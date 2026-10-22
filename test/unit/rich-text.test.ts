@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bbcodeToMarkdown } from '../../app/core/commentText';
+import { bbcodeToMarkdown, htmlToMarkdown } from '../../app/core/commentText';
 import { parseBlocks, parseInline } from '../../frontend/src/lib/richText';
 
 describe('comment rich text', () => {
@@ -54,6 +54,17 @@ describe('comment rich text', () => {
         ],
       },
     ]);
+  });
+
+  it('turns every form of <br> into a line break', () => {
+    // YouTube textDisplay HTML
+    expect(htmlToMarkdown('Great ep!<br>Loved <b>Koyuki</b> at <a href="https://www.youtube.com/watch?v=abc&amp;t=83">1:23</a> &quot;wow&quot;')).toBe(
+      'Great ep!\nLoved **Koyuki** at [1:23](https://www.youtube.com/watch?v=abc&t=83) "wow"',
+    );
+    // escaped once more by the source
+    expect(bbcodeToMarkdown('one&lt;br /&gt;two')).toBe('one\ntwo');
+    // a stray tag that reached the renderer
+    expect(parseBlocks('one<br/>two<BR />three')).toEqual([{ t: 'p', c: [{ t: 'text', v: 'one' }, { t: 'br' }, { t: 'text', v: 'two' }, { t: 'br' }, { t: 'text', v: 'three' }] }]);
   });
 
   it('groups quotes and lists', () => {

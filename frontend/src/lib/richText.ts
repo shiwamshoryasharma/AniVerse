@@ -64,7 +64,11 @@ function pushText(out: Inline[], text: string) {
 
 export function parseBlocks(src: string): Block[] {
   const blocks: Block[] = [];
-  const lines = src.replace(/\r/g, '').split('\n');
+  // A stray HTML line break is still a line break, whichever source let it through.
+  const lines = src
+    .replace(/\r/g, '')
+    .replace(/<br\s*\/?>\n?/gi, '\n')
+    .split('\n');
   let para: string[] = [];
   const flush = () => {
     if (para.length) blocks.push({ t: 'p', c: parseInline(para.join('\n')) });

@@ -29,6 +29,8 @@ export function htmlToMarkdown(html: string): string {
   s = s
     // a <br /> is the line break; the newline the source put after it is not a second one
     .replace(/<br\s*\/?>\n?/gi, '\n')
+    // …also when the source escaped it once more (&lt;br /&gt;)
+    .replace(/&lt;br\s*\/?&gt;\n?/gi, '\n')
     .replace(/<\/?(p|div)[^>]*>/gi, '\n')
     .replace(/<(b|strong)>([\s\S]*?)<\/\1>/gi, '**$2**')
     .replace(/<(i|em)>([\s\S]*?)<\/\1>/gi, '_$2_')

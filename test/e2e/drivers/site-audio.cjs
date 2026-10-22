@@ -65,11 +65,20 @@ module.exports = async function audio({ window, webContents }) {
       }
       const dub = (opened.options?.types ?? []).find((t) => t.value === 'dub');
       if (dub) {
-        const chosen = await rpc('site.choose', { webContentsId: wcId, sourceId: id, kind: 'type', value: 'dub' });
-        await sleep(2500);
-        entry.after = summary(chosen.options ?? {});
-        entry.afterFocused = chosen.focused;
+        // Press AniVerse's own DUB button, like the user does, and wait until it's done.
+        await until(`[...document.querySelectorAll('.opt-btn')].some((b) => b.textContent.trim() === ${JSON.stringify(dub.label)} && !b.disabled)`, 20000);
+        await ui(`[...document.querySelectorAll('.opt-btn')].find((b) => b.textContent.trim() === ${JSON.stringify(dub.label)})?.click()`);
+        await sleep(500);
+        await until(`![...document.querySelectorAll('.opt-btn')].some((b) => b.disabled)`, 30000);
+        await sleep(6000);
+        const now = await rpc('site.options', { webContentsId: wcId });
+        entry.after = summary(now ?? {});
+        entry.buttons = await ui(`[...document.querySelectorAll('.opt-btn')].map((b) => b.textContent.trim() + (b.classList.contains('active') ? '*' : '')).join(' ')`);
         entry.page = await focusState(wc);
+        entry.media = await wc
+          .executeJavaScript(`(() => { const p = document.querySelector('[data-aniverse-player]'); return p ? (p.src || p.currentSrc || '').slice(0, 120) : null })()`)
+          .catch(() => null);
+        writeFileSync(path.join(root, 'test', 'artifacts', `audio-${id}-dub.png`), (await window.webContents.capturePage()).toPNG());
         // put the site preference back to SUB for the user's own sessions
         await rpc('site.choose', { webContentsId: wcId, sourceId: id, kind: 'type', value: 'sub' });
       }

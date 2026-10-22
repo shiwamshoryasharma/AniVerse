@@ -1,4 +1,5 @@
 import type { CommentItem, MediaRef, SourceEpisode, SourceInfo, SourceMatch, Stream } from '../../shared/types';
+import { htmlToMarkdown } from '../commentText';
 import type { SiteEntry } from '../config/sitesConfig';
 import type { Store } from '../db/store';
 import { type FetchFn, requestJson } from '../net/http';
@@ -68,7 +69,7 @@ export class YouTubeAdapter implements SourceAdapter {
     const key = this.apiKey();
     if (!key) return [];
     const res = await requestJson<{ items: YtCommentThread[] }>(this.fetchFn, {
-      url: `${API}/commentThreads?part=snippet&maxResults=40&order=relevance&textFormat=plainText&videoId=${encodeURIComponent(videoId)}&key=${encodeURIComponent(key)}`,
+      url: `${API}/commentThreads?part=snippet&maxResults=40&order=relevance&textFormat=html&videoId=${encodeURIComponent(videoId)}&key=${encodeURIComponent(key)}`,
     });
     return (res.items ?? []).map((t) => {
       const s = t.snippet.topLevelComment.snippet;
@@ -76,7 +77,8 @@ export class YouTubeAdapter implements SourceAdapter {
         id: `yt-${t.id}`,
         provider: 'youtube' as const,
         author: { name: s.authorDisplayName, avatar: s.authorProfileImageUrl ?? null, url: s.authorChannelUrl ?? null },
-        body: s.textDisplay,
+        // textDisplay is HTML (<br>, links, entities) — normalise it like every other comment source
+        body: htmlToMarkdown(s.textDisplay),
         createdAt: Math.floor(Date.parse(s.publishedAt) / 1000),
         likes: s.likeCount ?? null,
         url: `https://www.youtube.com/watch?v=${videoId}&lc=${t.id}`,
