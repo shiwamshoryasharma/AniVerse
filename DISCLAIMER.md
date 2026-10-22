@@ -59,6 +59,14 @@ By using AniVerse, the user agrees that they:
 
 AniVerse is provided **“as is”, without warranty of any kind**, express or implied, as stated in sections 15 and 16 of the [GNU General Public License v3.0](LICENSE). To the maximum extent permitted by law, the developer and contributors are **not liable** for any claim, damage or other liability arising from the software, from its use, or from any third-party website, service or content accessed with it.
 
-## 8. Changes
+## 8. A personal project with rare updates
+
+AniVerse is a **personal project**. The developer built it for their own comfort and shares it as-is, in the hope that it is useful to others.
+
+- **Releases and updates will be rare.** They come only when the developer runs into a problem or wants a change.
+- There is **no release schedule, no roadmap, and no promise** of support, bug fixes or new features. Issues and suggestions are welcome but may not be acted on.
+- The built-in updater only installs releases that the developer chooses to publish. If none are published for a long time, AniVerse simply keeps working as it is.
+
+## 9. Changes
 
 This disclaimer may be updated from time to time. The version in the `main` branch of this repository is the current one. The same notice appears in the app under **Settings → About**.

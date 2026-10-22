@@ -23,4 +23,5 @@ export const DEFAULT_SETTINGS_FALLBACK: Settings = {
     twoWay: true,
   },
   privacy: { adblock: true, blockPopups: true, autoCloudflare: true },
+  updates: { autoCheck: true, autoDownload: true },
 };

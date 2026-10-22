@@ -1,4 +1,4 @@
-import { Gavel, Globe, ServerOff, ShieldAlert, UserCheck } from 'lucide-react';
+import { Gavel, Globe, HeartHandshake, ServerOff, ShieldAlert, UserCheck } from 'lucide-react';
 
 /**
  * The legal position of the app, styled to be impossible to miss: AniVerse is a
@@ -53,6 +53,15 @@ export function Disclaimer() {
           </span>
           <div>
             <strong>You are responsible for the websites you add</strong> and for following the laws of your country.
+          </div>
+        </li>
+        <li className="tone-warn">
+          <span className="dz-icon" aria-hidden>
+            <HeartHandshake size={18} />
+          </span>
+          <div>
+            <strong>A personal project, shared as-is.</strong> The developer made AniVerse for their own comfort. New releases and updates will be <strong>rare</strong>: they come only when the developer runs into
+            a problem or wants a change. There is no release schedule, roadmap or promise of support.
           </div>
         </li>
       </ul>

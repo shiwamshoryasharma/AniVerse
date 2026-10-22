@@ -25,6 +25,7 @@ import { useAccounts, useAdblockStats, useBridgeEvents, useSearch, useSettings }
 import { useToast } from '../lib/useToast';
 import { Logo, Spinner } from './common';
 import { ContextMenuProvider } from './ContextMenu';
+import { UpdateBadge } from './Updates';
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -101,6 +102,7 @@ export function Shell() {
         </div>
         <SearchBox />
         <div className="spacer" />
+        <UpdateBadge />
         <RefreshButton />
         <AdblockBadge />
         <ProfileMenu />

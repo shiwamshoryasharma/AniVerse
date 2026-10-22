@@ -1,14 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Info, KeyRound, LogOut, Palette, Play, RefreshCw, Search, Shield, UserRound, Globe, Link2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, Info, KeyRound, LogOut, Palette, Play, RefreshCw, RotateCw, Search, Shield, UserRound, Globe, Link2, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import type { AccentName, AccountInfo, DeepPartial, Provider, Settings, SourceInfo } from '../../../app/shared/types';
 import { SourceIcon, Spinner, Switch } from '../components/common';
 import { Disclaimer } from '../components/Disclaimer';
+import { updateSummary, useInstallUpdate } from '../lib/updates';
 import { RadioGroup, Select } from '../components/controls';
 import { call, errorText } from '../lib/bridge';
 import { cx, timeAgo } from '../lib/format';
-import { keys, useAccounts, useAdblockStats, useAppInfo, useSettings, useSources, useUpdateSettings, useUpdateSource } from '../lib/queries';
+import { keys, useAccounts, useAdblockStats, useAppInfo, useSettings, useSources, useUpdateSettings, useUpdateSource, useUpdateState } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 
 const SECTIONS = [
@@ -526,11 +527,70 @@ function PrivacySection() {
   );
 }
 
+function UpdatesGroup() {
+  const s = useSettings();
+  const save = useSave();
+  const toast = useToast();
+  const install = useInstallUpdate();
+  const { data: u } = useUpdateState();
+  const [busy, setBusy] = useState(false);
+  if (!u) return null;
+  const run = (method: 'update.check' | 'update.download') => {
+    setBusy(true);
+    call(method)
+      .catch((err) => toast.push({ level: 'error', message: errorText(err) }))
+      .finally(() => setBusy(false));
+  };
+  const off = u.status === 'disabled';
+  const working = busy || u.status === 'checking' || u.status === 'downloading';
+  return (
+    <Group title="Updates">
+      <Setting title={`AniVerse ${u.current}`} desc={updateSummary(u)}>
+        {u.status === 'downloaded' ? (
+          <button className="btn primary sm" onClick={() => void install()}>
+            <RotateCw size={14} /> Restart to update
+          </button>
+        ) : u.status === 'available' ? (
+          <button className="btn primary sm" disabled={working} onClick={() => run('update.download')}>
+            <Download size={14} /> Download {u.version}
+          </button>
+        ) : (
+          <button className="btn sm" disabled={off || working} onClick={() => run('update.check')}>
+            <RefreshCw size={14} className={working ? 'spin' : undefined} /> Check for updates
+          </button>
+        )}
+        {u.version && u.releaseUrl && (
+          <button className="btn ghost sm" onClick={() => void call('app.openExternal', { url: u.releaseUrl! })}>
+            What’s new
+          </button>
+        )}
+      </Setting>
+      {u.status === 'downloading' && (
+        <div className="card-pad">
+          <div className="update-progress" role="progressbar" aria-valuenow={Math.floor(u.progress?.percent ?? 0)} aria-valuemin={0} aria-valuemax={100}>
+            <span style={{ width: `${u.progress?.percent ?? 0}%` }} />
+          </div>
+        </div>
+      )}
+      <Setting title="Check for updates automatically" desc="At start-up and every 6 hours, from AniVerse’s GitHub releases.">
+        <Switch on={s.updates.autoCheck} disabled={off} label="Check for updates automatically" onChange={(autoCheck) => save({ updates: { autoCheck } })} />
+      </Setting>
+      <Setting
+        title="Download updates automatically"
+        desc="Downloads in the background (only the parts that changed, when possible) and installs when you restart or quit. Updates must carry AniVerse’s code signature, or they are not installed."
+      >
+        <Switch on={s.updates.autoDownload} disabled={off} label="Download updates automatically" onChange={(autoDownload) => save({ updates: { autoDownload } })} />
+      </Setting>
+    </Group>
+  );
+}
+
 function AboutSection() {
   const info = useAppInfo().data;
   return (
     <>
       <Disclaimer />
+      <UpdatesGroup />
       <Group title="AniVerse">
         <div className="card-pad help">
           <p style={{ marginTop: 0 }}>

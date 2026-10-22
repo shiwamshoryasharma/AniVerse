@@ -88,6 +88,7 @@ AniList-powered discovery · airing schedule · built-in player · AniList & MyA
 - Ad, tracker and popup blocking (EasyList, EasyPrivacy, annoyance lists + your own rules)
 - Each website runs in its **own isolated session**; nothing is shared between sites
 - Accent themes (Ember, Aqua, Violet, Sakura, Crimson), density and title-language options
+- **Self-update** from GitHub Releases: downloads only the parts that changed, checks the code signature, and installs on restart
 
 </td>
 </tr>
@@ -110,13 +111,13 @@ AniList-powered discovery · airing schedule · built-in player · AniList & MyA
 
 ### 1. Install
 
-Build the Windows installer as described in [Build from source](#%EF%B8%8F-build-from-source) and run `AniVerse-Setup-<version>.exe`:
+Download **`AniVerse-Setup-<version>.exe`** from the [latest release](https://github.com/shiwamshoryasharma/AniVerse/releases/latest). Check its [fingerprints](#-certificate-fingerprints), then run it:
 
 - pick any folder on any drive (no administrator rights needed);
 - choose the desktop / Start Menu shortcuts;
 - launch AniVerse from the finish page.
 
-Upgrading or uninstalling keeps your library, settings and connected accounts.
+From then on AniVerse **updates itself** (see step 7). Upgrading or uninstalling keeps your library, settings and connected accounts. You can also build the installer yourself; see [Build from source](#%EF%B8%8F-build-from-source).
 
 ### 2. Add your sources
 
@@ -169,6 +170,15 @@ Everything lives on your PC in `%APPDATA%\AniVerse`:
 
 Nothing is sent anywhere except to the services you use. See [PRIVACY.md](PRIVACY.md).
 
+### 7. Stay up to date
+
+AniVerse checks this repository's releases at start-up and every 6 hours. It downloads a new version in the background, fetching only the parts that changed when it can. It **installs only updates that carry AniVerse's code signature**. When the top bar shows **Restart to update**, click it, or just quit AniVerse and the update installs on the way out.
+
+Manage it in **Settings → About → Updates**: check now, read what's new, or turn automatic checks and downloads off. Details: [docs/UPDATES.md](docs/UPDATES.md).
+
+> [!NOTE]
+> AniVerse is a personal project, so **new releases are rare**. They come only when the developer runs into a problem or wants a change. Most checks will simply find nothing new.
+
 ## ⚠️ Disclaimer
 
 > [!IMPORTANT]
@@ -178,6 +188,7 @@ Nothing is sent anywhere except to the services you use. See [PRIVACY.md](PRIVAC
 > - The developer has **no control over, affiliation with, or responsibility for** those websites. **Send DMCA and other legal notices to the operator or hosting provider of the site that serves the content.**
 > - AniVerse is not affiliated with AniList, MyAnimeList, YouTube or Google. Anime titles, artwork and metadata belong to their respective owners and are provided by AniList's public API.
 > - You are responsible for the websites you add and for following the laws of your country.
+> - **A personal project, shared as-is.** The developer made AniVerse for their own comfort. **Releases and updates will be rare**: they come only when the developer runs into a problem or wants a change. There is no schedule, roadmap or support promise.
 >
 > Full text: **[DISCLAIMER.md](DISCLAIMER.md)**. The software comes **without any warranty** (GPL-3.0, sections 15–16).
 
@@ -188,6 +199,7 @@ Nothing is sent anywhere except to the services you use. See [PRIVACY.md](PRIVAC
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module map, data flow, security model |
 | [docs/ACCOUNTS.md](docs/ACCOUNTS.md) | AniList / MyAnimeList sign-in, client IDs, redirect URLs, sync rules |
 | [docs/INSTALLER.md](docs/INSTALLER.md) | Windows installer pages, behaviour, build and tests |
+| [docs/UPDATES.md](docs/UPDATES.md) | Self-update: GitHub Releases feed, differential downloads, signature check, publishing a release |
 | [DISCLAIMER.md](DISCLAIMER.md) · [PRIVACY.md](PRIVACY.md) | Legal notice and what data goes where |
 | [CONTRIBUTING.md](CONTRIBUTING.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md) | How to help, community rules, reporting vulnerabilities |
 
@@ -256,7 +268,9 @@ npm run dist:installer
 | `npm run test:sites` | Drive every configured website to an episode and report per site |
 | `npm run dist` | Windows installer + portable build in `release/` |
 | `npm run dist:installer` | Windows installer only |
-| `npm run dist:signed` | Release installer: signed, no bundled source list |
+| `npm run dist:signed` | Release installer: signed, no bundled source list, plus `latest.yml` and `.blockmap` for self-update |
+| `npm run release -- --notes <file>` | Tag and publish the signed build as a GitHub release (the update feed) |
+| `npm run test:update` | Real update end to end: two signed builds, install, differential update, uninstall |
 
 </details>
 

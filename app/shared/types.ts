@@ -406,6 +406,30 @@ export interface Settings {
     blockPopups: boolean;
     autoCloudflare: boolean;
   };
+  updates: {
+    /** Look for a new release at start-up and every few hours. */
+    autoCheck: boolean;
+    /** Download a found update in the background (only the changed blocks when possible). */
+    autoDownload: boolean;
+  };
+}
+
+/** Self-update state (electron/updater.ts), pushed to the renderer as `update.status`. */
+export interface UpdateState {
+  status: 'disabled' | 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+  /** Installed version. */
+  current: string;
+  /** The newer version that was found / downloaded. */
+  version: string | null;
+  releaseDate: string | null;
+  /** Release page with the notes for `version`. */
+  releaseUrl: string | null;
+  progress: { percent: number; transferred: number; total: number; bytesPerSecond: number } | null;
+  /** Epoch ms of the last finished check. */
+  checkedAt: number | null;
+  error: string | null;
+  /** Why updating is off (development build, portable copy, …) when status is 'disabled'. */
+  reason: string | null;
 }
 
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };

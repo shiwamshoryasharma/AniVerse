@@ -27,6 +27,7 @@ AniVerse only talks to a service when you use the feature that needs it:
 | **MyAnimeList** (`api.myanimelist.net`) | Forum comments; list sync if connected | Topic lookups; with sign-in, your list changes |
 | **YouTube** (`youtube.com`, `googleapis.com`) | Official-channel sources, trailers, YouTube comments | Channel/video requests; your own YouTube Data API key if you set one |
 | **Ad-block filter lists** (Ghostery's list CDN) | Start-up, when the cached lists are out of date | A plain download request |
+| **GitHub** (this repository's releases) | Update checks: start-up and every 6 hours, unless turned off in Settings → About | Plain requests for the latest release's `latest.yml` and, when there's an update, its installer files |
 | **Websites you add** | When you open them | Whatever any browser sends to a website you visit |
 | **Cast devices** on your local network | When you use casting | The stream address, to the TV you chose |
 

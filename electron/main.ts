@@ -27,6 +27,7 @@ import { isDev, resolvePaths } from './paths';
 import { browserUserAgent, SessionManager } from './sessions';
 import { SiteNavigator } from './siteNavigator';
 import { CastService } from './cast/castService';
+import { UpdateService } from './updater';
 
 registerSchemes();
 app.setName('AniVerse');
@@ -103,18 +104,21 @@ function emit<E extends EventName>(event: E, payload: EventContract[E]) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(EVENT_CHANNEL, event, payload);
 }
 
-/** Sign-in diagnostics without secrets (no tokens, codes or state values): <userData>/logs/accounts.log. */
-function accountsLog(message: string) {
+/** Diagnostics without secrets: <userData>/logs/<name>.log, restarted past 256 KB. */
+function logTo(name: 'accounts' | 'updates', message: string) {
   try {
     const dir = path.join(app.getPath('userData'), 'logs');
     mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, 'accounts.log');
+    const file = path.join(dir, `${name}.log`);
     if (existsSync(file) && statSync(file).size > 256 * 1024) writeFileSync(file, '');
     appendFileSync(file, `${new Date().toISOString()} ${message}\n`);
   } catch {
-    // diagnostics must never break sign-in
+    // diagnostics must never break the feature they describe
   }
 }
+
+/** Sign-in diagnostics (no tokens, codes or state values). */
+const accountsLog = (message: string) => logTo('accounts', message);
 
 function focusMainWindow() {
   const win = mainWindow;
@@ -258,7 +262,15 @@ async function bootstrap() {
   });
   registry.setEntries(config.load().entries);
   config.start();
-  settings.onChange(() => sessions.refresh());
+  const updates = new UpdateService(
+    () => settings.get(),
+    (s) => emit('update.status', s),
+    (m) => logTo('updates', m),
+  );
+  settings.onChange((s) => {
+    sessions.refresh();
+    updates.applySettings(s);
+  });
 
   const protocols = new MediaProtocols(paths.renderer, paths.profileDir);
   protocols.install();
@@ -440,6 +452,11 @@ async function bootstrap() {
       store.cachePurge(true);
       await session.defaultSession.clearCache();
     },
+
+    'update.state': () => updates.snapshot(),
+    'update.check': () => updates.check(),
+    'update.download': () => updates.download(),
+    'update.install': () => updates.install(),
   };
 
   registerRpc(handlers, (event: IpcMainInvokeEvent) => !!mainWindow && event.sender === mainWindow.webContents && event.senderFrame?.parent === null);
@@ -461,6 +478,7 @@ async function bootstrap() {
   const onGuest = (guest: WebContents) => navigator.attach(guest);
   mainWindow = createWindow(paths.preload, sessions, onGuest);
   if (isDev && process.env.ANIVERSE_TEST_DRIVER) runTestDriver(process.env.ANIVERSE_TEST_DRIVER, mainWindow);
+  updates.start();
   app.on('activate', () => {
     if (!BrowserWindow.getAllWindows().length) mainWindow = createWindow(paths.preload, sessions, onGuest);
   });
@@ -469,6 +487,7 @@ async function bootstrap() {
   });
   app.on('before-quit', () => {
     config.stop();
+    updates.stop();
     void cast.stop();
   });
   app.on('will-quit', () => {

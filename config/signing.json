@@ -1,4 +1,6 @@
 {
-  "$comment": "Public SHA-1 thumbprint of AniVerse's code-signing certificate (CN=Shiwam Shorya Sharma, O=AniVerse; self-signed, valid until 2031-10-23). npm run dist:signed signs with it from the Windows certificate store; the private key is never in this repository. Fingerprints: README.md.",
-  "certificateSha1": "5AAD691D2F1B3CA480BA1083D417E72DFA9F2B84"
+  "$comment": "AniVerse's code-signing certificate (CN=Shiwam Shorya Sharma, O=AniVerse; self-signed, valid until 2031-10-23). certificateSha1: thumbprint npm run dist:signed signs with, from the Windows certificate store (the private key is never in this repository). updateSigners: SHA-256 fingerprints of the certificates the built-in updater accepts on a downloaded update; a release must be signed by one of them. When moving to a new certificate, ship one release that lists both. Fingerprints: README.md.",
+  "certificateSha1": "5AAD691D2F1B3CA480BA1083D417E72DFA9F2B84",
+  "publisherName": "Shiwam Shorya Sharma",
+  "updateSigners": ["A4E97736B350B8DB5D71A7A60BD2AA94BEAA8D70FB0F19E227D9BF3C36814145"]
 }

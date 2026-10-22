@@ -34,6 +34,10 @@ export const DEFAULT_SETTINGS: Settings = {
     blockPopups: true,
     autoCloudflare: true,
   },
+  updates: {
+    autoCheck: true,
+    autoDownload: true,
+  },
 };
 
 const KEY = 'settings';
@@ -85,6 +89,10 @@ export function sanitize(s: Settings): Settings {
       youtubeApiKey: String(s.accounts.youtubeApiKey ?? '').trim(),
       autoSync: s.accounts.autoSync !== false,
       twoWay: s.accounts.twoWay !== false,
+    },
+    updates: {
+      autoCheck: s.updates?.autoCheck !== false,
+      autoDownload: s.updates?.autoDownload !== false,
     },
   };
 }

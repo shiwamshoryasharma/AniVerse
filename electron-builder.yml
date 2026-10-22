@@ -62,6 +62,15 @@ nsis:
 portable:
   artifactName: ${productName}-${version}-portable.${ext}
 
+# Self-update feed (electron-updater): every release carries the installer, its .blockmap
+# (for differential downloads) and latest.yml. Builds write app-update.yml into resources/;
+# uploading is done by scripts/release.mjs, never by electron-builder. See docs/UPDATES.md.
+publish:
+  provider: github
+  owner: shiwamshoryasharma
+  repo: AniVerse
+  releaseType: release
+
 mac:
   icon: build/icon.png
   category: public.app-category.entertainment

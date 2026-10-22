@@ -44,6 +44,7 @@ import type {
   Stream,
   SyncReport,
   SyncStatusEvent,
+  UpdateState,
 } from './types';
 
 export interface RpcContract {
@@ -118,6 +119,13 @@ export interface RpcContract {
   'app.info': [void, AppInfo];
   'app.openExternal': [{ url: string }, void];
   'app.cacheClear': [void, void];
+
+  'update.state': [void, UpdateState];
+  /** Looks for a newer release now (and downloads it when automatic downloads are on). */
+  'update.check': [void, UpdateState];
+  'update.download': [void, UpdateState];
+  /** Quits AniVerse, installs the downloaded update silently and starts the new version. */
+  'update.install': [void, void];
 }
 
 export type RpcMethod = keyof RpcContract;
@@ -132,6 +140,7 @@ export interface EventContract {
   'app.notice': AppNotice;
   'site.status': SiteStatusEvent;
   'cast.status': CastState;
+  'update.status': UpdateState;
 }
 
 export type EventName = keyof EventContract;

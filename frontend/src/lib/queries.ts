@@ -25,6 +25,7 @@ export const keys = {
   settings: ['settings'] as const,
   adblock: ['adblock'] as const,
   info: ['app-info'] as const,
+  update: ['update'] as const,
 };
 
 export const useHome = () => useQuery({ queryKey: keys.home, queryFn: () => call('meta.home'), staleTime: 5 * 60_000 });
@@ -81,6 +82,8 @@ export const useEntries = (status: ListStatus | null) => useQuery({ queryKey: ke
 export const useAccounts = () => useQuery({ queryKey: keys.accounts, queryFn: () => call('accounts.list') });
 export const useAdblockStats = () => useQuery({ queryKey: keys.adblock, queryFn: () => call('adblock.stats') });
 export const useAppInfo = () => useQuery({ queryKey: keys.info, queryFn: () => call('app.info'), staleTime: Infinity });
+/** Self-update state; kept current by `update.status` events (useBridgeEvents). */
+export const useUpdateState = () => useQuery({ queryKey: keys.update, queryFn: () => call('update.state'), staleTime: Infinity });
 
 export const useComments = (q: CommentsQuery | null) =>
   useQuery({
@@ -182,6 +185,7 @@ export function useBridgeEvents(qc: QueryClient) {
         void qc.invalidateQueries({ queryKey: ['match'] });
       }),
       onEvent('adblock.stats', (stats) => qc.setQueryData(keys.adblock, stats)),
+      onEvent('update.status', (state) => qc.setQueryData(keys.update, state)),
       onEvent('sync.status', (e) => {
         if (e.state !== 'syncing') {
           void qc.invalidateQueries({ queryKey: keys.accounts });

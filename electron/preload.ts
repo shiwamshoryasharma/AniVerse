@@ -1,7 +1,18 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { EVENT_CHANNEL, RPC_CHANNEL, type AniverseBridge, type EventName, type RpcError } from '../app/shared/rpc';
 
-const EVENTS: ReadonlySet<EventName> = new Set<EventName>(['sources.changed', 'cloudflare.status', 'sync.status', 'adblock.stats', 'app.notice', 'site.status', 'cast.status']);
+// Every event in the contract must be listed (a missing one is a type error, not a runtime crash).
+const EVENT_NAMES: Record<EventName, true> = {
+  'sources.changed': true,
+  'cloudflare.status': true,
+  'sync.status': true,
+  'adblock.stats': true,
+  'app.notice': true,
+  'site.status': true,
+  'cast.status': true,
+  'update.status': true,
+};
+const EVENTS: ReadonlySet<string> = new Set(Object.keys(EVENT_NAMES));
 
 class BridgeError extends Error {
   constructor(public code: RpcError['code'], message: string) {

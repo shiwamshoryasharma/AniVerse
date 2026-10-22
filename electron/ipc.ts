@@ -88,6 +88,7 @@ const settingsPatch = z
       })
       .partial(),
     privacy: z.object({ adblock: z.boolean(), blockPopups: z.boolean(), autoCloudflare: z.boolean() }).partial(),
+    updates: z.object({ autoCheck: z.boolean(), autoDownload: z.boolean() }).partial(),
   })
   .partial();
 
@@ -209,6 +210,11 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'app.info': none,
   'app.openExternal': z.object({ url }),
   'app.cacheClear': none,
+
+  'update.state': none,
+  'update.check': none,
+  'update.download': none,
+  'update.install': none,
 };
 
 export type Handlers = { [M in RpcMethod]: (input: RpcContract[M][0], event: IpcMainInvokeEvent) => Promise<RpcContract[M][1]> | RpcContract[M][1] };

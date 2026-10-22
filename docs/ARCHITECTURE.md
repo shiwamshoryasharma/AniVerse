@@ -80,6 +80,10 @@ The renderer only sees a loader and status lines; the site's URL bar is hidden. 
 `SyncService` (`app/core/sync/syncService.ts`) queues one "entry" job per title per service (pushes AniVerse's current status/progress/score at send time, or removes it) plus favourite jobs, with exponential backoff. `AccountManager` (`electron/accounts.ts`) supplies tokens: MAL refresh a day before expiry or after a rejection (single-flight), AniList re-sign-in after a year; a confirmed rejection marks the account "reconnect needed" and keeps its queue. Two-way mode pulls both lists and runs `reconcile()` per title: newest edit wins, superseded local pushes are dropped, winners propagate to the other service, local removals are tombstoned (`library_tombstones`) and sent, and titles missing on a service are re-added only if changed since that service's last sync.
 - Cloudflare: challenges run in a real Chromium window that shares the source's session. Nothing clicks, solves or spoofs; interactive checks are shown to the user.
 
+## Self-update
+
+`electron/updater.ts` wraps electron-updater with the GitHub Releases feed from `electron-builder.yml`. It checks at start-up and every 6 hours, downloads differentially using blockmaps, and installs silently on restart or quit. Only installed, signed Windows builds update. Every download must pass `electron/updateSignature.ts`: an intact Authenticode signature from a certificate pinned in `config/signing.json`. State reaches the UI as `update.status` events. Details: [UPDATES.md](UPDATES.md).
+
 ## Notable constraints
 
 - AniList rate limit is ~30 req/min: token bucket (burst 12, 28/min) + SQLite response cache + stale fallback when offline.
