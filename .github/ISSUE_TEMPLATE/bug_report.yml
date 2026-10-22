@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in AniVerse doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **don't include links to or names of streaming websites**, or any personal data. Security problems go through SECURITY.md instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: AniVerse version
+      placeholder: "0.1.0 (Settings → About)"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Home / Browse, Schedule, Details, Watch / website sources, Native player, Accounts & sync, Comments, Installer, Settings, Other]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshots or logs
+      description: Crop out site names and personal data. Sign-in problems — `%APPDATA%\AniVerse\logs\accounts.log` (tokens are never written there).
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: This report contains no links to, or names of, streaming websites.
+          required: true

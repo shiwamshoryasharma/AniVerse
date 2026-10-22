@@ -1,0 +1,73 @@
+appId: app.aniverse.desktop
+productName: AniVerse
+copyright: Copyright © 2026 Shiwam Shorya Sharma
+
+# aniverse:// deep links bring AniList / MyAnimeList sign-ins back to the app
+# (installer registry entry on Windows, Info.plist on macOS, .desktop MimeType on Linux).
+protocols:
+  - name: AniVerse
+    schemes: [aniverse]
+
+directories:
+  output: release
+  buildResources: build
+
+# Main/preload/renderer are pre-bundled into dist/ by scripts/build.mjs.
+files:
+  - dist/**
+  - '!dist/**/*.map'
+  - package.json
+  - build/icon.png
+
+# Shipped defaults; on first run they are copied to <userData>/config (or a
+# portable <exe dir>/config is used when present) — see electron/paths.ts.
+extraResources:
+  - from: config
+    to: config
+    filter:
+      - streaming-sites.txt
+      - filters.txt
+      - site-recipes.json
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+# Assisted installer with AniVerse's own pages and styling (build/installer.nsh):
+# welcome → install folder (any drive, validated) → shortcuts → progress → finish.
+# Per-user install without admin rights; app data in %APPDATA%\AniVerse is never removed.
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  # AniVerse's own folder page replaces the stock one (it validates space and write access).
+  allowToChangeInstallationDirectory: false
+  # Created, kept or removed according to the installer's Shortcuts page.
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AniVerse
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  displayLanguageSelector: false
+  include: build/installer.nsh
+  installerHeader: build/installer/header-1.bmp
+  installerSidebar: build/installer/sidebar.bmp
+  uninstallerSidebar: build/installer/sidebar.bmp
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.entertainment
+  target: [dmg]
+
+linux:
+  icon: build/icon.png
+  category: AudioVideo
+  target: [AppImage]

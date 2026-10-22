@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/shiwamshoryasharma/AniVerse/security/advisories/new
+    about: Report security problems privately (see SECURITY.md).
+  - name: Copyright notice about content on a website
+    url: https://github.com/shiwamshoryasharma/AniVerse/blob/main/DISCLAIMER.md#5-copyright-and-legal-notices-dmca-and-similar
+    about: AniVerse hosts no content. Notices about material on third-party websites must go to that website or its hosting provider.

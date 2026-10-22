@@ -1,0 +1,33 @@
+# dependencies & build output
+node_modules
+dist
+release
+*.tsbuildinfo
+
+# test caches, profiles and screenshots (see test/README.md)
+test/cache/*
+!test/cache/.gitkeep
+test/artifacts/*
+!test/artifacts/.gitkeep
+
+# logs / OS / editors
+logs
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.local
+
+# private, never published
+.prompts
+index.txt
+Anime Website stream list.txt
+config/oauth.json
+config/streaming-sites.txt
+config/site-recipes.json
+.claude/private-notes.md
+
+# generated installer art (scripts/make-installer-art.cjs)
+build/installer/

@@ -1,0 +1,25 @@
+# AniVerse — status / resume point (2026-10-22)
+
+## Done and verified
+- Root project (single package.json) with `app/` core, `electron/` main+preload, `frontend/` renderer, `config/`, `test/`, `scripts/`, `docs/`.
+- Core: config parser (hot reload), SQLite store (node:sqlite), settings, AniList client (cache, rate gate, stale fallback, null-safe browse), web + YouTube adapters, registry, comments (AniList read/post, MAL read, YouTube read), AniList/MAL sync with queue + backoff + remove op.
+- Electron: isolated partitions, webview guard, popup/redirect/download blocking, Ghostery ad blocking + filters.txt, Cloudflare verifier window, OAuth windows, app:// + media:// protocols, media probe/control, zod-validated RPC, safeStorage token encryption, headless E2E mode.
+- UI: Home (hero, latest episodes, top charts, rails), Browse (full filters), Details, Watch (sources, web session / player, episode panel, toolbar, comments), Schedule, Library, History, Sources (+ per-site browser), Player (URL/file), Settings (6 sections).
+- Validation: 36 unit tests, typecheck ×2, oxlint 0 warnings, E2E smoke (14 steps incl. HLS/DASH/MP4 playback) on dist and on the packaged exe, live source checks.
+
+## Session 2 (same day) — added
+- Site navigator: search → series → episode on configured websites, hidden behind a frame-by-frame running-cat loader; player-only focus; SUB/DUB + server buttons (remembered per site); site menu (reload, search again, pin, open in browser); learned links + `config/site-recipes.json`; survey script `test/e2e/site-survey.mjs`.
+- Custom Select/Checkbox/RadioGroup/Range, themed scrollbars (also injected into site pages), hover preview cards, right-click menu (+F5, Alt+←/→), top-bar refresh.
+- Profile page (avatar/banner upload + crop, bio, stats). Chromecast casting for native-player media (`electron/cast/`).
+- Home: Latest episodes 6×6 grid (auto-refresh 5 min, NEW badges, paging, filters). Schedule redesign. Continue-watching removal fixed (history delete / dismiss).
+- Release gating (`app/shared/release.ts`): unreleased titles, films in cinemas and unaired episodes open a release page (date, live countdown, Plan to watch) instead of a player; Home "Coming soon" section; cards/hover/Details show the release date.
+- Loader uses the user's six cat drawings (`frontend/src/assets/cat/`, imported from `.idea` by `scripts/import-cat-frames.cjs`), 16 fps on twos + scrolling ground.
+- Site survey (2026-10-22, Frieren EP3, **in-process driver**): 12/14 configured sites reach the episode with the player isolated; 2 time out on Cloudflare (needs the user once, not visible in hidden runs). Earlier "redirect" and "site down" reports were Playwright artifacts (navigator.webdriver) — see SKILL gotcha. Site names and per-site results: .claude/private-notes.md (not published).
+- Accounts (session 3): system-browser OAuth via `aniverse://oauth/{anilist,myanimelist}` (electron/oauth.ts broker, deepLink.ts, accounts.ts), client IDs in `config/oauth.json` (private, not published; compiled for builds, read live in dev), profile-bound safeStorage tokens, MAL refresh/reconnect, coalesced "entry" queue, two-way reconcile with tombstones (DB v3), scores (Details score picker, `library.setScore`). **Real sign-in verified 2026-10-22 on Windows dev**: both accounts connected, AniList echoes `state` in the fragment, MAL code+PKCE exchange works, first two-way sync imported 37 entries, queue empty, no errors. The user's AniList client is registered with `aniverse://auth/anilist` (AniVerse accepts `auth` and `oauth` hosts). Dev prompt reads "Open AniVerse?" via `FriendlyAppName` on HKCU\Software\Classes\aniverse\shell\open. Diagnostics: `<userData>/logs/accounts.log`. Not verified: macOS/Linux deep links (need packaged builds).
+- Settings → About leads with a styled disclaimer (components/Disclaimer.tsx) + README: AniVerse is a browser with custom features; hosts nothing; legal notices go to the sites' operators/hosts. Route crashes show the error + "Reload AniVerse" (components/RouteCrash.tsx).
+- Windows installer (2026-10-22, docs/INSTALLER.md): assisted NSIS, per-user without admin, AniVerse-themed pages (random one of 6 wallpapers from `assets/installer/`), own folder page (any drive; path/space/write-test validation), Shortcuts page (desktop / Start Menu), real 7-Zip progress, finish page with optional "Launch AniVerse now", themed uninstaller; app data never removed. **Verified** with the real `release/AniVerse-Setup-0.1.0.exe` (117 MB): `test/e2e/installer-silent.ps1` (custom E: folder, reinstall, uninstall, data byte-identical) and `test/e2e/installer-ui.ps1` (all 8 pages screenshotted, Program Files refused, shortcuts honoured, uninstall clean).
+
+## Known limits / next ideas
+- Muse Asia embeds are geo-restricted outside its licence region (YouTube's own message is shown; "YouTube" button opens the video externally).
+- Installer: not code-signed (SmartScreen warning); "not enough space" path not exercised on a full drive; push buttons keep the Windows theme.
+- Possible next: code signing, AniSkip-style intro markers for native streams, per-site cosmetic filter UI, i18n.

@@ -1,0 +1,5 @@
+{
+  "$comment": "Copy to config/oauth.json (untracked) and fill in YOUR OAuth client IDs. Client IDs are public identifiers, not secrets; never add a client secret. Redirect URLs to register: aniverse://oauth/anilist (AniList) and aniverse://oauth/myanimelist (MyAnimeList). See docs/ACCOUNTS.md.",
+  "anilist": { "clientId": "" },
+  "myanimelist": { "clientId": "" }
+}

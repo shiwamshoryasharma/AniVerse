@@ -1,0 +1,33 @@
+! AniVerse extra filters — Adblock Plus / uBlock syntax.
+! Applied on top of the EasyList, EasyPrivacy and annoyance lists in every source session.
+! Edit this file and restart AniVerse (or toggle ad blocking in Settings) to apply.
+
+! ---- Self-promotion and social widgets commonly injected by streaming sites
+##[class*="share-buttons"]
+##[class*="social-share"]
+##[class*="sharethis"]
+##[id*="telegram-popup"]
+##[class*="telegram-popup"]
+##[class*="discord-popup"]
+##[class*="app-download-banner"]
+##[class*="install-app"]
+##.adsbygoogle
+##[id^="ad-container"]
+##[class^="ad-slot"]
+##[data-ad-slot]
+
+! ---- Popunder / redirect networks frequently used on anime mirrors
+||adsterra.com^
+||adsterratools.com^
+||propellerads.com^
+||popads.net^
+||popcash.net^
+||onclickads.net^
+||hilltopads.net^
+||exoclick.com^
+||juicyads.com^
+||a-ads.com^
+||clickadu.com^
+||monetag.com^
+||highperformanceformat.com^
+||profitablecpmrate.com^
