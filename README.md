@@ -272,9 +272,28 @@ docs/           Architecture, accounts, installer, screenshots
 
 </details>
 
+<div align="center">
+
 ## 📄 License
 
-AniVerse is free software under the **[GNU General Public License v3.0](LICENSE)**, © 2026 Shiwam Shorya Sharma. You may use, study, share and modify it under the same license. It comes with **no warranty**.
+<a href="LICENSE"><img src="https://img.shields.io/badge/GNU%20GPL-v3-BD0000?style=for-the-badge&logo=gnu&logoColor=white" alt="GNU GPL v3" height="36" /></a>
+
+</div>
+
+AniVerse is free software under the **[GNU General Public License v3.0](LICENSE)**, © 2026 Shiwam Shorya Sharma.
+- You may use, study, copy, modify and share it.
+- If you distribute AniVerse or a modified version, it must stay under the GPL. Keep the copyright and license notices, mark what you changed and when, and make the complete source code available with build and install instructions.
+- It comes with **no warranty**.
+
+<div align="center">
+
+## ⚖️ DMCA disclaimer
+
+</div>
+
+The developer of AniVerse is **not affiliated with any content** that can be reached through the app. The developer does **not host, store, upload or distribute** any of it. AniVerse should be regarded as a **web browser**: everything it shows is loaded directly from websites on the public internet that the user chose to open.
+
+**All DMCA takedown requests and other legal notices must be sent to the owners or hosting providers of the websites where the content is actually hosted.** The developer of AniVerse cannot remove content from third-party websites. Notices about it sent to this repository cannot be acted upon. See [DISCLAIMER.md](DISCLAIMER.md) for the full notice.
 
 <div align="center">
 <br />
