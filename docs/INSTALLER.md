@@ -38,6 +38,20 @@ electron-builder compiles NSIS with warnings as errors: functions and variables 
 
 To iterate on the NSIS script without repackaging the app: `npx electron-builder --win nsis --prepackaged release/win-unpacked --config electron-builder.yml`.
 
+## Signed release build
+
+`npm run dist:signed` (`scripts/dist-signed.mjs`) builds the release installer:
+
+- **Signed:** `AniVerse.exe`, `elevate.exe`, the uninstaller and the setup `.exe` are signed (SHA-256, RFC 3161 timestamp) with the code-signing certificate `CN=Shiwam Shorya Sharma, O=AniVerse`.
+  - signtool takes the certificate from the Windows certificate store (`CurrentUser\My`) by the thumbprint in `config/signing.json` (or `ANIVERSE_SIGN_SHA1`).
+  - The private key never leaves the store. The build stops early when the certificate isn't installed.
+- **No source list:** only `filters.txt` is bundled, so a fresh install starts with no websites. An existing `%APPDATA%\AniVerse\config\streaming-sites.txt` is kept.
+- **Release config:** electron-builder merges lists from extra config into `electron-builder.yml` rather than replacing them. So the script writes a complete release copy of the config to a temporary folder and builds from that.
+
+The fingerprints users check are in the README (*Certificate fingerprints*). The certificate is self-signed (valid until 2031-10-23): Windows shows the signature as from an untrusted root, and SmartScreen may still warn. To use a trusted certificate later, import it and change `config/signing.json`, then update the README fingerprints.
+
+**Back up the key:** export it once to a password-protected `.pfx` kept outside the repository. Without it, a new PC can't produce installers with the same fingerprints.
+
 ## Testing
 
 ```bash
@@ -61,4 +75,4 @@ Drives the real installer window off-screen page by page and saves `test/artifac
 - NSIS draws push buttons (Back / Next / Cancel / Browse) with the Windows theme; they can't be recoloured without an extra skinning plug-in.
 - Page changes aren't animated (NSIS has no transitions); only the window fades in.
 - The "not enough space" message uses NSIS's own space check and wasn't exercised on a nearly full drive.
-- The installer isn't code-signed, so SmartScreen may warn on first run until it is signed.
+- Release installers are signed with a **self-signed** certificate (see above), so Windows doesn't show a verified publisher and SmartScreen may warn on first run. A certificate from a trusted CA would remove that.

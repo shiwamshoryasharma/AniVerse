@@ -1,3 +1,12 @@
+> [!CAUTION]
+> ### 🚫 AniVerse hosts NOTHING — it is a web browser
+> - **No content is hosted, uploaded, stored, streamed or distributed** by AniVerse or its developer. The developer runs **no media servers**.
+> - AniVerse ships with **no websites**. **You** add the sites, and their pages and videos load **directly from those sites' own servers**.
+> - AniVerse only works on pages a site has already sent: it finds episodes (web scraping and automated navigation), blocks ads, and shows **only the site's own player** through a CSS overlay. It **does not** download, rip or re-host videos, and it bypasses **no DRM**.
+> - ⚖️ **DMCA takedown requests and other legal notices must go to the operator or hosting provider of the website that serves the content — NOT to AniVerse or its developer.**
+>
+> 📜 Full text: **[DISCLAIMER.md](DISCLAIMER.md)** · [DMCA disclaimer](#%EF%B8%8F-dmca-disclaimer)
+
 <div align="center">
 
 <img src="build/icon.png" alt="AniVerse logo" width="104" />
@@ -29,9 +38,6 @@ AniList-powered discovery · airing schedule · built-in player · AniList & MyA
 <br />
 
 <img src="docs/screenshots/home.webp" alt="AniVerse home: spotlight, latest episodes and top charts" width="100%" />
-
-> [!CAUTION]
-> **AniVerse hosts nothing.** It is a web browser with anime-focused features. It does not host, upload, store, stream or distribute any video, and its developer runs no media servers. Websites are added by **you**; their pages load straight from their own servers. **Copyright and other legal notices belong to the operator or hosting provider of the website that serves the content — not to AniVerse or its developer.** Read the full [Disclaimer](DISCLAIMER.md).
 
 ## ✨ Features
 
@@ -232,7 +238,7 @@ npm run dist:installer
 ```
 
 > [!NOTE]
-> Packaged builds copy `config/streaming-sites.txt` from your checkout as the default source list. Clear it before building an installer you plan to share.
+> `dist` and `dist:installer` copy `config/streaming-sites.txt` from your checkout as the default source list. **Official releases** are built with `npm run dist:signed`. That build ships no source list and is signed with the certificate whose [fingerprints](#-certificate-fingerprints) are listed below. It needs that certificate in your Windows certificate store, so forks should use `dist:installer` or their own certificate (`ANIVERSE_SIGN_SHA1`).
 
 <details>
 <summary><b>All scripts</b></summary>
@@ -250,6 +256,7 @@ npm run dist:installer
 | `npm run test:sites` | Drive every configured website to an episode and report per site |
 | `npm run dist` | Windows installer + portable build in `release/` |
 | `npm run dist:installer` | Windows installer only |
+| `npm run dist:signed` | Release installer: signed, no bundled source list |
 
 </details>
 
@@ -269,6 +276,39 @@ scripts/        Build/dev runners, installer art, asset importers
 test/           Unit tests, fixtures, e2e drivers
 docs/           Architecture, accounts, installer, screenshots
 ```
+
+</details>
+
+<div align="center">
+
+## 🔏 Certificate fingerprints
+
+</div>
+
+Official AniVerse installers are signed with the developer's code-signing certificate (`CN=Shiwam Shorya Sharma, O=AniVerse`). Before you run an installer, check that its signature matches these fingerprints:
+
+**SHA-1**
+```text
+5A:AD:69:1D:2F:1B:3C:A4:80:BA:10:83:D4:17:E7:2D:FA:9F:2B:84
+```
+
+**SHA-256**
+```text
+A4:E9:77:36:B3:50:B8:DB:5D:71:A7:A6:0B:D2:AA:94:BE:AA:8D:70:FB:0F:19:E2:27:D9:BF:3C:36:81:41:45
+```
+
+<details>
+<summary><b>How to check</b></summary>
+
+**In Explorer:** right-click the installer → **Properties** → **Digital Signatures** → select the signature → **Details** → **View Certificate** → **Details** → **Thumbprint**. It must equal the SHA-1 above.
+
+**In PowerShell** (prints both fingerprints):
+
+```powershell
+$c = (Get-AuthenticodeSignature .\AniVerse-Setup-0.1.0.exe).SignerCertificate; ($c.Thumbprint -split '(..)' -ne '') -join ':'; ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($c.RawData))).Replace('-', ':')
+```
+
+The certificate is self-signed, so Windows reports the publisher as unverified and SmartScreen may warn on first run. The fingerprints are what prove the file came from this project. **If they don't match, don't run the file.**
 
 </details>
 

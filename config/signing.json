@@ -1,0 +1,4 @@
+{
+  "$comment": "Public SHA-1 thumbprint of AniVerse's code-signing certificate (CN=Shiwam Shorya Sharma, O=AniVerse; self-signed, valid until 2031-10-23). npm run dist:signed signs with it from the Windows certificate store; the private key is never in this repository. Fingerprints: README.md.",
+  "certificateSha1": "5AAD691D2F1B3CA480BA1083D417E72DFA9F2B84"
+}
