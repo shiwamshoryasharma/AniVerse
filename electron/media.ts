@@ -95,9 +95,14 @@ export class MediaProtocols {
     };
     const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
     if (result.canceled || !result.filePaths[0]) return null;
-    const token = `${randomBytes(16).toString('hex')}${path.extname(result.filePaths[0]).toLowerCase()}`;
-    this.files.set(token, result.filePaths[0]);
-    return { url: `media://local/${token}`, name: path.basename(result.filePaths[0]) };
+    return { url: this.grantFile(result.filePaths[0]), name: path.basename(result.filePaths[0]) };
+  }
+
+  /** Main-process callers must first validate that the user selected this file/folder. */
+  grantFile(file:string):string {
+    const token = `${randomBytes(16).toString('hex')}${path.extname(file).toLowerCase()}`;
+    this.files.set(token,file);
+    return `media://local/${token}`;
   }
 }
 

@@ -37,6 +37,8 @@ Inspected 2026-10-26. Start with [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.
 | Website navigation | `electron/siteNavigator.ts`, `electron/sitePage.ts`, `app/core/sources/recipes.ts`, `WebSession.tsx`, `Watch.tsx`. |
 | Theme/controls | `frontend/src/styles/app.css`, `controls.css`, `frontend/src/components/controls.tsx`. Reuse theme tokens and existing components. |
 
+Version 1 adds local Workspace and Episode Toolkit seams. Read [workspace.md](workspace.md) for modules, data boundaries and limits.
+
 ## Important implementations
 
 - Metadata: `app/core/metadata/anilist.ts`, `app/core/net/http.ts`. Cached/stale fallback and `RateGate(12, 28)` limit requests. Browse query variables intentionally omit unset filters.

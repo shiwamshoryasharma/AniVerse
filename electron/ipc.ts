@@ -64,6 +64,7 @@ const settingsPatch = z
         reduceMotion: z.boolean(),
         titleLanguage: z.enum(['english', 'romaji', 'native']),
         showAdult: z.boolean(),
+        spoilerShield: z.boolean(),
       })
       .partial(),
     player: z
@@ -79,6 +80,7 @@ const settingsPatch = z
         preferredQuality: z.enum(['auto', '1080', '720', '480']),
         theater: z.boolean(),
         siteFocus: z.boolean(),
+        subtitleStyle:z.object({size:z.number().finite().min(16).max(48),color:z.enum(['white','yellow','cyan','green']),background:z.number().finite().min(0).max(1),offset:z.number().finite().min(-15).max(15)}).partial(),
       })
       .partial(),
     accounts: z
@@ -88,7 +90,7 @@ const settingsPatch = z
         twoWay: z.boolean(),
       })
       .partial(),
-    privacy: z.object({ adblock: z.boolean(), blockPopups: z.boolean(), autoCloudflare: z.boolean() }).partial(),
+    privacy: z.object({ adblock: z.boolean(), blockPopups: z.boolean(), autoCloudflare: z.boolean(), watchInsights:z.boolean() }).partial(),
     updates: z.object({ autoCheck: z.boolean(), autoDownload: z.boolean() }).partial(),
   })
   .partial();
@@ -139,6 +141,31 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'site.options': z.object({ webContentsId: id }),
   'site.choose': z.object({ webContentsId: id, sourceId, kind: z.enum(['type', 'server']), value: text(60) }),
   'site.forget': z.object({ sourceId, mediaId: id }),
+
+
+  'toolkit.bookmarks': z.object({mediaId:id.optional(),search:text(200).optional()}),
+  'toolkit.saveBookmark': z.object({id:id.optional(),media:snapshot,episode:id,position:z.number().finite().min(0).max(604800),duration:z.number().finite().positive().max(604800),sourceId:sourceId.nullable(),note:text(1000),tags:z.array(text(30)).max(8)}),
+  'toolkit.deleteBookmark': z.object({id}),
+  'toolkit.skips': z.object({mediaId:id}),
+  'toolkit.saveSkip': z.object({mediaId:id,kind:z.enum(['intro','outro']),start:z.number().finite().min(0).max(604800),end:z.number().finite().positive().max(604800),enabled:z.boolean(),sourceId:sourceId.nullable(),duration:z.number().finite().positive().max(604800)}),
+  'toolkit.deleteSkip': z.object({mediaId:id,kind:z.enum(['intro','outro'])}),
+  'toolkit.record': z.object({sessionId:z.string().regex(/^[a-zA-Z0-9-]{1,100}$/),mediaId:id,episode:id,sourceId:sourceId.nullable(),position:z.number().finite().min(0).max(604800),duration:z.number().finite().positive().max(604800),paused:z.boolean(),totalFrames:z.number().int().min(0).max(1e10).nullable().optional(),droppedFrames:z.number().int().min(0).max(1e10).nullable().optional()}),
+  'toolkit.insights': none,
+  'toolkit.clearInsights': none,
+  'planner.get': none,
+  'planner.build': z.object({budget:z.number().int().min(5).max(360),startDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}),
+  'collection.list': none,
+  'collection.scan': z.object({choose:z.boolean()}),
+  'collection.match': z.object({id,media:snapshot,episode:id}),
+  'collection.remove': z.object({id}),
+  'collection.open': z.object({id}),
+  'themes.list': none,
+  'themes.save': z.object({name:z.string().trim().min(1).max(60)}),
+  'themes.apply': z.object({id:z.string().uuid()}),
+  'themes.delete': z.object({id:z.string().uuid()}),
+  'themes.import': none,
+  'themes.export': z.object({id:z.string().uuid()}),
+  'player.openSubtitles': none,
 
   'profile.setImage': z.object({
     kind: z.enum(['avatar', 'banner']),

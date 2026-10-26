@@ -2,7 +2,6 @@ import type Hls from 'hls.js';
 import type { MediaPlayerClass, Representation } from 'dashjs';
 import {
   Cast as CastIcon,
-  Captions,
   FastForward,
   Gauge,
   Maximize,
@@ -26,6 +25,7 @@ import { CastMenu, CastOverlay } from './Cast';
 import { isCasting, useCastState } from './useCastState';
 import { Range } from '../components/controls';
 import { clock, cx } from '../lib/format';
+import { SubtitleStudio } from './SubtitleStudio';
 
 export interface PlayerSource {
   type: 'hls' | 'dash' | 'mp4';
@@ -35,6 +35,8 @@ export interface PlayerSource {
 
 export interface PlayerControls {
   seekBy(seconds: number): void;
+  seekTo(seconds: number): void;
+  state(): { position:number; duration:number; paused:boolean; totalFrames:number|null; droppedFrames:number|null } | null;
   toggle(): void;
 }
 
@@ -90,9 +92,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
   const [speed, setSpeed] = useState(prefs.speed);
   const [levels, setLevels] = useState<Level[]>([]);
   const [level, setLevel] = useState(-1);
-  const [tracks, setTracks] = useState<{ index: number; label: string }[]>([]);
-  const [track, setTrack] = useState(-1);
-  const [menu, setMenu] = useState<'speed' | 'quality' | 'subs' | null>(null);
+  const [menu, setMenu] = useState<'speed' | 'quality' | null>(null);
   const [idle, setIdle] = useState(false);
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -270,7 +270,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
       ['canplay', () => setWaiting(false)],
       ['seeked', () => report(true)],
       ['durationchange', () => setDuration(v.duration)],
-      ['loadedmetadata', () => (setDuration(v.duration), refreshTracks())],
+      ['loadedmetadata', () => setDuration(v.duration)],
       [
         'timeupdate',
         () => {
@@ -282,18 +282,8 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
       ['ended', () => (report(true), cb.current.onEnded?.())],
       ['error', () => setError(v.error?.message || 'This video could not be played.')],
     ];
-    const refreshTracks = () => {
-      const list = Array.from(v.textTracks)
-        .map((t, index) => ({ index, label: t.label || t.language || `Track ${index + 1}`, kind: t.kind }))
-        .filter((t) => t.kind === 'subtitles' || t.kind === 'captions');
-      setTracks(list);
-      const showing = Array.from(v.textTracks).findIndex((t) => t.mode === 'showing');
-      setTrack(showing);
-    };
-    v.textTracks.addEventListener('addtrack', refreshTracks);
     for (const [name, fn] of handlers) v.addEventListener(name, fn);
     return () => {
-      v.textTracks.removeEventListener('addtrack', refreshTracks);
       for (const [name, fn] of handlers) v.removeEventListener(name, fn);
     };
   }, []);
@@ -319,8 +309,15 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
     showFlash(`${d > 0 ? '+' : '−'}${Math.abs(d)}s`);
   };
   useEffect(() => {
-    if (controlsRef) controlsRef.current = { seekBy, toggle };
+    if (controlsRef) controlsRef.current = { seekBy, seekTo, toggle, state: () => {
+      const v=video.current;
+      if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return null;
+      const quality=v.getVideoPlaybackQuality?.();
+      return {position:v.currentTime,duration:v.duration,paused:v.paused,totalFrames:quality?.totalVideoFrames ?? null,droppedFrames:quality?.droppedVideoFrames ?? null};
+    } };
   });
+
+  useEffect(() => () => { if (controlsRef) controlsRef.current = null; }, [controlsRef]);
 
   const changeVolume = (v: number) => {
     const next = Math.max(0, Math.min(1, v));
@@ -347,11 +344,6 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
     setLevel(index);
     setMenu(null);
   };
-  const pickTrack = (index: number) => {
-    Array.from(video.current!.textTracks).forEach((t, i) => (t.mode = i === index ? 'showing' : 'disabled'));
-    setTrack(index);
-    setMenu(null);
-  };
 
   const wake = () => {
     setIdle(false);
@@ -360,7 +352,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
   };
 
   const onKey = (e: React.KeyboardEvent) => {
-    if ((e.target as HTMLElement).tagName === 'INPUT') return;
+    if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
     const k = e.key.toLowerCase();
     if (k === ' ' || k === 'k') toggle();
     else if (k === 'j' || k === 'arrowleft') seekBy(k === 'j' ? -prefs.seekStep : -5);
@@ -408,6 +400,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
         ))}
       </video>
 
+      <SubtitleStudio key={source.url} video={video} style={prefs.subtitleStyle} />
       {title && <div className="player-title ellipsis">{title}</div>}
 
       <div className="player-center">
@@ -464,19 +457,6 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
                     {l.label}
                   </button>
                 ))}
-            </>
-          )}
-          {menu === 'subs' && (
-            <>
-              <h5>Subtitles</h5>
-              <button className={cx(track === -1 && 'on')} onClick={() => pickTrack(-1)}>
-                Off
-              </button>
-              {tracks.map((t) => (
-                <button key={t.index} className={cx(t.index === track && 'on')} onClick={() => pickTrack(t.index)}>
-                  {t.label}
-                </button>
-              ))}
             </>
           )}
         </div>
@@ -542,11 +522,6 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
           {levels.length > 1 && (
             <button className="icon-btn" aria-label="Quality" onClick={() => setMenu(menu === 'quality' ? null : 'quality')}>
               <Settings2 size={17} />
-            </button>
-          )}
-          {tracks.length > 0 && (
-            <button className={cx('icon-btn', track >= 0 && 'on')} aria-label="Subtitles" onClick={() => setMenu(menu === 'subs' ? null : 'subs')}>
-              <Captions size={18} />
             </button>
           )}
           <button className={cx('icon-btn', casting && 'on')} aria-label="Cast to a TV" title="Cast to Chromecast / Google TV" onClick={() => setCastMenu((v) => !v)}>

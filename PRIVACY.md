@@ -1,40 +1,57 @@
-# Privacy
+# Privacy and local data
 
-_Last updated: 23 October 2026_
+_Last updated: 26 October 2026 · AniVerse 1.0_
 
-AniVerse has **no accounts of its own, no telemetry, no analytics and no servers**. The developer receives nothing about you or how you use the app.
+AniVerse has no account system or developer-operated usage-analytics endpoint of its own. Most personal records stay on the device. Websites and external services receive requests when their features are used.
 
-## What stays on your computer
+## Local records
 
-Everything AniVerse keeps is stored locally in `%APPDATA%\AniVerse` (Windows):
-
-| Data | Where |
+| Data | Handling |
 | --- | --- |
-| Library, watch history, progress, favourites, settings, profile name/bio/images | `aniverse.db` (SQLite) and the profile folder |
-| AniList / MyAnimeList sign-in tokens | Encrypted with the operating system's secure storage (Windows DPAPI, macOS Keychain, Linux Secret Service) and tied to your local profile |
-| Each website's cookies, logins and cache | A separate, isolated browser session per site |
-| Your source list and extra filter rules | `config/streaming-sites.txt`, `config/filters.txt` |
+| Library, history, progress, favourites, scores, settings and profile | Local SQLite database and profile files |
+| Scene bookmarks, notes/tags and skip ranges | Local; excluded from AniList/MyAnimeList list sync |
+| Weekly plan and visual themes | Local; explicit theme export writes a JSON file you choose |
+| Collection roots, filenames, sizes and confirmed matches | Local database; real paths stay in the main process/database and are hidden from collection menus |
+| Imported subtitles | Selected file is read locally, converted to WebVTT and held for the native player session; original file unchanged |
+| Optional watch insights | Disabled by default; local session timestamps, media/episode/source identifiers, playing-time estimates and available frame counters |
+| Website cookies, logins, cache and local storage | Separate Chromium session per configured website |
+| OAuth tokens | Main process, using Electron's operating-system secure storage when available |
+| Source and OAuth configuration | Local files; do not commit or share them |
 
-Uninstalling AniVerse removes the program but keeps this folder, so a reinstall picks up where you left off. Delete the folder to remove all data.
+The database is not an encrypted vault. Operating-system account security, backups and disk protection matter. A collection index can reveal interests and paths even when menus hide paths.
 
-## What leaves your computer, and to whom
+Theme import/export accepts only a strict visual/player schema. It excludes credentials, sources, private notes and arbitrary CSS. Importing a preset does not execute a script or import media.
 
-AniVerse only talks to a service when you use the feature that needs it:
+## Network destinations
 
-| Service | When | What is sent |
-| --- | --- | --- |
-| **AniList** (`graphql.anilist.co`, image CDN) | Browsing, schedule, details, comments; list sync if connected | Search/filter queries; with sign-in, your list changes and comments you post |
-| **MyAnimeList** (`api.myanimelist.net`) | Forum comments; list sync if connected | Topic lookups; with sign-in, your list changes |
-| **YouTube** (`youtube.com`, `googleapis.com`) | Official-channel sources, trailers, YouTube comments | Channel/video requests; your own YouTube Data API key if you set one |
-| **Ad-block filter lists** (Ghostery's list CDN) | Start-up, when the cached lists are out of date | A plain download request |
-| **GitHub** (this repository's releases) | Update checks: start-up and every 6 hours, unless turned off in Settings → About | Plain requests for the latest release's `latest.yml` and, when there's an update, its installer files |
-| **Websites you add** | When you open them | Whatever any browser sends to a website you visit |
-| **Cast devices** on your local network | When you use casting | The stream address, to the TV you chose |
+| Destination | Trigger and request content |
+| --- | --- |
+| AniList and image hosts | Discovery, searches, details, schedule; authenticated list changes/comments when enabled |
+| MyAnimeList | Supported metadata/forum lookups and authenticated list sync |
+| YouTube / Google APIs | Official channel requests, embeds, trailers and comments; configured API key where required |
+| Websites and their third parties | Normal browser requests, cookies, scripts, media and addresses loaded by the page; blocking is best effort |
+| Filter-list distributors | Downloads when blocker lists need updating |
+| GitHub Releases and asset hosts | Update checks/downloads; automatic unless disabled in Settings → About |
+| Selected cast device | Media address/playback information; local files can be served temporarily over a token-protected LAN URL |
 
-Sign-in uses each service's official OAuth page in your normal web browser. AniVerse never sees your AniList or MyAnimeList password.
+Services ordinarily see request metadata such as IP address, time and user agent. Their own privacy policies apply. Local scene notes and watch-insight records are not copied to an AniVerse analytics service.
 
-These services have their own privacy policies. AniVerse has no control over them, or over the websites you add.
+Collection filename parsing is local. Matching uses the search text shown in the AniList search field; edit it if an inferred title contains private information. Full filesystem paths are not required by the metadata API.
 
-## Questions
+Account sign-in uses the provider's official OAuth page in the system browser. AniVerse does not ask for that password. A temporary local callback can receive the authorization response. See [Accounts](docs/ACCOUNTS.md).
 
-Open an issue on [GitHub](https://github.com/shiwamshoryasharma/AniVerse/issues). Don't include personal data.
+## Retention and controls
+
+- **Insights:** enable/disable in Workspace → Watch insights or Settings → Privacy & blocking. Disabling stops new samples; **Clear insights** deletes existing samples while keeping progress and bookmarks.
+- **Bookmarks and skip maps:** delete individual records in Workspace or Episode Toolkit.
+- **Collection:** removing an entry deletes its index record, not the file. Refreshing a remembered folder can index it again.
+- **Themes:** delete presets in Settings → Theme presets. Exported files remain where you saved them until separately deleted.
+- **Website sessions:** use the source-session clearing controls. Disconnecting AniList/MyAnimeList removes that integration's local token.
+- **Metadata:** clear cached metadata in Privacy & blocking; library records and logins remain.
+- **Updates:** disable automatic checks/downloads in About if unwanted.
+
+Uninstallation normally retains the user-data folder for reinstalling. For complete local removal, quit the app and remove its user-data folder, including database, configuration and browser sessions. Backups and exported files require separate deletion. Local deletion does not delete records already held by external services.
+
+## Reports
+
+Use [GitHub issues](https://github.com/shiwamshoryasharma/AniVerse/issues) for product questions and [SECURITY.md](SECURITY.md) for security concerns. Share the minimum reproduction details. Do not upload full databases, cookies, private source lists, OAuth files, personal paths or watch records.

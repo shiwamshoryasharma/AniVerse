@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: Settings = {
     reduceMotion: false,
     titleLanguage: 'english',
     showAdult: false,
+    spoilerShield: true,
   },
   player: {
     autoplay: true,
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
     preferredQuality: 'auto',
     theater: false,
     siteFocus: true,
+    subtitleStyle: { size:28, color:'white', background:0.65, offset:0 },
   },
   accounts: {
     youtubeApiKey: '',
@@ -34,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
     adblock: true,
     blockPopups: true,
     autoCloudflare: true,
+    watchInsights: false,
   },
   updates: {
     autoCheck: true,
@@ -73,6 +76,7 @@ export function sanitize(s: Settings): Settings {
     ...s,
     appearance: {
       ...s.appearance,
+      spoilerShield: s.appearance.spoilerShield !== false,
       fontFamily: ['inter', 'system', 'arial', 'serif', 'mono'].includes(s.appearance.fontFamily) ? s.appearance.fontFamily : 'inter',
     },
     profile: {
@@ -88,6 +92,12 @@ export function sanitize(s: Settings): Settings {
       seekStep: clamp(Math.round(Number(s.player.seekStep) || 10), 1, 60),
       skipStep: clamp(Math.round(Number(s.player.skipStep) || 85), 5, 300),
       completeThreshold: clamp(Number(s.player.completeThreshold) || 0.85, 0.5, 1),
+      subtitleStyle: {
+        size: clamp(Number(s.player.subtitleStyle?.size)||28,16,48),
+        color: ['white','yellow','cyan','green'].includes(s.player.subtitleStyle?.color) ? s.player.subtitleStyle.color : 'white',
+        background: clamp(Number.isFinite(s.player.subtitleStyle?.background)?s.player.subtitleStyle.background:0.65,0,1),
+        offset: clamp(Number(s.player.subtitleStyle?.offset)||0,-15,15),
+      },
     },
     // Built explicitly so keys from older versions (user-entered client IDs / redirect URLs) are dropped.
     accounts: {

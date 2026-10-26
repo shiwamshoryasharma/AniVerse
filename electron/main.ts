@@ -1,7 +1,7 @@
-import { app, BrowserWindow, Menu, safeStorage, session, shell, webContents, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import { app, BrowserWindow, Menu, dialog, safeStorage, session, shell, webContents, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Store, type SecretCodec } from '../app/core/db/store';
 import { CommentsService } from '../app/core/comments';
@@ -28,6 +28,11 @@ import { browserUserAgent, SessionManager } from './sessions';
 import { SiteNavigator } from './siteNavigator';
 import { CastService } from './cast/castService';
 import { UpdateService } from './updater';
+import { WorkspaceService } from '../app/core/workspace';
+import { buildWatchPlan, type WatchPlan } from '../app/shared/workspace';
+import { pendingRelease } from '../app/shared/release';
+import { subtitleTextToVtt } from '../app/shared/subtitles';
+import { LocalCollection } from './collection';
 import { summarizeGraphics, type GpuPreference } from '../app/shared/graphics';
 
 // Ask Chromium for the discrete adapter on hybrid laptops before GPU initialization.
@@ -208,6 +213,7 @@ async function bootstrap() {
   const store = new Store(paths.db, credentials.codec);
   store.cachePurge();
   const settings = new SettingsService(store);
+  const workspace = new WorkspaceService(store);
   const apiFetch: FetchFn = (url, init) => session.defaultSession.fetch(url, init);
 
   const adblock = new Adblocker(paths.adblockCache, paths.filtersFile, (stats) => emit('adblock.stats', stats));
@@ -281,6 +287,7 @@ async function bootstrap() {
 
   const protocols = new MediaProtocols(paths.renderer, paths.profileDir);
   protocols.install();
+  const collection = new LocalCollection(store,protocols,()=>mainWindow);
   const cast = new CastService(
     (s) => emit('cast.status', s),
     (u) => protocols.localPath(u),
@@ -363,6 +370,62 @@ async function bootstrap() {
       registry.get(sourceId);
       store.clearSiteLinks(sourceId, mediaId);
       store.setPin(sourceId, mediaId, null);
+    },
+
+
+    'toolkit.bookmarks': (input) => workspace.bookmarks(input),
+    'toolkit.saveBookmark': (input) => workspace.saveBookmark(input),
+    'toolkit.deleteBookmark': ({id}) => workspace.deleteBookmark(id),
+    'toolkit.skips': ({mediaId}) => workspace.skips(mediaId),
+    'toolkit.saveSkip': (range) => workspace.saveSkip(range),
+    'toolkit.deleteSkip': ({mediaId,kind}) => workspace.deleteSkip(mediaId,kind),
+    'toolkit.record': (point) => { if(settings.get().privacy.watchInsights) workspace.record(point); },
+    'toolkit.insights': () => workspace.insights(),
+    'toolkit.clearInsights': () => workspace.clearInsights(),
+    'planner.get': () => store.getKv<WatchPlan|null>('planner:v1',null),
+    'planner.build': async ({budget,startDate}) => {
+      const entries=store.listLibrary(null).filter((entry)=>['CURRENT','PLANNING','REPEATING'].includes(entry.status)).slice(0,20);
+      const candidates=await Promise.all(entries.map(async(entry)=>{
+        const details=await anilist.details(entry.media.id).catch(()=>null);
+        if(!details || pendingRelease(details,entry.progress+1)?.title)return null;
+        const available=details.status==='FINISHED' ? (details.episodes??entry.progress) : details.nextAiring ? Math.max(0,details.nextAiring.episode-1) : entry.progress;
+        return {media:entry.media,progress:entry.progress,available,minutes:details.duration??24,estimated:details.duration===null};
+      }));
+      const plan=buildWatchPlan(candidates.filter((entry)=>entry!==null),budget,startDate);
+      store.setKv('planner:v1',plan); return plan;
+    },
+    'collection.list': () => collection.list(),
+    'collection.scan': ({choose}) => collection.scan(choose),
+    'collection.match': ({id,media,episode}) => collection.match(id,media,episode),
+    'collection.remove': ({id}) => collection.remove(id),
+    'collection.open': ({id}) => collection.open(id),
+    'themes.list': () => workspace.themes(),
+    'themes.save': ({name}) => workspace.saveTheme(name,settings.get()),
+    'themes.apply': ({id}) => { const preset=workspace.theme(id); return settings.update({appearance:preset.appearance,player:preset.player}); },
+    'themes.delete': ({id}) => workspace.deleteTheme(id),
+    'themes.import': async () => {
+      const options={title:'Import an AniVerse theme',properties:['openFile' as const],filters:[{name:'AniVerse theme',extensions:['json']}]};
+      const result=mainWindow?await dialog.showOpenDialog(mainWindow,options):await dialog.showOpenDialog(options);
+      if(result.canceled || !result.filePaths[0])return null;
+      const info=await stat(result.filePaths[0]); if(info.size>20000)throw new AppError('invalid-input','Theme files must be smaller than 20 KB.');
+      let parsed:unknown; try {parsed=JSON.parse(await readFile(result.filePaths[0],'utf8'));}catch{throw new AppError('invalid-input','Choose a valid theme JSON file.');}
+      return workspace.importTheme(parsed);
+    },
+    'themes.export': async ({id}) => {
+      const preset=workspace.theme(id);
+      const options={title:'Export visual theme',defaultPath:preset.name.replace(/[^a-zA-Z0-9 _-]/g,'')+'.aniverse-theme.json',filters:[{name:'Theme JSON',extensions:['json']}]};
+      const result=mainWindow?await dialog.showSaveDialog(mainWindow,options):await dialog.showSaveDialog(options);
+      if(result.canceled || !result.filePath)return {saved:false};
+      await writeFile(result.filePath,JSON.stringify(preset,null,2)+'\n','utf8'); return {saved:true};
+    },
+    'player.openSubtitles': async () => {
+      const options={title:'Import subtitles',properties:['openFile' as const],filters:[{name:'Subtitle files',extensions:['vtt','srt']}]};
+      const result=mainWindow?await dialog.showOpenDialog(mainWindow,options):await dialog.showOpenDialog(options);
+      if(result.canceled || !result.filePaths[0])return null;
+      const file=result.filePaths[0]; const info=await stat(file);
+      if(info.size>2000000)throw new AppError('invalid-input','Subtitle files must be smaller than 2 MB.');
+      try {return {name:path.basename(file),text:subtitleTextToVtt(await readFile(file,'utf8'))};}
+      catch {throw new AppError('invalid-input','Choose a valid UTF-8 WebVTT or SRT subtitle file.');}
     },
 
     'profile.setImage': ({ kind, dataUrl }) => saveProfileImage(kind, dataUrl),

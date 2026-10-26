@@ -2,13 +2,19 @@
 
 Snapshot: 2026-10-26, Asia/Calcutta. This is a source/documentation inspection, not a runtime certification.
 
+## Version 1.0.0 update (2026-10-26)
+
+Adds the eight local workspace features and integrated Episode Toolkit; Watch Together was explicitly removed. See [workspace.md](workspace.md). README, DISCLAIMER, PRIVACY and the About notice now describe the actual browser/player model, local data, rights and limitations.
+
+131 unit tests, typecheck/lint, production/signed build, 10 packaged Workspace checks, 25 original-player assertions, both GPU preference/UI modes and packaged HLS/DASH/MP4 playback passed. The pinned signer, SHA-512 feed and public-only packaged resources were verified. Evidence: test/artifacts/release-1.0.0-validation.json. The self-signed certificate has an untrusted root; this is not a publicly trusted publisher. Real installer/uninstaller/updater installation and image/model-generation tests were not run. Source-specific live playback was not rerun for 1.0; frame counters do not certify lip sync.
+
 ## Playback/GPU update (2026-10-26)
 
 Version 0.3.0 adds focus isolation fixes, hidden/challenge-frame rejection, Playback Rescue, same-element recovery, position preservation on source option changes, and dedicated-GPU preference with actual adapter reporting, separate illustrated GPU settings menus, and persisted UI fonts. See [PLAYBACK.md](../../docs/PLAYBACK.md). Current validation/release evidence belongs under `test/artifacts/`; historical context-only hashes below describe the earlier documentation task, not the application patch.
 
 ## Existing implementation
 
-`package.json` reports AniVerse 0.3.0, Electron 44, React 19, TypeScript 6 and Vite 8. These are repository declarations, not claims about globally installed runtimes.
+`package.json` reports AniVerse 1.0.0, Electron 44, React 19, TypeScript 6 and Vite 8. These are repository declarations, not claims about globally installed runtimes.
 
 The inspected source contains these implemented layers:
 

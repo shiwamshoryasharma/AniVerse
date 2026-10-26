@@ -1,72 +1,81 @@
-# Disclaimer
+# Disclaimer and project scope
 
-_Last updated: 23 October 2026_
+_Last updated: 26 October 2026 · AniVerse 1.0_
 
-> **In one sentence:** AniVerse is a desktop web browser with anime-focused features. It hosts nothing, and any legal notice about content must go to the website and hosting provider that actually serve it.
+AniVerse is a desktop browser and media player with anime-focused discovery and personal organization tools. This notice describes what the software supplies, how it works, and where control lies. It is not a legal determination about every possible use.
 
-## 1. What AniVerse is
+## 1. Purpose and distribution
 
-AniVerse is free, open-source desktop software (GPL-3.0) that combines:
+AniVerse combines an Electron/Chromium browser, AniList metadata, optional AniList/MyAnimeList list integrations, a native media player and a local workspace.
 
-- an anime catalogue, schedule and tracker built on **AniList's public API**;
-- optional sign-in to **AniList** and **MyAnimeList** to sync the user's own lists through their official APIs;
-- a **web browser** that opens websites the user chooses, each in its own isolated session;
-- a **media player** for stream links or local files that the user provides.
+Users choose their websites, direct media URLs, local videos and subtitle files. The project does not operate a public episode-hosting platform or internet stream relay. Official signed releases do not bundle streaming-site lists or private browsing recipes.
 
-## 2. AniVerse hosts no content
+“Browser” describes the implementation. It does not automatically make a source authorized, create a copyright exception or exempt an application or user from applicable law.
 
-- The developer of AniVerse **does not host, upload, store, index, stream, sell or distribute** any video, episode, subtitle or other copyrighted content, and runs **no servers** for media of any kind.
-- AniVerse ships **without any streaming websites**. The list of websites (`streaming-sites.txt`) is empty until the **user** adds sites to it on their own computer.
-- When the user opens a website in AniVerse, its pages, scripts and videos are requested by the user's computer and **delivered directly by that website's own servers**, exactly as in any other browser.
+## 2. Website access and automation
 
-## 3. What AniVerse does with a website's pages
+Requests originate from the user's computer. Websites and their content-delivery providers serve their pages, scripts, images and media.
 
-To make websites easier to use, AniVerse acts on the pages that the site has already sent to the user's browser:
+AniVerse can inspect rendered page elements to locate search results, series links, episodes and player controls. It follows links on the user's behalf, blocks selected requests/popups, and applies CSS to focus the site's existing player. SUB/DUB and server switches activate controls the site actually exposes.
 
-- **Web scraping and automated navigation:** it reads the site's search results and links to find the series and episode the user asked for, and follows them on the user's behalf.
-- **Ad, tracker and popup blocking**, using public filter lists.
-- **A custom CSS overlay**, which hides the rest of the page so that only the **site's own player** is shown.
-- **SUB / DUB and server buttons** that click the site's own controls.
+The website workflow does not extract media URLs into a replacement stream, remove DRM, defeat a login/paywall or solve human-verification challenges on the user's behalf. A challenge may be presented in the site's own session for the user to complete.
 
-AniVerse **does not** download, copy, record, re-host, re-stream or extract the videos. It **does not** circumvent DRM, paywalls, logins or any other technical protection measure. Playback happens inside the website's own player, from the website's own servers.
+Automation can fail when sites change. A focused page still runs website code. Hiding elements and blocking advertisements do not certify a site's licensing, security or privacy practices.
 
-## 4. No affiliation, no control, no responsibility for third-party sites
+## 3. Storage, playback and networking
 
-- The developer of AniVerse has **no affiliation** with, and **no control** over, any website a user adds. This includes their content, availability, legality, advertising and data practices.
-- Whether a website may lawfully offer a given title is a matter between that website, its hosting provider and the rights holders. The developer of AniVerse does **not** endorse, recommend or link to any unlicensed streaming service.
-- AniVerse is **not affiliated with, endorsed by or sponsored by** AniList, MyAnimeList, YouTube, Google, or any studio, publisher or distributor. All product names, logos, anime titles, artwork and metadata are the property of their respective owners. Artwork and metadata shown in the app come from AniList's public API.
+“No public media hosting” must be distinguished from ordinary browser and local-player operation:
 
-## 5. Copyright and legal notices (DMCA and similar)
+- Chromium can buffer media and retain cookies, website storage and cache on the device.
+- AniVerse stores metadata, library progress, profile data, settings, scene notes, skip maps, plans and collection records locally.
+- A collection scan reads selected folder entries and video-file metadata. It does not move or upload videos. A title match does not verify ownership.
+- The native player opens a user-provided URL or file. Imported SRT/WebVTT captions are processed locally.
+- Opt-in watch insights store observed playing-time and frame-count samples locally; they are not developer analytics uploads.
+- Optional casting sends media information to a selected device. Local-file casting can create a temporary token-protected server on the user's local network. This is distinct from a developer-operated public hosting service.
+- OAuth sign-in can use a temporary local callback listener. Metadata and updates contact their respective providers.
 
-AniVerse does not host the material, so **the developer cannot remove it from the internet**. To have infringing material taken down, send your notice to:
+See [PRIVACY.md](PRIVACY.md). The project does not claim that no data is ever stored or that no network connection is ever opened.
 
-1. **the operator of the website** that serves the material (its contact, abuse or DMCA page); and/or
-2. **the hosting provider, CDN or domain registrar** of that website (a WHOIS / IP lookup shows who they are).
+## 4. Content rights and user choices
 
-Notices sent to the developer of AniVerse about content on third-party websites cannot be acted upon. That includes notices sent through this repository.
+Episodes, audio, subtitles, artwork, catalogue text and trademarks retain their owners' rights. The software's GPL license does not grant rights to unrelated media displayed through it.
 
-This repository contains source code only. If you believe a file **in this repository itself** infringes your rights, open an issue titled “Copyright notice” with a description and the file path, without links to infringing material. It will be reviewed promptly.
+Users should choose sources and files they are entitled to access and comply with applicable law and relevant service terms. A reachable website or locally stored file is not evidence of permission. Copyright exceptions depend on the circumstances and jurisdiction; this project asserts no universal “personal use” exemption. The [U.S. Copyright Office permissions and fair-use FAQ](https://www.copyright.gov/help/faq/faq-fairuse.html) offers general U.S. information, not a worldwide rule.
 
-## 6. The user's responsibility
+AniVerse is not intended for unauthorized redistribution or circumvention of access controls. The project does not endorse unlicensed sources or publish a list of them.
 
-By using AniVerse, the user agrees that they:
+## 5. Third-party independence
 
-- choose and are solely responsible for the websites they add and the content they access;
-- will comply with the laws of their country and with the terms of the websites and services they use;
-- will not use AniVerse to infringe copyright or other rights.
+AniVerse is independent. It is not affiliated with, endorsed by or sponsored by AniList, MyAnimeList, YouTube, Google, NVIDIA, Microsoft or any anime studio, publisher or distributor unless separately stated in writing.
 
-## 7. No warranty, limitation of liability
+External names identify services or compatible technologies. Their owners control their APIs, terms, accounts and regional availability. Integration does not transfer content rights or create endorsement.
 
-AniVerse is provided **“as is”, without warranty of any kind**, express or implied, as stated in sections 15 and 16 of the [GNU General Public License v3.0](LICENSE). To the maximum extent permitted by law, the developer and contributors are **not liable** for any claim, damage or other liability arising from the software, from its use, or from any third-party website, service or content accessed with it.
+## 6. Playback and hardware limits
 
-## 8. A personal project with rare updates
+Source timing, buffering, codecs and drivers can limit playback. Recovery controls cannot repair every encoding error. Frame-drop statistics do not measure lip sync.
 
-AniVerse is a **personal project**. The developer built it for their own comfort and shares it as-is, in the hope that it is useful to others.
+AniVerse requests high-performance graphics and reports available GPU information. Windows, Chromium and the driver decide the actual rendering/decoding path, especially on hybrid laptops. A dedicated GPU, NVIDIA enhancement, AI super resolution, HDR, interpolation or particular performance level is not guaranteed. AniVerse supplies no custom graphics driver.
 
-- **Releases and updates will be rare.** They come only when the developer runs into a problem or wants a change.
-- There is **no release schedule, no roadmap, and no promise** of support, bug fixes or new features. Issues and suggestions are welcome but may not be acted on.
-- The built-in updater only installs releases that the developer chooses to publish. If none are published for a long time, AniVerse simply keeps working as it is.
+Spoiler Shield covers specified application elements, not every website, image, result or external discussion. Planner durations, filename parsing and watch insights are estimates that may require correction.
 
-## 9. Changes
+## 7. Copyright concerns and other notices
 
-This disclaimer may be updated from time to time. The version in the `main` branch of this repository is the current one. The same notice appears in the app under **Settings → About**.
+For material on a third-party website, contact the operator or host that controls it. AniVerse's maintainers cannot remove files from websites they do not operate.
+
+Concerns about this repository's own code, assets or conduct are different. Identify affected files or release assets, the rights involved and a contact method through the project's [GitHub channels](https://github.com/shiwamshoryasharma/AniVerse/issues). Do not publish confidential evidence, credentials or personal information.
+
+For material hosted on GitHub, the [formal GitHub DMCA process](https://docs.github.com/en/site-policy/content-removal-policies/dmca-takedown-policy) remains available. Security concerns should follow [SECURITY.md](SECURITY.md). This notice does not invalidate valid claims, require a public issue, promise an outcome or exclude obligations imposed by law.
+
+## 8. Warranty and liability
+
+AniVerse is provided without warranty under the [GNU General Public License](LICENSE), including its warranty and liability provisions. Exclusions and limitations apply only to the extent permitted by applicable law.
+
+This notice does not create immunity, override mandatory protections, settle third-party rights or replace advice about a specific legal situation. Rights and obligations depend on the relevant facts, law and license.
+
+## 9. Maintenance and changes
+
+AniVerse is a personal project shared on a best-effort basis. Releases may be rare. There is no fixed release schedule, support commitment, service-level agreement or promise of lasting compatibility with a particular website.
+
+The updater does not promise future releases. An outdated or unsupported browser can become incompatible with sites; continued operation is not guaranteed.
+
+This notice may change with the application. Use the version accompanying your release when assessing documented behavior. The About menu contains a shorter notice; this document provides the fuller explanation.

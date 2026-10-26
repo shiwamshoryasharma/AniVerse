@@ -1,6 +1,7 @@
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
+  PanelsTopLeft,
   Clapperboard,
   Compass,
   Globe,
@@ -34,6 +35,7 @@ const NAV = [
   { to: '/library', label: 'Library', icon: Library },
   { to: '/history', label: 'History', icon: History },
   { to: '/sources', label: 'Sources', icon: Globe },
+  { to: '/workspace', label: 'Workspace', icon: PanelsTopLeft },
   { to: '/player', label: 'Player', icon: Clapperboard },
 ];
 

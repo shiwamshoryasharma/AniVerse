@@ -18,6 +18,10 @@ Read [the memory index](../../memory/MEMORY.md), then [architecture](../../memor
 - Preserve renderer/guest security boundaries, credential handling and sync semantics. The concrete invariants are in [decisions](../../memory/decisions.md).
 - Read current source when old notes conflict. In particular, development OAuth IDs are read live even though an older build-script comment says otherwise.
 
+## Workspace changes
+
+For bookmarks, ranges, plans, collection files, portable themes, local insights or native captions, read [the workspace map](../../memory/workspace.md). Retain the browser-only website workflow, opt-in statistics, main-process file grants and strict visual-theme schema. Watch Together was explicitly removed by the user; do not infer its inclusion from older notes.
+
 ## Choose relevant validation
 
 Use [the validation skill](../aniverse-validation/SKILL.md). Application changes follow the repository's typecheck/lint/test/build requirements and relevant runtime checks; documentation-only edits need focused context validation.

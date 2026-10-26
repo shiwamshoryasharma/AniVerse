@@ -74,6 +74,31 @@ export interface RpcContract {
   'site.choose': [{ webContentsId: number; sourceId: string; kind: 'type' | 'server'; value: string }, { options: SiteOptions; focused: boolean }];
   'site.forget': [{ sourceId: string; mediaId: number }, void];
 
+
+  'toolkit.bookmarks': [{mediaId?:number;search?:string}, import('./workspace').SceneBookmark[]];
+  'toolkit.saveBookmark': [import('./workspace').BookmarkInput, import('./workspace').SceneBookmark];
+  'toolkit.deleteBookmark': [{id:number}, void];
+  'toolkit.skips': [{mediaId:number}, import('./workspace').SkipRange[]];
+  'toolkit.saveSkip': [import('./workspace').SkipRange, import('./workspace').SkipRange[]];
+  'toolkit.deleteSkip': [{mediaId:number;kind:'intro'|'outro'}, void];
+  'toolkit.record': [import('./workspace').PlaybackPoint, void];
+  'toolkit.insights': [void, import('./workspace').WatchInsights];
+  'toolkit.clearInsights': [void, void];
+  'planner.get': [void, import('./workspace').WatchPlan|null];
+  'planner.build': [{budget:number;startDate:string}, import('./workspace').WatchPlan];
+  'collection.list': [void, import('./workspace').LocalMedia[]];
+  'collection.scan': [{choose:boolean}, {files:import('./workspace').LocalMedia[];skipped:number}];
+  'collection.match': [{id:number;media:MediaSnapshot;episode:number}, import('./workspace').LocalMedia];
+  'collection.remove': [{id:number}, void];
+  'collection.open': [{id:number}, {url:string;name:string;media:MediaSnapshot|null;episode:number|null}];
+  'themes.list': [void, import('./theme').SavedTheme[]];
+  'themes.save': [{name:string}, import('./theme').SavedTheme];
+  'themes.apply': [{id:string}, Settings];
+  'themes.delete': [{id:string}, void];
+  'themes.import': [void, import('./theme').SavedTheme|null];
+  'themes.export': [{id:string}, {saved:boolean}];
+  'player.openSubtitles': [void, {name:string;text:string}|null];
+
   'profile.setImage': [{ kind: 'avatar' | 'banner'; dataUrl: string }, Settings];
   'profile.clearImage': [{ kind: 'avatar' | 'banner' }, Settings];
 

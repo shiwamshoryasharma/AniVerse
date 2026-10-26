@@ -2,6 +2,8 @@ import { CalendarClock, Check, ExternalLink, Heart, Play, Star, TvMinimalPlay } 
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import type { ListStatus, MediaDetails } from '../../../app/shared/types';
+import { hideEpisode } from '../../../app/shared/workspace';
+import { SpoilerGuard } from '../components/SpoilerGuard';
 import { ErrorState, Loading, SourceIcon } from '../components/common';
 import { Select } from '../components/controls';
 import { CardRail, MediaCard } from '../components/MediaCard';
@@ -177,7 +179,7 @@ function Details({ media }: { media: MediaDetails }) {
 
           <div className="card card-pad">
             <h3 style={{ marginTop: 0 }}>Synopsis</h3>
-            <p className="synopsis selectable">{media.description ?? 'No synopsis available.'}</p>
+            <SpoilerGuard key={media.id} label="Synopsis"><p className="synopsis selectable">{media.description ?? 'No synopsis available.'}</p></SpoilerGuard>
           </div>
 
           <div className="card card-pad">
@@ -198,7 +200,7 @@ function Details({ media }: { media: MediaDetails }) {
                     <button
                       key={n}
                       className={cx('ep-cell', watched.has(n) && 'watched')}
-                      title={episodeTitles.get(n) ?? `Episode ${n}`}
+                      title={hideEpisode(n,nextEpisode,watched,settings.appearance.spoilerShield) ? `Episode ${n}` : episodeTitles.get(n) ?? `Episode ${n}`}
                       onClick={() => navigate(`/watch/${media.id}/${n}`)}
                     >
                       {watched.has(n) ? <Check size={13} /> : n}

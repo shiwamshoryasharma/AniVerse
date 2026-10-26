@@ -61,6 +61,30 @@ const MIGRATIONS: string[] = [
   `
   CREATE TABLE library_tombstones (media_id INTEGER PRIMARY KEY, deleted_at INTEGER NOT NULL);
   `,
+  // v4: private Episode Toolkit and viewing insights; existing library/sync data is retained.
+  `
+  CREATE TABLE scene_bookmarks (
+    id INTEGER PRIMARY KEY, media_id INTEGER NOT NULL, episode INTEGER NOT NULL CHECK(episode>0),
+    position REAL NOT NULL CHECK(position>=0), duration REAL NOT NULL, source_id TEXT,
+    note TEXT NOT NULL, tags TEXT NOT NULL, created_at INTEGER NOT NULL
+  );
+  CREATE INDEX scene_bookmarks_media ON scene_bookmarks(media_id,episode);
+  CREATE TABLE skip_ranges (
+    media_id INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('intro','outro')),
+    start REAL NOT NULL CHECK(start>=0), end REAL NOT NULL CHECK(end>start),
+    enabled INTEGER NOT NULL, source_id TEXT, duration REAL NOT NULL, PRIMARY KEY(media_id,kind)
+  );
+  CREATE TABLE local_media (
+    id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL, bytes INTEGER NOT NULL,
+    query TEXT NOT NULL, episode INTEGER, media_id INTEGER, missing INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE watch_sessions (
+    id TEXT PRIMARY KEY, media_id INTEGER NOT NULL, episode INTEGER NOT NULL, source_id TEXT,
+    started_at INTEGER NOT NULL, last_at INTEGER NOT NULL, watched_seconds REAL NOT NULL DEFAULT 0,
+    total_frames INTEGER NOT NULL DEFAULT 0, dropped_frames INTEGER NOT NULL DEFAULT 0, samples INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX watch_sessions_started ON watch_sessions(started_at);
+  `,
 ];
 
 export interface StoredAccount {

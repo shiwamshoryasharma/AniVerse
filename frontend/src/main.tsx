@@ -1,6 +1,7 @@
 import '@fontsource-variable/inter';
 import './styles/app.css';
 import './styles/controls.css';
+import './styles/workspace.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -17,6 +18,7 @@ import { ProfilePage } from './pages/Profile';
 import { SchedulePage } from './pages/Schedule';
 import { SettingsPage } from './pages/Settings';
 import { SourceBrowserPage, SourcesPage } from './pages/Sources';
+import { WorkspacePage } from './pages/Workspace';
 import { WatchPage } from './pages/Watch';
 
 const queryClient = new QueryClient({
@@ -42,6 +44,7 @@ const router = createHashRouter([
       { path: 'history', element: <HistoryPage /> },
       { path: 'sources', element: <SourcesPage /> },
       { path: 'sources/:id', element: <SourceBrowserPage /> },
+      { path: 'workspace/:section?', element: <WorkspacePage /> },
       { path: 'player', element: <PlayerPage /> },
       { path: 'profile', element: <ProfilePage /> },
       { path: 'settings/:section?', element: <SettingsPage /> },

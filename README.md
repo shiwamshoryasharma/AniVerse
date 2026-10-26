@@ -1,355 +1,225 @@
-> [!CAUTION]
-> ### 🚫 AniVerse hosts NOTHING — it is a web browser
-> - **No content is hosted, uploaded, stored, streamed or distributed** by AniVerse or its developer. The developer runs **no media servers**.
-> - AniVerse ships with **no websites**. **You** add the sites, and their pages and videos load **directly from those sites' own servers**.
-> - AniVerse only works on pages a site has already sent: it finds episodes (web scraping and automated navigation), blocks ads, and shows **only the site's own player** through a CSS overlay. It **does not** download, rip or re-host videos, and it bypasses **no DRM**.
-> - ⚖️ **DMCA takedown requests and other legal notices must go to the operator or hosting provider of the website that serves the content — NOT to AniVerse or its developer.**
->
-> 📜 Full text: **[DISCLAIMER.md](DISCLAIMER.md)** · [DMCA disclaimer](#%EF%B8%8F-dmca-disclaimer)
-
 <div align="center">
 
-<img src="build/icon.png" alt="AniVerse logo" width="104" />
+<img src="build/icon.png" alt="AniVerse" width="104" />
 
 # AniVerse
 
-**A cinematic desktop home for anime — browse, track, schedule and watch in one dark, fast app.**
+**Your sites. Your collection. A calmer place to watch.**
 
-AniList-powered discovery · airing schedule · built-in player · AniList & MyAnimeList sync
+A desktop browser with anime discovery, isolated website sessions, a native media player, and a local workspace.
 
-<p>
-  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/github/license/shiwamshoryasharma/AniVerse?style=for-the-badge&color=8b5cf6" /></a>
-  <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white" />
-  <img alt="Electron" src="https://img.shields.io/badge/Electron-44-47848F?style=for-the-badge&logo=electron&logoColor=white" />
-  <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?style=for-the-badge&logo=react&logoColor=white" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
-</p>
-<p>
-  <a href="https://github.com/shiwamshoryasharma/AniVerse/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/shiwamshoryasharma/AniVerse?style=flat-square&color=f59e0b" /></a>
-  <a href="https://github.com/shiwamshoryasharma/AniVerse/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/shiwamshoryasharma/AniVerse?style=flat-square&color=8b5cf6" /></a>
-  <a href="https://github.com/shiwamshoryasharma/AniVerse/issues"><img alt="Issues" src="https://img.shields.io/github/issues/shiwamshoryasharma/AniVerse?style=flat-square" /></a>
-  <img alt="Visitors" src="https://visitor-badge.laobi.icu/badge?page_id=shiwamshoryasharma.AniVerse&left_text=visitors" />
-</p>
+[Download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Getting started](#getting-started) · [Features](#version-1-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
 
-[Features](#-features) · [Screenshots](#-screenshots) · [How to use](#-how-to-use) · [Disclaimer](#%EF%B8%8F-disclaimer) · [Build from source](#%EF%B8%8F-build-from-source) · [Docs](#-documentation)
+Windows 10 / 11 · Electron · React · TypeScript · GPL-3.0-or-later
 
 </div>
 
-<br />
+![AniVerse home](docs/screenshots/home.webp)
 
-<img src="docs/screenshots/home.webp" alt="AniVerse home: spotlight, latest episodes and top charts" width="100%" />
+## What AniVerse does
 
-## ✨ Features
+AniVerse brings the websites **you choose** and the media **you provide** into one desktop interface. Find a title through AniList, open a configured website in its own browser session, focus the site's existing player, and keep your progress alongside local scene notes and a watch plan.
 
-<table>
-<tr>
-<td width="50%" valign="top">
+The project does not operate a public episode-hosting service or internet stream relay. Official signed installers contain no streaming-site list. Adding a website does not establish that its content is licensed, and AniVerse does not grant permission to access or redistribute anyone else's work. Read the [disclaimer](DISCLAIMER.md) and [privacy notice](PRIVACY.md).
 
-### 🏠 Discover
-- **Home** — spotlight hero, *Latest episodes* grid (refreshes every 5 min, NEW badges, filters, paging), top charts, Continue watching, seasonal rails
-- **Coming soon** — titles that aren't out yet, films still in cinemas and unaired episodes open a **release page with a live countdown** instead of a player
-- **Browse** — full filter page (genres in/out, season, year, format, status, country, source, score, length, sort, hide-library) and instant search <kbd>Ctrl</kbd> <kbd>K</kbd>
-- **Details** — banner, synopsis, episode grid with watched state, characters & cast, relations, recommendations, official streaming links, list status, score, favourite
+## Version 1 features
 
-</td>
-<td width="50%" valign="top">
-
-### 📅 Schedule
-- Week strip with per-day counts, live clock and your timezone
-- Timeline with a live “now” line and countdowns, or a grid view
-- Filter box, format filter, *my list & favourites only*
-- Hover details plus **Watch** and **Plan** buttons on every slot
-
-### 👤 Profile
-- Display name, bio, avatar and banner with drag-and-zoom crop
-- Watch stats and favourites
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-### ▶️ Watch
-- Open an episode from a site **you** added: AniVerse goes from the site's search to the series and the episode behind a running-cat loader. **Only the site's own player is shown.**
-- **SUB / DUB and server switches** mirrored as AniVerse buttons, remembered per site
-- Episode panel (list/grid, ranges, search, hide watched), prev/next, auto-next, skip-opening, theater, lights-off, mark watched, page pinning
-- **Native player** for direct HLS / DASH / MP4 links and local files: quality & subtitle menus, speed, PiP, resume, **Chromecast / Google TV casting**
-- Official YouTube channels as episode sources
-
-</td>
-<td valign="top">
-
-### 🔄 Sync & community
-- **Connect AniList and MyAnimeList** in your browser — no keys or tokens to paste
-- Status, progress, scores and favourites sync automatically and offline-safe; optional **two-way sync** (newest edit wins, removals respected)
-- **Unified comments** from AniList episode threads (read + post), MyAnimeList forum topics and YouTube, with Markdown/BBCode rendered safely
-
-### 🛡️ Privacy & polish
-- Ad, tracker and popup blocking (EasyList, EasyPrivacy, annoyance lists + your own rules)
-- Each website runs in its **own isolated session**; nothing is shared between sites
-- Accent themes (Ember, Aqua, Violet, Sakura, Crimson), density and title-language options
-- **Self-update** from GitHub Releases: downloads only the parts that changed, checks the code signature, and installs on restart
-
-</td>
-</tr>
-</table>
-
-## 📸 Screenshots
-
-<table>
-<tr>
-<td width="50%"><img src="docs/screenshots/browse.webp" alt="Browse with filters" /><p align="center"><sub><b>Browse</b> — every AniList filter in one place</sub></p></td>
-<td width="50%"><img src="docs/screenshots/schedule.webp" alt="Airing schedule" /><p align="center"><sub><b>Schedule</b> — this week's episodes in your timezone</sub></p></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/screenshots/details.webp" alt="Anime details" /><p align="center"><sub><b>Details</b> — list status, favourite and Watch now</sub></p></td>
-<td width="50%"><img src="docs/screenshots/installer.png" alt="AniVerse installer" /><p align="center"><sub><b>Installer</b> — themed, per-user, no admin rights</sub></p></td>
-</tr>
-</table>
-
-## 🚀 How to use
-
-### 1. Install
-
-Download **`AniVerse-Setup-<version>.exe`** from the [latest release](https://github.com/shiwamshoryasharma/AniVerse/releases/latest). Check its [fingerprints](#-certificate-fingerprints), then run it:
-
-- pick any folder on any drive (no administrator rights needed);
-- choose the desktop / Start Menu shortcuts;
-- launch AniVerse from the finish page.
-
-From then on AniVerse **updates itself** (see step 7). Upgrading or uninstalling keeps your library, settings and connected accounts. You can also build the installer yourself; see [Build from source](#%EF%B8%8F-build-from-source).
-
-### 2. Add your sources
-
-AniVerse ships with **no websites**. Open **Settings → Sources → Edit streaming-sites.txt** and add one URL per line:
-
-```text
-# Official channels: episodes come from the channel and play in YouTube's embed
-https://www.youtube.com/@SomeOfficialChannel
-
-# Any other URL opens as an isolated, ad-blocked browser session
-https://example-site.tld/
-```
-
-Save the file and the list reloads by itself. You are responsible for the sites you add (see the [Disclaimer](DISCLAIMER.md)).
-
-### 3. Find something to watch
-
-Use **Home**, **Browse**, **Schedule** or the search bar (<kbd>Ctrl</kbd> <kbd>K</kbd>). Right-click any card for quick actions: watch, plan, favourite, copy, or open on AniList.
-
-### 4. Watch
-
-Press **Watch now** and pick a source. On a website source, AniVerse finds the episode on that site for you and shows only its player. **SUB / DUB** and server buttons appear above it. Not out yet? You get the release date and a countdown instead.
-
-| Native player key | Action |
+| Menu | What you can do |
 | --- | --- |
-| <kbd>Space</kbd> / <kbd>K</kbd> | Play / pause |
-| <kbd>←</kbd> <kbd>→</kbd> · <kbd>J</kbd> <kbd>L</kbd> | Seek 5 s · seek by your step |
-| <kbd>↑</kbd> <kbd>↓</kbd> · <kbd>M</kbd> | Volume · mute |
-| <kbd>F</kbd> · <kbd>T</kbd> | Fullscreen · theater |
-| <kbd>S</kbd> | Skip opening |
-| <kbd>Shift</kbd>+<kbd>N</kbd> / <kbd>Shift</kbd>+<kbd>P</kbd> | Next / previous episode |
-| <kbd>&lt;</kbd> <kbd>&gt;</kbd> · <kbd>0</kbd>–<kbd>9</kbd> | Speed · jump to 0–90 % |
+| 🧭 **Home & Browse** | Discover titles, filter AniList metadata, search, view detailed pages and airing information. |
+| 📅 **Schedule** | View episode air dates in your timezone and countdowns for unavailable releases. |
+| 🌐 **Sources** | Configure websites or supported official YouTube channels. Each website has its own cookie/login session. |
+| ▶️ **Watch** | Navigate episodes, focus the original website player, choose available SUB/DUB/server controls, resume progress and use Playback Rescue. |
+| 🎬 **Player** | Open local videos or direct HLS/DASH/MP4/WebM URLs; use speed controls, fullscreen, picture in picture and supported casting. |
+| 🔖 **Workspace → Scene bookmarks** | Save timestamps with private notes and tags; search, edit, delete or revisit a scene. |
+| ✂️ **Episode Toolkit** | See bookmarks and intro/outro ranges on one episode timeline. Save a scene with **B** and build reusable skip maps. |
+| 🛡️ **Spoiler Shield** | Hide app synopses and comments behind Reveal, plus future unwatched episode titles/thumbnails. |
+| 💬 **Subtitle Studio** | Select two native-player caption tracks, adjust their offsets, style captions or import UTF-8 SRT/WebVTT files. |
+| 🗓️ **Workspace → Weekly planner** | Fit available unwatched episodes from your library into a daily time budget over seven days. |
+| 📁 **Workspace → Local collection** | Index video filenames, confirm title/episode matches and play files without relocating them. |
+| 🎨 **Settings → Theme presets** | Save, apply, import and export visual preferences, including your UI font. |
+| 📊 **Workspace → Watch insights** | Opt in to local playing-time estimates, title totals and observed dropped-frame ratios. |
+| 🖥️ **Settings → Graphics & GPU** | Inspect GPUs and the active renderer; follow illustrated laptop setup and NVIDIA RTX Video guidance. |
+| 🔄 **Library & Accounts** | Track list status, progress, favourites, history and scores; optionally sync with AniList/MyAnimeList. |
 
-App-wide: <kbd>F5</kbd> refresh, <kbd>Alt</kbd>+<kbd>←</kbd> / <kbd>→</kbd> back / forward.
+### A workspace built around the episode
 
-### 5. Connect AniList / MyAnimeList
+The Episode Toolkit combines your notes, scene positions and skip ranges beneath the Watch player. Records remain local and separate from public comments and account list sync. This is a specific product workflow; the project makes no claim that its individual features are unprecedented.
 
-**Settings → Accounts & sync → Connect**:
+Auto skip is off when saving a range unless you enable it. It runs only when the source matches and the runtime is close to the recorded edition. Website observation runs every three seconds, so skipping can lag the boundary. Check timing when changing cuts, releases or audio editions.
 
-1. Sign in on the service's own page in your browser and allow access.
-2. When the browser asks *“Open AniVerse?”*, accept. You're connected.
+### Playback boundaries
 
-Your list then syncs automatically. **Sync now** pulls changes on demand, and **Two-way sync** also brings edits made on the websites back into AniVerse.
+- **Websites keep their own player.** AniVerse reads rendered search results and links, follows navigation, clicks exposed controls and focuses the original media area with CSS. It does not extract website streams into a replacement player.
+- **SUB and DUB depend on the source.** AniVerse exposes options the site supplies; it does not synthesize a missing dub or translate audio.
+- **Controls follow the observable video clock.** Native captions use the native video's clock. Website progress and rescue target the selected visible player/frame when accessible. Restricted or unusual players may limit controls.
+- **Resync is a recovery attempt.** Frame counters help diagnose stalls, but do not prove lip sync. AniVerse cannot repair a badly encoded or mistimed source.
+- **GPU preference is a request.** AniVerse requests high-performance graphics at startup and reports the active renderer. Windows, Chromium, power policy, drivers and codecs determine rendering and decoding paths.
+- **RTX Video is driver controlled.** AniVerse does not install a custom driver, bundle an NVIDIA AI upscaler or guarantee super resolution, HDR or frame generation. Inspect the driver's own indicators.
+- **Codec support varies.** Recognizing an extension does not prove Chromium can decode its codecs. Some MKV/MOV files will fail.
+- **Dual captions stay inside AniVerse.** The overlay does not replace website captions or follow into operating-system picture in picture or a TV's player.
 
-### 6. Your data
+## Getting started
 
-Everything lives on your PC in `%APPDATA%\AniVerse`:
-- the library, history and settings (SQLite);
-- sign-ins, encrypted with Windows DPAPI.
+### 1. Install and verify
 
-Nothing is sent anywhere except to the services you use. See [PRIVACY.md](PRIVACY.md).
+Download from [GitHub Releases](https://github.com/shiwamshoryasharma/AniVerse/releases/latest). Official installers use a self-signed project certificate; Windows may show an unverified publisher or SmartScreen warning.
 
-### 7. Stay up to date
+Compare the installer signer with the [certificate fingerprints below](#installer-signing). A matching certificate identifies a signing key, not a guarantee of safety. Use a release you trust.
 
-AniVerse checks this repository's releases at start-up and every 6 hours. It downloads a new version in the background, fetching only the parts that changed when it can. It **installs only updates that carry AniVerse's code signature**. When the top bar shows **Restart to update**, click it, or just quit AniVerse and the update installs on the way out.
+Updates appear in **Settings → About**, where automatic checks/downloads can be disabled. Upgrading preserves the local profile; back up important records before a major upgrade.
 
-Manage it in **Settings → About → Updates**: check now, read what's new, or turn automatic checks and downloads off. Details: [docs/UPDATES.md](docs/UPDATES.md).
+### 2. Add the sites you choose
 
-> [!NOTE]
-> AniVerse is a personal project, so **new releases are rare**. They come only when the developer runs into a problem or wants a change. Most checks will simply find nothing new.
+Open **Settings → Sources → Edit streaming-sites.txt**, enter one URL per line, save and reload sources. Empty lines and hash-prefixed comments are ignored.
 
-## ⚠️ Disclaimer
+~~~text
+# Illustrative address only: replace with a site you are authorized to use.
+https://video.example.test
+~~~
 
-> [!IMPORTANT]
-> **AniVerse is a browser with custom features — nothing more.**
-> - It **hosts no content** and runs no media servers. Every website is a third-party site that the user adds; its pages and videos load **directly from that site's own servers**.
-> - AniVerse reads those pages to find search results and episode links (web scraping and automated navigation), blocks ads, and lays a **CSS overlay** on top so only the site's own player shows. It does **not** download, copy, re-host or extract videos, and it bypasses **no DRM or access controls**.
-> - The developer has **no control over, affiliation with, or responsibility for** those websites. **Send DMCA and other legal notices to the operator or hosting provider of the site that serves the content.**
-> - AniVerse is not affiliated with AniList, MyAnimeList, YouTube or Google. Anime titles, artwork and metadata belong to their respective owners and are provided by AniList's public API.
-> - You are responsible for the websites you add and for following the laws of your country.
-> - **A personal project, shared as-is.** The developer made AniVerse for their own comfort. **Releases and updates will be rare**: they come only when the developer runs into a problem or wants a change. There is no schedule, roadmap or support promise.
->
-> Full text: **[DISCLAIMER.md](DISCLAIMER.md)**. The software comes **without any warranty** (GPL-3.0, sections 15–16).
+This deliberately non-operational address is not a recommendation. Site availability, access conditions and permissions remain independent of AniVerse.
 
-## 📚 Documentation
+Complete required sign-in or human verification in the site's browser view. Turn focus off if it hides a useful control. Popup and tracker blocking is best effort; filter lists cannot make every website quiet or trustworthy.
 
-| Document | What's inside |
-| --- | --- |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module map, data flow, security model |
-| [docs/ACCOUNTS.md](docs/ACCOUNTS.md) | AniList / MyAnimeList sign-in, client IDs, redirect URLs, sync rules |
-| [docs/INSTALLER.md](docs/INSTALLER.md) | Windows installer pages, behaviour, build and tests |
-| [docs/UPDATES.md](docs/UPDATES.md) | Self-update: GitHub Releases feed, differential downloads, signature check, publishing a release |
-| [DISCLAIMER.md](DISCLAIMER.md) · [PRIVACY.md](PRIVACY.md) | Legal notice and what data goes where |
-| [CONTRIBUTING.md](CONTRIBUTING.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md) | How to help, community rules, reporting vulnerabilities |
+### 3. Find a title and watch
 
-## 🤝 Contributing
+Search or browse, open a title, choose **Watch now**, then select a source and episode. Audio/server controls appear when supported by the site; some titles have only one audio version.
 
-Bug reports, ideas and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+If playback stalls, try **Playback Rescue**, reload, reveal website controls or select another source you may use. Unreleased episodes normally show a release panel.
 
-**Do not post links to, or lists of, unlicensed streaming websites** in issues, discussions or pull requests. They will be removed.
+### 4. Keep an episode workspace
 
-## 🛠️ Build from source
+1. Start a video on the Watch page.
+2. Enter a note and comma-separated tags in **Episode Toolkit**, then **Save scene**. **B** also saves a scene when the app has keyboard focus and you are not typing in a field.
+3. In **Intro & outro map**, set start/end seconds using the current-position buttons. Check the range before explicitly enabling Auto skip.
+4. Open **Workspace → Scene bookmarks** to search or edit notes and revisit timestamps. Positions can differ across editions.
 
-**Requirements:** Windows 10/11, [Node.js](https://nodejs.org) 22 or newer, npm, Git. There are no native modules to compile: storage uses Electron's built-in `node:sqlite`.
+### 5. Open local videos and captions
 
-```bash
+1. Choose **Workspace → Local collection → Choose folder**.
+2. Select **Match title**, search AniList and confirm the title and episode. Filename guesses are suggestions, not identity guarantees.
+3. Select **Play**. Matched videos open on Watch; unmatched videos open in Player.
+4. In the native player's **Subtitle Studio**, choose two tracks or import SRT/VTT. Positive offsets delay captions. **Save style** keeps the primary offset, size, colour and background.
+
+A scan covers up to 2,000 videos and six nested folder levels; symbolic links are skipped. Refresh after moving files. Removing an entry removes the index record, not its video. Playback requires a Chromium-supported codec.
+
+### 6. Plan and personalize
+
+Add titles to Watching, Planning or Rewatching, then build a week in **Weekly planner**. It uses up to 20 library titles and known airing data. Missing runtimes use a labelled 24-minute estimate. Rebuild after changing progress or list entries.
+
+Choose font, accent, density and motion under **Settings → Profile & appearance**. Save the result in **Theme presets**. Preset JSON includes only approved visual/player preferences; account data, sources, notes and private filesystem paths are excluded.
+
+Watch insights start disabled. Enable them explicitly if wanted and clear stored samples from the same menu.
+
+### 7. Optional account sync
+
+Configure your own OAuth client IDs following [Accounts](docs/ACCOUNTS.md). Do not put secrets in frontend code or committed configuration. Without client IDs, browsing, discovery and the local library still work.
+
+Sign-in uses the provider's official page in your system browser. Tokens stay in the main process. Local notes, collection paths, skip maps and plans are excluded from list sync.
+
+## Privacy and trust
+
+AniVerse has no developer-operated usage-analytics endpoint. Opt-in watch insights are computed locally. Browsing still involves networking: websites, metadata/image providers, filter-list distributors and the release host receive their own requests.
+
+The local profile contains library records, settings, notes, plans, collection paths and browser sessions. Menus show local filenames instead of your private system paths; the database itself is not an encrypted vault. Cookies and cache can contain information from visited sites.
+
+See [PRIVACY.md](PRIVACY.md) for destinations, retention and deletion. Do not attach a full database, cookies, credentials, private source lists or personal paths to a public report.
+
+## Copyright and project support
+
+The application does not own third-party videos, subtitles, artwork or catalogue text. Its open-source license does not license that media. Contact a website's operator/host about material they control. Concerns about this repository's code/assets can be raised with the project; GitHub's formal copyright process remains available. The [disclaimer](DISCLAIMER.md) does not reject valid notices or establish legal immunity.
+
+AniVerse is a personal project shared on a best-effort basis. Updates may be rare; there is no fixed roadmap, service-level agreement, support response time or promise of lasting website compatibility.
+
+## Build from source
+
+Use Windows 10/11, Node.js 22 or newer, npm and Git. Storage uses the runtime's built-in SQLite.
+
+~~~powershell
 git clone https://github.com/shiwamshoryasharma/AniVerse.git
-```
-
-```bash
 cd AniVerse
-```
-
-```bash
-npm install
-```
-
-**Optional: AniList / MyAnimeList sign-in.** Register your own OAuth apps. Then copy `config/oauth.example.json` to `config/oauth.json` and put in your **client IDs**. Never put a secret there. [docs/ACCOUNTS.md](docs/ACCOUNTS.md) walks through it. Without client IDs, everything else works and the Connect buttons stay disabled.
-
-**Run in development** (hot reload for the UI, auto-restart for the main process):
-
-```bash
+npm ci
 npm run dev
-```
+~~~
 
-**Build and run the production bundle:**
+For a production build:
 
-```bash
+~~~powershell
+npm run typecheck
+npm run lint
+npm test
 npm run build
-```
-
-```bash
 npm start
-```
-
-**Create the Windows installer** (`release/AniVerse-Setup-<version>.exe`):
-
-```bash
-npm run dist:installer
-```
-
-> [!NOTE]
-> `dist` and `dist:installer` copy `config/streaming-sites.txt` from your checkout as the default source list. **Official releases** are built with `npm run dist:signed`. That build ships no source list and is signed with the certificate whose [fingerprints](#-certificate-fingerprints) are listed below. It needs that certificate in your Windows certificate store, so forks should use `dist:installer` or their own certificate (`ANIVERSE_SIGN_SHA1`).
-
-<details>
-<summary><b>All scripts</b></summary>
+~~~
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Development app with HMR |
-| `npm run build` | Bundle main/preload (esbuild) and renderer (Vite) into `dist/` |
-| `npm start` | Run the built app |
-| `npm run typecheck` | TypeScript for core/Electron and renderer |
-| `npm run lint` | oxlint (React + TypeScript rules) |
-| `npm test` | Unit tests (Vitest) |
-| `npm run test:e2e` | Launch the built app hidden and screenshot every screen |
-| `npm run test:live` | Live checks: AniList filters, YouTube RSS, optional site checks |
-| `npm run test:sites` | Drive every configured website to an episode and report per site |
-| `npm run dist` | Windows installer + portable build in `release/` |
-| `npm run dist:installer` | Windows installer only |
-| `npm run dist:signed` | Release installer: signed, no bundled source list, plus `latest.yml` and `.blockmap` for self-update |
-| `npm run release -- --notes <file>` | Tag and publish the signed build as a GitHub release (the update feed) |
-| `npm run test:update` | Real update end to end: two signed builds, install, differential update, uninstall |
+| npm run dev | Renderer hot reload and main-process rebuilds |
+| npm run build | Bundle main/preload and the React renderer |
+| npm test | Unit and persistence regressions |
+| npm run test:e2e | Existing hidden Electron smoke harness |
+| node test/e2e/workspace.mjs | Version 1 Workspace and native-player regressions after building |
+| npm run dist:installer | Build a Windows installer from this checkout |
+| npm run dist:signed | Signed release installer, blockmap and update feed |
+| node scripts/release.mjs --notes docs/releases/1.0.0.md | Maintainer publishing: tags, pushes and uploads a prepared signed release |
 
-</details>
+Personal builds may copy local configuration from the checkout. Official signed builds use restricted resources and omit private source lists/recipes. Forks need their own signing identity; private signing material must remain private.
 
-<details>
-<summary><b>Project layout</b></summary>
+All test scripts, profiles, caches, temporary files and evidence belong under **test/**. Image-based model checks, where applicable, use inputs in **test/images/**. See [test/README.md](test/README.md) and [agent guidance](AGENTS.md).
 
-```text
-app/shared      Types + typed RPC contract shared by every layer
-app/core        Framework-free core: config parser, SQLite store, AniList client,
-                source adapters (web, YouTube), comments, AniList/MAL sync
-electron/       Main process: window, sessions & navigation policy, ad blocking,
-                Cloudflare verifier, OAuth, deep links, media probe, IPC
-frontend/       React renderer (pages, components, player, styles)
-config/         filters.txt, oauth.example.json (your streaming-sites.txt and oauth.json stay local)
-build/          App icon and the NSIS installer script
-scripts/        Build/dev runners, installer art, asset importers
-test/           Unit tests, fixtures, e2e drivers
-docs/           Architecture, accounts, installer, screenshots
-```
+~~~text
+app/shared/       Types, RPC contracts, playback/subtitle/theme helpers
+app/core/         SQLite, settings, library, metadata, sources, workspace
+electron/         Windows, sessions, IPC, navigation, GPU, local media
+frontend/         React pages, components, native player and CSS
+config/           Public examples/filters; private configuration stays local
+scripts/          Build, signing and release tools
+test/             Tests, fixtures, isolated caches and generated evidence
+docs/             Architecture, accounts, installer, updater, releases
+.codex/           Project skills and engineering memory
+~~~
 
-</details>
+## Installer signing
 
-<div align="center">
+Official installers use **CN=Shiwam Shorya Sharma, O=AniVerse**.
 
-## 🔏 Certificate fingerprints
+**Certificate SHA-1**
 
-</div>
-
-Official AniVerse installers are signed with the developer's code-signing certificate (`CN=Shiwam Shorya Sharma, O=AniVerse`). Before you run an installer, check that its signature matches these fingerprints:
-
-**SHA-1**
-```text
+~~~text
 5A:AD:69:1D:2F:1B:3C:A4:80:BA:10:83:D4:17:E7:2D:FA:9F:2B:84
-```
+~~~
 
-**SHA-256**
-```text
+**Certificate SHA-256**
+
+~~~text
 A4:E9:77:36:B3:50:B8:DB:5D:71:A7:A6:0B:D2:AA:94:BE:AA:8D:70:FB:0F:19:E2:27:D9:BF:3C:36:81:41:45
-```
+~~~
 
-<details>
-<summary><b>How to check</b></summary>
+Inspect **Properties → Digital Signatures → Details → View Certificate**. From your download directory, PowerShell 7 can print the fingerprints:
 
-**In Explorer:** right-click the installer → **Properties** → **Digital Signatures** → select the signature → **Details** → **View Certificate** → **Details** → **Thumbprint**. It must equal the SHA-1 above.
+~~~powershell
+$certificate = (Get-AuthenticodeSignature -LiteralPath '.\AniVerse-Setup-1.0.0.exe').SignerCertificate
+if ($null -eq $certificate) { throw 'No signer certificate found.' }
+$certificate.Thumbprint
+[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($certificate.RawData))
+~~~
 
-**In PowerShell** (prints both fingerprints):
+The certificate is self-signed, not publicly trusted. Compare fingerprints and release checksums using trusted project information. Do not bypass a mismatch.
 
-```powershell
-$c = (Get-AuthenticodeSignature .\AniVerse-Setup-0.1.0.exe).SignerCertificate; ($c.Thumbprint -split '(..)' -ne '') -join ':'; ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($c.RawData))).Replace('-', ':')
-```
+## Documentation
 
-The certificate is self-signed, so Windows reports the publisher as unverified and SmartScreen may warn on first run. The fingerprints are what prove the file came from this project. **If they don't match, don't run the file.**
+| Document | Scope |
+| --- | --- |
+| [Architecture](docs/ARCHITECTURE.md) | Layers, data flow and trust boundaries |
+| [Accounts](docs/ACCOUNTS.md) | OAuth and list sync |
+| [Installer](docs/INSTALLER.md) · [Updates](docs/UPDATES.md) | Installation, feed, signatures and publishing |
+| [Version 1 notes](docs/releases/1.0.0.md) | Changes, checks and known limits |
+| [Disclaimer](DISCLAIMER.md) · [Privacy](PRIVACY.md) | Rights, product scope, local data and notices |
+| [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) | Contribution checks and vulnerability reporting |
 
-</details>
+## License and contributions
 
-<div align="center">
+© 2026 Shiwam Shorya Sharma. AniVerse is available under **[GPL-3.0-or-later](LICENSE)**. Preserve applicable notices and provide corresponding source when distributing covered binaries or modifications. Dependencies retain their own terms; artwork, trademarks and media retain their owners' rights.
 
-## 📄 License
-
-<a href="LICENSE"><img src="https://img.shields.io/badge/GNU%20GPL-v3-BD0000?style=for-the-badge&logo=gnu&logoColor=white" alt="GNU GPL v3" height="36" /></a>
-
-</div>
-
-AniVerse is free software under the **[GNU General Public License v3.0](LICENSE)**, © 2026 Shiwam Shorya Sharma.
-- You may use, study, copy, modify and share it.
-- If you distribute AniVerse or a modified version, it must stay under the GPL. Keep the copyright and license notices, mark what you changed and when, and make the complete source code available with build and install instructions.
-- It comes with **no warranty**.
-
-<div align="center">
-
-## ⚖️ DMCA disclaimer
-
-</div>
-
-The developer of AniVerse is **not affiliated with any content** that can be reached through the app. The developer does **not host, store, upload or distribute** any of it. AniVerse should be regarded as a **web browser**: everything it shows is loaded directly from websites on the public internet that the user chose to open.
-
-**All DMCA takedown requests and other legal notices must be sent to the owners or hosting providers of the websites where the content is actually hosted.** The developer of AniVerse cannot remove content from third-party websites. Notices about it sent to this repository cannot be acted upon. See [DISCLAIMER.md](DISCLAIMER.md) for the full notice.
-
-<div align="center">
-<br />
-<sub>Built with Electron, React, TypeScript, hls.js, dash.js and the AniList API · Made with 💜 for anime fans</sub>
-</div>
+Reports and pull requests are welcome under [CONTRIBUTING.md](CONTRIBUTING.md). Share reproducible behavior without credentials, copyrighted video copies or private site lists. The software is provided without warranty under its license, subject to applicable law.

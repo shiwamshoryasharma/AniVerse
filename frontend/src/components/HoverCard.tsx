@@ -89,7 +89,8 @@ function PreviewCard({
   onNavigate: () => void;
 }) {
   const navigate = useNavigate();
-  const lang = useSettings().appearance.titleLanguage;
+  const settings = useSettings();
+  const lang = settings.appearance.titleLanguage;
   const { data: extra, isLoading } = useQuery({ queryKey: ['hover', media.id], queryFn: () => call('meta.hover', { id: media.id }), staleTime: Infinity, retry: false });
   const width = 320;
   const gap = 12;
@@ -151,7 +152,7 @@ function PreviewCard({
             ))}
           </div>
         )}
-        {(extra?.description ?? media.description) && <p className="hovercard-desc clamp-3">{extra?.description ?? media.description}</p>}
+        {!settings.appearance.spoilerShield && (extra?.description ?? media.description) && <p className="hovercard-desc clamp-3">{extra?.description ?? media.description}</p>}
         <div className="row" style={{ marginTop: 2 }}>
           {release ? (
             <button className="btn primary sm grow" onClick={() => go(`/watch/${media.id}/1`)} title={release.label}>

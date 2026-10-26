@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarClock,
   Check,
@@ -27,6 +27,8 @@ import type { MediaDetails, ProbeResult, SiteOptions, SourceInfo, Stream } from 
 import { CommentsPanel } from '../components/CommentsPanel';
 import { CatLoader } from '../components/CatLoader';
 import { Empty, ErrorState, Loading, SourceIcon } from '../components/common';
+import { EpisodeToolkit } from '../components/EpisodeToolkit';
+import { SpoilerGuard } from '../components/SpoilerGuard';
 import { EpisodePanel } from '../components/EpisodePanel';
 import { ReleasePanel } from '../components/ReleasePanel';
 import { PlaybackRescue } from '../components/PlaybackRescue';
@@ -58,7 +60,7 @@ export function WatchPage() {
   if (!data || !sources || !state) return <Loading label="Preparing player…" />;
   const episode = Math.max(1, Number(params.episode) || 1);
   // Not out yet: show when it releases instead of opening a player or a site.
-  const pending = search.get('anyway') ? null : pendingRelease(data, episode);
+  const pending = search.get('anyway') || search.has('local') ? null : pendingRelease(data, episode);
   if (pending) return <ReleasePanel media={data} pending={pending} onReleased={() => setReleased((n) => n + 1)} />;
   return <Watch media={data} sources={sources} episode={episode} />;
 }
@@ -78,11 +80,15 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const snapshot = useMemo(() => snapshotOf(media, lang), [media, lang]);
   const title = titleOf(media, lang);
 
+  const localId = Number(search.get('local')) || null;
+  const local = useQuery({queryKey:['local-open',localId],queryFn:()=>call('collection.open',{id:localId!}),enabled:!!localId,retry:false,staleTime:Infinity});
+  const localFiles = useQuery({queryKey:['collection'],queryFn:()=>call('collection.list'),enabled:!!localId});
+  const adjacentLocal = (n:number) => localFiles.data?.find(f=>!f.missing && f.media?.id===media.id && f.episode===n);
   const enabled = sources.filter((s) => s.enabled);
   const lastUsed = state?.progress
     .filter((p) => p.sourceId)
     .sort((a, b) => b.updatedAt - a.updatedAt)[0]?.sourceId;
-  const sourceId = [search.get('source'), lastUsed, enabled[0]?.id].find((id) => id && enabled.some((s) => s.id === id)) ?? null;
+  const sourceId = localId ? null : [search.get('source'), lastUsed, enabled[0]?.id].find((id) => id && enabled.some((s) => s.id === id)) ?? null;
   const source = enabled.find((s) => s.id === sourceId) ?? null;
 
   const titleVariants = [...new Set([media.title.english, media.title.romaji, media.title.native].filter((t): t is string => !!t))];
@@ -221,10 +227,10 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
     }
   };
 
-  const goEpisode = (n: number, replace = false) => navigate(`/watch/${media.id}/${n}${sourceId ? `?source=${sourceId}` : ''}`, { replace });
+  const goEpisode = (n: number, replace = false) => { const file=localId ? adjacentLocal(n) : null; navigate(`/watch/${media.id}/${n}${file ? `?local=${file.id}` : sourceId ? `?source=${sourceId}` : ''}`, { replace }); };
   const selectSource = (id: string) => navigate(`/watch/${media.id}/${episode}?source=${id}`, { replace: true });
-  const hasNext = episode < total;
-  const hasPrev = episode > 1;
+  const hasNext = localId ? !!adjacentLocal(episode+1) : episode < total;
+  const hasPrev = localId ? !!adjacentLocal(episode-1) : episode > 1;
   const next = () => hasNext && goEpisode(episode + 1);
   const prev = () => hasPrev && goEpisode(episode - 1);
 
@@ -290,7 +296,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   };
 
   const skip = () => {
-    if (stream && stream.type !== 'web' && stream.type !== 'youtube' && player.current) player.current.seekBy(settings.player.skipStep);
+    if (player.current) player.current.seekBy(settings.player.skipStep);
     else if (webContentsId && progressAt.current) void call('player.control', { webContentsId, action: 'seek', value: progressAt.current.position + settings.player.skipStep });
     else if (webContentsId) {
       void call('player.probe', { webContentsId }).then((p) => p && call('player.control', { webContentsId, action: 'seek', value: p.currentTime + settings.player.skipStep }));
@@ -319,7 +325,13 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const siteGroup = enabled.filter((s) => s.kind === 'web');
 
   let screen;
-  if (!source) {
+  if (localId) {
+    const resume=state?.progress.find(p=>p.episode===episode && !p.completed);
+    screen = local.error ? <ErrorState error={local.error} onRetry={()=>void local.refetch()} /> : !local.data ? <Loading label="Opening local video…" /> :
+      <VideoPlayer key={local.data.url} source={{type:'mp4',url:local.data.url,subtitles:[]}} title={local.data.name} prefs={settings.player} controlsRef={player}
+        startAt={settings.player.resume ? resume?.position : undefined} theater={theater} onTheater={()=>setTheater(t=>!t)}
+        onProgress={record} onEnded={()=>settings.player.autoNext && next()} hasNext={hasNext} hasPrev={hasPrev} onNext={next} onPrev={prev} />;
+  } else if (!source) {
     screen = (
       <Empty title="No streaming sources enabled">
         Add website or official channel URLs to <span className="code">config/streaming-sites.txt</span>, or enable sources in Settings → Sources.
@@ -413,7 +425,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
             <button className={cx('btn ghost', settings.player.autoNext && 'on')} onClick={() => updateSettings.mutate({ player: { autoNext: !settings.player.autoNext } })} title="Play the next episode automatically">
               <Repeat size={14} /> Auto next
             </button>
-            <button className="btn ghost" onClick={skip} disabled={!stream && !webContentsId} title="Skip the opening">
+            <button className="btn ghost" onClick={skip} disabled={!stream && !webContentsId && !local.data} title="Skip the opening">
               <FastForward size={14} /> Skip {settings.player.skipStep}s
             </button>
             <button className={cx('btn ghost', theater && 'on')} onClick={() => setTheater((t) => !t)}>
@@ -453,6 +465,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
           </div>
 
           {isSite && webContentsId && <PlaybackRescue key={siteKey + ':' + episode} probe={playbackProbe} health={playbackStatus} webContentsId={webContentsId} busy={siteBusy || !!choosing} />}
+
+          {(local.data || webContentsId || (stream && stream.type !== 'web' && stream.type !== 'youtube')) && <EpisodeToolkit key={media.id+':'+episode+':'+(sourceId ?? localId)} media={snapshot} episode={episode} sourceId={sourceId} webContentsId={localId?null:webContentsId} native={player} probe={localId?null:playbackProbe} initialTime={search.has('t') && Number.isFinite(Number(search.get('t'))) && Number(search.get('t'))>=0 ? Number(search.get('t')) : null} />}
 
           <div className="card source-bar">
             <div className="now">
@@ -549,16 +563,14 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
                   </span>
                 ))}
               </div>
-              <p className="muted clamp-3 selectable" style={{ margin: 0 }}>
-                {media.description}
-              </p>
+              <SpoilerGuard key={media.id} label="Synopsis"><p className="muted clamp-3 selectable" style={{ margin: 0 }}>{media.description}</p></SpoilerGuard>
             </div>
             <button className="btn sm" onClick={() => navigate(`/anime/${media.id}`)}>
               <Info size={14} /> Details
             </button>
           </div>
 
-          <CommentsPanel query={commentsQuery} />
+          <SpoilerGuard key={media.id+':'+episode} label="Comments"><CommentsPanel query={commentsQuery} /></SpoilerGuard>
         </div>
 
         <EpisodePanel
@@ -569,7 +581,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
           titles={titles}
           thumbs={thumbs}
           onSelect={(n) => goEpisode(n)}
-          sourceLabel={source?.name}
+          sourceLabel={localId ? 'Local collection' : source?.name}
+          spoilerShield={settings.appearance.spoilerShield}
         />
       </div>
     </div>

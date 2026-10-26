@@ -380,6 +380,7 @@ export interface Settings {
     reduceMotion: boolean;
     titleLanguage: 'english' | 'romaji' | 'native';
     showAdult: boolean;
+    spoilerShield: boolean;
   };
   player: {
     autoplay: boolean;
@@ -394,6 +395,7 @@ export interface Settings {
     theater: boolean;
     /** Show only the site's player (not the whole page) when watching on a website. */
     siteFocus: boolean;
+    subtitleStyle: { size:number; color:'white'|'yellow'|'cyan'|'green'; background:number; offset:number };
   };
   accounts: {
     youtubeApiKey: string;
@@ -406,6 +408,7 @@ export interface Settings {
     adblock: boolean;
     blockPopups: boolean;
     autoCloudflare: boolean;
+    watchInsights: boolean;
   };
   updates: {
     /** Look for a new release at start-up and every few hours. */

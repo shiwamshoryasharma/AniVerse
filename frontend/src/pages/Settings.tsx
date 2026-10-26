@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router';
 import type { AccentName, AccountInfo, DeepPartial, Provider, Settings, SourceInfo } from '../../../app/shared/types';
 import { SourceIcon, Spinner, Switch } from '../components/common';
 import { Disclaimer } from '../components/Disclaimer';
+import { ThemePresets } from '../components/ThemePresets';
 import { GraphicsPanel } from '../components/GraphicsPanel';
 import { updateSummary, useInstallUpdate } from '../lib/updates';
 import { RadioGroup, Select } from '../components/controls';
@@ -15,6 +16,7 @@ import { useToast } from '../lib/useToast';
 
 const SECTIONS = [
   { id: 'general', label: 'Profile & appearance', icon: Palette },
+  { id: 'themes', label: 'Theme presets', icon: Palette },
   { id: 'player', label: 'Player', icon: Play },
   { id: 'graphics', label: 'Graphics & GPU', icon: Cpu },
   { id: 'sources', label: 'Sources', icon: Globe },
@@ -49,6 +51,7 @@ export function SettingsPage() {
         <div style={{ minWidth: 0 }}>
           {section === 'general' && <GeneralSection />}
           {section === 'player' && <PlayerSection />}
+          {section === 'themes' && <ThemePresets />}
           {section === 'graphics' && <GraphicsPanel />}
           {section === 'sources' && <SourcesSection />}
           {section === 'accounts' && <AccountsSection />}
@@ -163,6 +166,9 @@ function GeneralSection() {
         </Setting>
         <Setting title="Reduce motion" desc="Turns off carousel transitions and hover animations.">
           <Switch label="Reduce motion" on={s.appearance.reduceMotion} onChange={(v) => save({ appearance: { reduceMotion: v } })} />
+        </Setting>
+        <Setting title="Spoiler Shield" desc="Hides app synopses, comment panels, and future unwatched episode titles and thumbnails. Website content is controlled by the site.">
+          <Switch label="Spoiler Shield" on={s.appearance.spoilerShield} onChange={(spoilerShield) => save({appearance:{spoilerShield}})} />
         </Setting>
         <Setting title="Show adult titles" desc="Include 18+ entries from AniList in browse and search.">
           <Switch label="Show adult titles" on={s.appearance.showAdult} onChange={(v) => save({ appearance: { showAdult: v } })} />
@@ -534,6 +540,9 @@ function PrivacySection() {
         </Setting>
       </Group>
       <Group title="Data">
+        <Setting title="Local watch insights" desc="Estimate playing time and observed frame drops on the Watch page. Stored only on this device; view or delete samples in Workspace → Watch insights.">
+          <Switch label="Local watch insights" on={s.watchInsights} onChange={(watchInsights)=>save({privacy:{watchInsights}})} />
+        </Setting>
         <Setting title="Clear metadata cache" desc="Forces fresh data from AniList. Your library, history and logins are kept.">
           <button className="btn sm" onClick={() => void call('app.cacheClear').then(() => toast.push({ level: 'success', message: 'Cache cleared.' }))}>
             Clear cache

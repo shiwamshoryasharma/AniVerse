@@ -1,4 +1,7 @@
 import { Clapperboard, FolderOpen, Link2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router';
+import { ErrorState } from '../components/common';
 import { useState } from 'react';
 import { call, errorText } from '../lib/bridge';
 import { detectStreamType } from '../lib/format';
@@ -10,6 +13,9 @@ export function PlayerPage() {
   const settings = useSettings();
   const updateSettings = useUpdateSettings();
   const toast = useToast();
+  const [search] = useSearchParams();
+  const localId = Number(search.get('local')) || null;
+  const local = useQuery({queryKey:['local-open',localId],queryFn:()=>call('collection.open',{id:localId!}),enabled:!!localId,retry:false,staleTime:Infinity});
   const [input, setInput] = useState('');
   const [subs, setSubs] = useState('');
   const [current, setCurrent] = useState<{ source: PlayerSource; title: string } | null>(null);
@@ -33,6 +39,7 @@ export function PlayerPage() {
     }
   };
 
+  const playing = current ?? (local.data ? {source:{type:'mp4' as const,url:local.data.url,subtitles:[]},title:local.data.name} : null);
   return (
     <div className="page">
       <h1 className="page-title">Player</h1>
@@ -54,11 +61,11 @@ export function PlayerPage() {
         </span>
       </div>
       <div className="screen">
-        {current ? (
+        {local.error && !current ? <ErrorState error={local.error} onRetry={()=>void local.refetch()}/> : playing ? (
           <VideoPlayer
-            key={current.source.url}
-            source={current.source}
-            title={current.title}
+            key={playing.source.url}
+            source={playing.source}
+            title={playing.title}
             prefs={settings.player}
             onVolume={(volume) => updateSettings.mutate({ player: { volume } })}
           />

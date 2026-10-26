@@ -2,13 +2,14 @@
 
 Last inspected: 2026-10-26, Asia/Calcutta. Repository: `E:\14-OCT-2026\aniverse`.
 
-AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 0.3.0; read the current package file before relying on versions.
+AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 1.0.0; read the current package file before relying on versions.
 
 Read the relevant reference only:
 
 - [Architecture and extension seams](architecture.md): directory map, entrypoints, coordinated changes.
 - [Product decisions and invariants](decisions.md): existing behavior, source boundaries, security, UI.
 - [Testing and image-input policy](testing.md): commands, isolation, outputs, known harness limitations.
+- [Version 1 local workspace](workspace.md): scene/skip/subtitle/planner/collection/theme/insight seams and the removed Watch Together scope.
 - [Status and provenance](status.md): inspected implementation, stale Claude notes, what was actually validated.
 
 The user's durable requirements are recorded in [the root guidance](../../AGENTS.md): retain Claude's completed work, use `test/images/` for image-based generation/validation, and contain all test machinery and generated evidence under `test/`.

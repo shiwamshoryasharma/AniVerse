@@ -25,6 +25,6 @@ Image-based model generation or validation must take inputs from `test/images/`.
 
 Use hidden Electron test runs and profiles/config under `test/cache/`. Preserve data-dir setup before the single-instance lock. Serialize harnesses that share a profile; record owned process IDs and clean up only those processes. Never kill all Electron instances or interfere with the user's development session.
 
-Inspect tool cache/temp behavior too. The existing Vitest config lacks an explicit Vite cache directory; guard-probe does not set its own app data directory. Installer/updater harnesses modify real Windows state and caches outside the project; release commands tag/push/publish. Do not use those as routine validation. A specifically requested installer/updater task first needs isolation work and scope review.
+Inspect tool cache/temp behavior too. Vitest explicitly caches under test/cache/vite; guard-probe still does not set its own app data directory. Installer/updater harnesses modify real Windows state and caches outside the project; release commands tag/push/publish. Do not use those as routine validation. A specifically requested installer/updater task first needs isolation work and scope review.
 
 Report exact checks run, failures, skipped or blocked checks and evidence paths. Old artifacts and Claude's historical passes do not establish a current result.

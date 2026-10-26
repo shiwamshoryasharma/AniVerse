@@ -1,5 +1,6 @@
 import { Check, LayoutGrid, List, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { hideEpisode } from '../../../app/shared/workspace';
 import { cx } from '../lib/format';
 import { Checkbox, Select } from './controls';
 
@@ -13,11 +14,12 @@ interface Props {
   thumbs: Map<number, string>;
   onSelect: (episode: number) => void;
   sourceLabel?: string;
+  spoilerShield?: boolean;
 }
 
 const CHUNK = 100;
 
-export function EpisodePanel({ total, current, watched, available, titles, thumbs, onSelect, sourceLabel }: Props) {
+export function EpisodePanel({ total, current, watched, available, titles, thumbs, onSelect, sourceLabel, spoilerShield = false }: Props) {
   const [mode, setMode] = useState<'list' | 'grid'>(total > 30 ? 'grid' : 'list');
   const [filter, setFilter] = useState('');
   const [hideWatched, setHideWatched] = useState(false);
@@ -35,11 +37,11 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
   const numbers = useMemo(() => {
     const q = filter.trim().toLowerCase();
     let list = Array.from({ length: total }, (_, i) => i + 1);
-    if (q) list = list.filter((n) => String(n) === q || String(n).startsWith(q) || (titles.get(n) ?? '').toLowerCase().includes(q));
+    if (q) list = list.filter((n) => String(n) === q || String(n).startsWith(q) || (!hideEpisode(n,current,watched,spoilerShield) && (titles.get(n) ?? '').toLowerCase().includes(q)));
     else if (chunks > 1) list = list.slice(chunk * CHUNK, chunk * CHUNK + CHUNK);
     if (hideWatched) list = list.filter((n) => !watched.has(n) || n === current);
     return list;
-  }, [filter, total, chunks, chunk, hideWatched, watched, current, titles]);
+  }, [filter, total, chunks, chunk, hideWatched, watched, current, titles, spoilerShield]);
 
   return (
     <div className="card ep-panel">
@@ -82,7 +84,8 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
         {numbers.map((n) => {
           const unavailable = available !== null && !available.has(n);
           const cls = cx(n === current && 'active', watched.has(n) && 'watched', unavailable && 'unavailable');
-          const label = titles.get(n);
+          const hidden = hideEpisode(n,current,watched,spoilerShield);
+          const label = hidden ? undefined : titles.get(n);
           const tip = unavailable ? `Episode ${n} is not available on this source` : label ? `Episode ${n}: ${label}` : `Episode ${n}`;
           return mode === 'grid' ? (
             <button key={n} ref={n === current ? activeRef : undefined} className={cx('ep-cell', cls)} title={tip} onClick={() => onSelect(n)}>
@@ -92,7 +95,7 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
             <button key={n} ref={n === current ? activeRef : undefined} className={cx('ep-row', cls)} title={tip} onClick={() => onSelect(n)}>
               <span className="num">{n}</span>
               <span className="ellipsis">{label ?? `Episode ${n}`}</span>
-              {thumbs.get(n) ? <img src={thumbs.get(n)} alt="" loading="lazy" /> : watched.has(n) ? <Check size={14} color="var(--ok)" /> : <span />}
+              {!hidden && thumbs.get(n) ? <img src={thumbs.get(n)} alt="" loading="lazy" /> : watched.has(n) ? <Check size={14} color="var(--ok)" /> : <span />}
             </button>
           );
         })}

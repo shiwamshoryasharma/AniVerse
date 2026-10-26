@@ -68,7 +68,7 @@ These contact live services/sites; historical artifacts cannot establish present
 
 The current harnesses are not all fully contained:
 
-- `test/vitest.config.ts` does not explicitly set Vite's `cacheDir`. Configure any required tool cache under `test/cache/` when running strict-contained tests.
+- `test/vitest.config.ts` now explicitly sets Vite's `cacheDir` to `test/cache/vite/`. Keep task-specific tool/npm/temp caches under `test/cache/` as well.
 - A custom check may need task-scoped `TEMP`, `TMP`, and `TMPDIR` redirected under `test/cache/`; restore prior values afterward.
 - `test/e2e/guard-probe.cjs` does not set `ANIVERSE_DATA_DIR` itself. Do not use its unmodified default invocation as an isolated test.
 - Installer tests modify real Windows installation, HKCU records and shortcuts. Updater E2E also temporarily moves the shared `%LOCALAPPDATA%\aniverse-updater` cache.
