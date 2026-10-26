@@ -218,8 +218,32 @@ The certificate is self-signed, not publicly trusted. Compare fingerprints and r
 | [Disclaimer](DISCLAIMER.md) · [Privacy](PRIVACY.md) | Rights, product scope, local data and notices |
 | [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) | Contribution checks and vulnerability reporting |
 
-## License and contributions
+## Contributing
 
-© 2026 Shiwam Shorya Sharma. AniVerse is available under **[GPL-3.0-or-later](LICENSE)**. Preserve applicable notices and provide corresponding source when distributing covered binaries or modifications. Dependencies retain their own terms; artwork, trademarks and media retain their owners' rights.
+Reports and pull requests are welcome under [CONTRIBUTING.md](CONTRIBUTING.md). Share reproducible behavior without credentials, copyrighted video copies or private site lists.
 
-Reports and pull requests are welcome under [CONTRIBUTING.md](CONTRIBUTING.md). Share reproducible behavior without credentials, copyrighted video copies or private site lists. The software is provided without warranty under its license, subject to applicable law.
+<br />
+
+<h2 align="center">License</h2>
+
+<p align="center">
+  <a href="LICENSE">
+    <img src="https://www.gnu.org/graphics/gplv3-127x51.png" alt="GNU General Public License version 3" width="160" />
+  </a>
+</p>
+
+You may use, copy, distribute and modify AniVerse under **[GPL-3.0-or-later](LICENSE)**. When distributing covered modifications, preserve copyright and license notices, clearly identify changes and their dates, and license the covered work under the GPL. When distributing covered binaries, meet the license's Corresponding Source requirements, including build/install scripts and installation information where required. Dependencies retain their own terms. The software is provided without warranty as described in the license, subject to applicable law.
+
+© 2026 Shiwam Shorya Sharma.
+
+<br />
+
+<h2 align="center">DMCA disclaimer</h2>
+
+AniVerse is a desktop web browser and media player. The project does not operate a public episode-hosting service or supply third-party videos. Websites and their media load from the sources users choose; local files remain on the user's device. The project is not affiliated with those websites, and videos, subtitles, artwork and other materials retain their owners' rights.
+
+For a takedown request concerning content hosted on another website, contact that website's operator or hosting provider. Concerns about this repository's own code or assets can be raised through the project and [GitHub's formal copyright process](https://docs.github.com/en/site-policy/content-removal-policies/dmca-takedown-policy). This notice does not waive valid legal obligations or grant permission to use copyrighted material.
+
+<p align="center">
+  <a href="DISCLAIMER.md">Full disclaimer</a> · <a href="PRIVACY.md">Privacy notice</a>
+</p>
