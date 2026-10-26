@@ -113,10 +113,11 @@ export interface RpcContract {
   'cast.stop': [void, CastState];
   'cast.state': [void, CastState];
   'player.probe': [{ webContentsId: number }, ProbeResult | null];
-  'player.control': [{ webContentsId: number; action: 'play' | 'pause' | 'seek'; value?: number }, boolean];
+  'player.control': [{ webContentsId: number; action: 'play' | 'pause' | 'seek' | 'resync'; value?: number }, boolean];
 
   'adblock.stats': [void, AdblockStats];
   'app.info': [void, AppInfo];
+  'app.openGraphicsSettings': [void, void];
   'app.openExternal': [{ url: string }, void];
   'app.cacheClear': [void, void];
 

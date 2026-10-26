@@ -59,6 +59,7 @@ export function Shell() {
     const root = document.documentElement;
     root.dataset.accent = settings.appearance.accent;
     root.dataset.density = settings.appearance.density;
+    root.dataset.font = settings.appearance.fontFamily;
     root.dataset.motion = settings.appearance.reduceMotion ? 'reduce' : 'full';
   }, [settings.appearance]);
 

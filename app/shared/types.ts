@@ -376,6 +376,7 @@ export interface Settings {
   appearance: {
     accent: AccentName;
     density: 'compact' | 'comfortable';
+    fontFamily: 'inter' | 'system' | 'arial' | 'serif' | 'mono';
     reduceMotion: boolean;
     titleLanguage: 'english' | 'romaji' | 'native';
     showAdult: boolean;
@@ -442,6 +443,10 @@ export interface ProbeResult {
   paused: boolean;
   ended: boolean;
   url: string;
+  video?: {
+    width: number; height: number; readyState: number; bufferedAhead: number;
+    totalFrames: number | null; droppedFrames: number | null; playbackRate: number;
+  };
 }
 
 export interface AppInfo {
@@ -451,6 +456,7 @@ export interface AppInfo {
   platform: string;
   configPath: string;
   dataPath: string;
+  graphics: import('./graphics').GraphicsSummary & { renderer: string | null };
 }
 
 export interface CloudflareEvent {

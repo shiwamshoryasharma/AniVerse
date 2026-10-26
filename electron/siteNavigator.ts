@@ -133,6 +133,7 @@ export class SiteNavigator {
     private emit: (e: SiteStatusEvent) => void,
     private probe: (wc: WebContents) => Promise<ProbeResult | null>,
     private autoplay: () => boolean,
+    private control?: (wc: WebContents, action: 'seek' | 'play' | 'pause', value?: number) => Promise<boolean>,
   ) {}
 
   /** Recipes are re-read when the file changes (cheap mtime check). */
@@ -441,13 +442,30 @@ export class SiteNavigator {
     const raw = (await this.page<RawSiteOption[]>(wc, { op: 'siteOptions' })) ?? [];
     const target = raw.find((o) => o.kind === kind && o.value === value);
     if (target) {
+      const job = (this.jobs.get(wc.id) ?? 0) + 1;
+      this.jobs.set(wc.id, job);
+      const alive = () => !wc.isDestroyed() && this.jobs.get(wc.id) === job;
+      const playback = await this.probe(wc).catch(() => null);
       const wasFocused = this.focusWanted.get(wc.id) ?? false;
       await this.page(wc, { op: 'click', pick: target.pick });
       const pref = this.store.getKv<SitePreference>(`site-pref:${source.id}`, {});
       this.store.setKv(`site-pref:${source.id}`, kind === 'type' ? { ...pref, type: value } : { ...pref, server: value });
-      await this.settle(wc, () => !wc.isDestroyed(), 1600);
-      const focused = wasFocused ? await this.focus(wc, true, null) : false;
-      return { options: await this.options(wc), focused };
+      await this.settle(wc, alive, 1600);
+      const focused = wasFocused && alive() ? await this.focus(wc, true, null) : false;
+      // A server/audio switch replaces the site's player. Restore the same episode's
+      // position through the original video clock, never by extracting its URL.
+      if (playback && !playback.ended && playback.currentTime > 1 && this.control) {
+        for (const end = Date.now() + 10000; alive() && Date.now() < end; await sleep(400)) {
+          const next = await this.probe(wc).catch(() => null);
+          if (!next || (next.video?.readyState ?? 0) < 2) continue;
+          if (Math.abs(next.duration - playback.duration) <= Math.max(60, playback.duration * 0.1)) {
+            await this.control(wc, 'seek', playback.currentTime);
+            await this.control(wc, playback.paused ? 'pause' : 'play');
+          }
+          break;
+        }
+      }
+      return { options: alive() ? await this.options(wc) : EMPTY_OPTIONS, focused: alive() && focused };
     }
     return { options: toSiteOptions(raw), focused: this.focusWanted.get(wc.id) ?? false };
   }

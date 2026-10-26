@@ -1,0 +1,4 @@
+interface:
+  display_name: "AniVerse Validation"
+  short_description: "Validate AniVerse with contained test artifacts"
+  default_prompt: "Use $aniverse-validation to select and run focused AniVerse checks while keeping test data under test."

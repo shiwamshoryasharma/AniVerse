@@ -28,6 +28,12 @@ import { browserUserAgent, SessionManager } from './sessions';
 import { SiteNavigator } from './siteNavigator';
 import { CastService } from './cast/castService';
 import { UpdateService } from './updater';
+import { summarizeGraphics, type GpuPreference } from '../app/shared/graphics';
+
+// Ask Chromium for the discrete adapter on hybrid laptops before GPU initialization.
+// Explicit low-power/system choices remain available for battery use or driver troubleshooting.
+const gpuPreference: GpuPreference = process.env.ANIVERSE_GPU_PREFERENCE === 'system' || app.commandLine.hasSwitch('force_low_power_gpu') ? 'system' : 'high-performance';
+if (gpuPreference === 'high-performance') app.commandLine.appendSwitch('force_high_performance_gpu');
 
 registerSchemes();
 app.setName('AniVerse');
@@ -228,6 +234,7 @@ async function bootstrap() {
     (e) => emit('site.status', e),
     (wc) => probe.probe(wc.id),
     () => settings.get().player.autoplay,
+    (wc, action, value) => probe.control(wc.id, action, value),
   );
   sessions = new SessionManager(
     registry,
@@ -437,14 +444,22 @@ async function bootstrap() {
     'player.control': ({ webContentsId, action, value }) => probe.control(webContentsId, action, value),
 
     'adblock.stats': () => adblock.snapshot(),
-    'app.info': () => ({
-      version: app.getVersion(),
-      electron: process.versions.electron,
-      chrome: process.versions.chrome,
-      platform: `${process.platform} ${process.arch}`,
-      configPath: paths.sitesFile,
-      dataPath: paths.dataDir,
-    }),
+    'app.info': async () => {
+      const info = await app.getGPUInfo('complete').catch(() => null);
+      const aux = (info as { auxAttributes?: { glRenderer?: string } } | null)?.auxAttributes;
+      return {
+        version: app.getVersion(),
+        electron: process.versions.electron,
+        chrome: process.versions.chrome,
+        platform: `${process.platform} ${process.arch}`,
+        configPath: paths.sitesFile,
+        dataPath: paths.dataDir,
+        graphics: { ...summarizeGraphics(info, app.getGPUFeatureStatus(), gpuPreference), renderer: aux?.glRenderer ?? null },
+      };
+    },
+    'app.openGraphicsSettings': async () => {
+      if (process.platform === 'win32') await shell.openExternal('ms-settings:display-advancedgraphics');
+    },
     'app.openExternal': async ({ url }) => {
       await shell.openExternal(url);
     },
@@ -592,6 +607,8 @@ function createWindow(preload: string, sessions: SessionManager, onGuest: (guest
     webPreferences.sandbox = true;
     webPreferences.webSecurity = true;
     webPreferences.allowRunningInsecureContent = false;
+    // Keep video frames/timers running alongside audio when a guest is occluded.
+    webPreferences.backgroundThrottling = false;
     if (!sessions.allowAttach(params.partition ?? '', params.src ?? '')) event.preventDefault();
   });
   wc.on('did-attach-webview', (_event, guest: WebContents) => {

@@ -22,12 +22,14 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { episodeFromUrl } from '../../../app/core/sources/text';
-import type { MediaDetails, SiteOptions, SourceInfo, Stream } from '../../../app/shared/types';
+import { playbackHealth, type PlaybackHealth, type PlaybackSample } from '../../../app/shared/playback';
+import type { MediaDetails, ProbeResult, SiteOptions, SourceInfo, Stream } from '../../../app/shared/types';
 import { CommentsPanel } from '../components/CommentsPanel';
 import { CatLoader } from '../components/CatLoader';
 import { Empty, ErrorState, Loading, SourceIcon } from '../components/common';
 import { EpisodePanel } from '../components/EpisodePanel';
 import { ReleasePanel } from '../components/ReleasePanel';
+import { PlaybackRescue } from '../components/PlaybackRescue';
 import { WebSession, type WebSessionControls } from '../components/WebSession';
 import { call, errorText, onEvent } from '../lib/bridge';
 import { availableEpisodes, countdown, cx, formatLabel, mediaRefOf, pendingRelease, snapshotOf, statusLabel, titleOf } from '../lib/format';
@@ -105,6 +107,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const player = useRef<PlayerControls | null>(null);
   const progressAt = useRef<{ position: number; duration: number } | null>(null);
+  const [playbackProbe, setPlaybackProbe] = useState<ProbeResult | null>(null);
+  const [playbackStatus, setPlaybackStatus] = useState<PlaybackHealth | null>(null);
 
   // ---- Website sources: AniVerse drives the site (search → title → episode) and focuses its player.
   const siteKey = mode === 'web' && match.data && sourceId ? `${sourceId}:${media.id}` : null;
@@ -246,9 +250,18 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   useEffect(() => {
     if (!webContentsId) return;
     let last = 0;
+    let disposed = false;
+    let previousSample: PlaybackSample | null = null;
+    setPlaybackProbe(null);
+    setPlaybackStatus(null);
     const timer = window.setInterval(async () => {
       if (document.hidden) return;
       const probe = await call('player.probe', { webContentsId }).catch(() => null);
+      if (disposed) return;
+      setPlaybackProbe(probe);
+      const sample = probe?.video ? { at: Date.now(), currentTime: probe.currentTime, paused: probe.paused, ended: probe.ended, ...probe.video } : null;
+      setPlaybackStatus(sample ? playbackHealth(previousSample, sample) : null);
+      previousSample = sample;
       if (!probe || probe.duration < 60) return;
       const now = Date.now();
       if (probe.ended || now - last > (probe.paused ? 20000 : 9000)) {
@@ -260,7 +273,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         if (settings.player.autoNext && hasNext && (mode === 'episodes' || mode === 'web')) goEpisode(episode + 1);
       }
     }, 3000);
-    return () => window.clearInterval(timer);
+    return () => { disposed = true; window.clearInterval(timer); };
     // record/goEpisode are recreated each render; the interval only needs the latest ids.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [webContentsId, episode, sourceId, settings.player.autoNext, hasNext, mode]);
@@ -438,6 +451,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
               </button>
             )}
           </div>
+
+          {isSite && webContentsId && <PlaybackRescue key={siteKey + ':' + episode} probe={playbackProbe} health={playbackStatus} webContentsId={webContentsId} busy={siteBusy || !!choosing} />}
 
           <div className="card source-bar">
             <div className="now">

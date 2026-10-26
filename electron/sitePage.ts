@@ -414,7 +414,9 @@ function PAGE_FN(A: PageOp): unknown {
     if (!target) {
       const media = [...document.querySelectorAll('iframe, video')].filter((el) => {
         const r = el.getBoundingClientRect();
-        return r.width >= 240 && r.height >= 135 && ratioOk(el);
+        // Challenge/ad frames can be larger than the episode, even while hidden.
+        const challenge = el.tagName === 'IFRAME' && /recaptcha|hcaptcha|turnstile|challenges\.cloudflare\.com/i.test(el.getAttribute('src') || '');
+        return !challenge && el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) && r.width >= 240 && r.height >= 135 && ratioOk(el);
       });
       target = media.sort((a, b) => area(b) - area(a))[0];
       if (target && target.tagName === 'VIDEO') {
@@ -427,7 +429,7 @@ function PAGE_FN(A: PageOp): unknown {
       target = [...document.querySelectorAll('[id*="player" i], [class*="player" i]')]
         .filter((el) => {
           const r = el.getBoundingClientRect();
-          return r.width >= 320 && r.height >= 180 && ratioOk(el, 1.2, 2.4);
+          return el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) && r.width >= 320 && r.height >= 180 && ratioOk(el, 1.2, 2.4);
         })
         .sort((a, b) => area(b) - area(a))[0];
     }
@@ -477,7 +479,12 @@ function PAGE_FN(A: PageOp): unknown {
 /* eslint-enable */
 
 export const FOCUS_CSS = `
-html, body { overflow: hidden !important; }
+html:has([data-aniverse-player]), body:has([data-aniverse-player]) { overflow: hidden !important; }
+/* Keep layout/DOM intact so the site's audio/server controls remain discoverable. */
+[data-aniverse-chain] > :not([data-aniverse-chain]):not([data-aniverse-player]),
+[data-aniverse-chain] > :not([data-aniverse-chain]):not([data-aniverse-player]) * {
+  visibility: hidden !important; pointer-events: none !important;
+}
 [data-aniverse-chain] { transform: none !important; filter: none !important; contain: none !important; perspective: none !important;
   backdrop-filter: none !important; will-change: auto !important; clip-path: none !important; overflow: visible !important; z-index: 2147483646 !important; }
 [data-aniverse-player] { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important;

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import type { ProbeResult } from '../app/shared/types';
+import { mediaPageScript, type MediaAction } from './mediaPage';
 
 const MIME: Record<string, string> = {
   '.mp4': 'video/mp4',
@@ -100,13 +101,7 @@ export class MediaProtocols {
   }
 }
 
-const PROBE_SCRIPT = `(() => {
-  const videos = Array.from(document.querySelectorAll('video')).filter((v) => isFinite(v.duration) && v.duration > 0);
-  if (!videos.length) return null;
-  videos.sort((a, b) => (Number(!b.paused) - Number(!a.paused)) || (b.duration - a.duration));
-  const v = videos[0];
-  return { currentTime: v.currentTime, duration: v.duration, paused: v.paused, ended: v.ended };
-})()`;
+const PROBE_SCRIPT = mediaPageScript();
 
 /**
  * Reads (and optionally controls) the <video> element inside a source webview,
@@ -126,38 +121,37 @@ export class MediaProbe {
     return wc;
   }
 
-  async probe(id: number): Promise<ProbeResult | null> {
-    const wc = this.guest(id);
-    if (!wc) return null;
-    let best: Omit<ProbeResult, 'url'> | null = null;
+  private async selected(wc: WebContents) {
+    let best: { value: Omit<ProbeResult, 'url'>; frame: WebContents['mainFrame'] } | null = null;
     for (const frame of wc.mainFrame.framesInSubtree) {
       try {
         const r = (await frame.executeJavaScript(PROBE_SCRIPT)) as Omit<ProbeResult, 'url'> | null;
-        if (r && (!best || (!r.paused && best.paused) || r.duration > best.duration)) best = r;
+        if (r && (!best || (r.duration >= 60 && best.value.duration < 60) ||
+          ((r.duration >= 60) === (best.value.duration >= 60) && ((!r.paused && best.value.paused) ||
+          (r.paused === best.value.paused && r.duration > best.value.duration))))) best = { value: r, frame };
       } catch {
         // detached or restricted frame
       }
     }
-    return best ? { ...best, url: wc.getURL() } : null;
+    return best;
   }
 
-  async control(id: number, action: 'play' | 'pause' | 'seek', value?: number): Promise<boolean> {
+  async probe(id: number): Promise<ProbeResult | null> {
+    const wc = this.guest(id);
+    if (!wc) return null;
+    const selected = await this.selected(wc);
+    return selected ? { ...selected.value, url: wc.getURL() } : null;
+  }
+
+  async control(id: number, action: Exclude<MediaAction, 'probe'>, value?: number): Promise<boolean> {
     const wc = this.guest(id);
     if (!wc) return false;
-    const op =
-      action === 'seek'
-        ? `v.currentTime = Math.max(0, Math.min(v.duration, ${Number(value) || 0}));`
-        : action === 'play'
-          ? 'void v.play();'
-          : 'v.pause();';
-    const script = `(() => { const v = Array.from(document.querySelectorAll('video')).find((x) => isFinite(x.duration) && x.duration > 0); if (!v) return false; ${op} return true; })()`;
-    for (const frame of wc.mainFrame.framesInSubtree) {
-      try {
-        if (await frame.executeJavaScript(script)) return true;
-      } catch {
-        // ignore
-      }
+    const selected = await this.selected(wc);
+    if (!selected) return false;
+    try {
+      return (await selected.frame.executeJavaScript(mediaPageScript(action, value))) === true;
+    } catch {
+      return false;
     }
-    return false;
   }
 }

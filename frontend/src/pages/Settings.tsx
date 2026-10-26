@@ -1,10 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Download, Info, KeyRound, LogOut, Palette, Play, RefreshCw, RotateCw, Search, Shield, UserRound, Globe, Link2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, Info, KeyRound, LogOut, Palette, Play, RefreshCw, RotateCw, Search, Shield, UserRound, Globe, Link2, X, Cpu } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import type { AccentName, AccountInfo, DeepPartial, Provider, Settings, SourceInfo } from '../../../app/shared/types';
 import { SourceIcon, Spinner, Switch } from '../components/common';
 import { Disclaimer } from '../components/Disclaimer';
+import { GraphicsPanel } from '../components/GraphicsPanel';
 import { updateSummary, useInstallUpdate } from '../lib/updates';
 import { RadioGroup, Select } from '../components/controls';
 import { call, errorText } from '../lib/bridge';
@@ -15,6 +16,7 @@ import { useToast } from '../lib/useToast';
 const SECTIONS = [
   { id: 'general', label: 'Profile & appearance', icon: Palette },
   { id: 'player', label: 'Player', icon: Play },
+  { id: 'graphics', label: 'Graphics & GPU', icon: Cpu },
   { id: 'sources', label: 'Sources', icon: Globe },
   { id: 'accounts', label: 'Accounts & sync', icon: UserRound },
   { id: 'privacy', label: 'Privacy & blocking', icon: Shield },
@@ -40,13 +42,14 @@ export function SettingsPage() {
         <nav className="card settings-nav" aria-label="Settings sections">
           {SECTIONS.map((s) => (
             <button key={s.id} className={cx(section === s.id && 'active')} onClick={() => navigate(`/settings/${s.id}`, { replace: true })}>
-              <s.icon size={16} /> {s.label}
+              <s.icon size={16} className={'settings-icon settings-icon--' + s.id} /> {s.label}
             </button>
           ))}
         </nav>
         <div style={{ minWidth: 0 }}>
           {section === 'general' && <GeneralSection />}
           {section === 'player' && <PlayerSection />}
+          {section === 'graphics' && <GraphicsPanel />}
           {section === 'sources' && <SourcesSection />}
           {section === 'accounts' && <AccountsSection />}
           {section === 'privacy' && <PrivacySection />}
@@ -117,6 +120,18 @@ function GeneralSection() {
           </button>
         </Setting>
       </Group>
+      <Group title="Typography">
+        <Setting title="UI font" desc="Changes menus, labels and reading text across AniVerse. Your choice saves automatically.">
+          <Select<Settings['appearance']['fontFamily']> ariaLabel="UI font" width={210} value={s.appearance.fontFamily} onChange={(fontFamily) => save({ appearance: { fontFamily } })} options={[
+            { value: 'inter', label: 'Inter · default' },
+            { value: 'system', label: 'System UI' },
+            { value: 'arial', label: 'Arial · clean' },
+            { value: 'serif', label: 'Georgia · serif' },
+            { value: 'mono', label: 'Consolas · monospace' },
+          ]} />
+        </Setting>
+        <div className="font-preview" aria-label="Font preview"><span>Aa</span><p><b>Your story, your style.</b>The quick brown fox jumps over the lazy dog. 0123456789</p></div>
+      </Group>
       <Group title="Appearance">
         <Setting title="Accent colour">
           {ACCENTS.map(([name, color, label]) => (
@@ -163,6 +178,7 @@ function PlayerSection() {
   const s = useSettings().player;
   const save = useSave();
   return (
+    <>
     <Group title="Playback">
       <Setting title="Autoplay" desc="Start playing as soon as a stream loads.">
         <Switch label="Autoplay" on={s.autoplay} onChange={(v) => save({ player: { autoplay: v } })} />
@@ -212,6 +228,7 @@ function PlayerSection() {
         />
       </Setting>
     </Group>
+    </>
   );
 }
 

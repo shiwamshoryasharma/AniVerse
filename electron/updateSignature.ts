@@ -45,6 +45,7 @@ export function readSignature(file: string): Promise<SignatureInfo> {
   // (single quotes are literal, doubled to escape) so it can never run as a command.
   const literal = file.replace(/'/g, "''");
   const command =
+    "Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop; " +
     `$s = Get-AuthenticodeSignature -LiteralPath '${literal}'; ` +
     `[pscustomobject]@{ status = [int]$s.Status; path = $s.Path; certificate = $(if ($s.SignerCertificate) { [Convert]::ToBase64String($s.SignerCertificate.RawData) } else { $null }) } | ConvertTo-Json -Compress`;
   return new Promise((resolve, reject) => {

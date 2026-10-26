@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: Settings = {
   appearance: {
     accent: 'ember',
     density: 'compact',
+    fontFamily: 'inter',
     reduceMotion: false,
     titleLanguage: 'english',
     showAdult: false,
@@ -70,6 +71,10 @@ export class SettingsService {
 export function sanitize(s: Settings): Settings {
   return {
     ...s,
+    appearance: {
+      ...s.appearance,
+      fontFamily: ['inter', 'system', 'arial', 'serif', 'mono'].includes(s.appearance.fontFamily) ? s.appearance.fontFamily : 'inter',
+    },
     profile: {
       name: (s.profile.name || 'Viewer').slice(0, 40),
       bio: (s.profile.bio ?? '').slice(0, 280),

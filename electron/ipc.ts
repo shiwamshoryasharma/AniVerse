@@ -60,6 +60,7 @@ const settingsPatch = z
       .object({
         accent: z.enum(['ember', 'aqua', 'violet', 'sakura', 'crimson']),
         density: z.enum(['compact', 'comfortable']),
+        fontFamily: z.enum(['inter', 'system', 'arial', 'serif', 'mono']),
         reduceMotion: z.boolean(),
         titleLanguage: z.enum(['english', 'romaji', 'native']),
         showAdult: z.boolean(),
@@ -204,10 +205,11 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'cast.stop': none,
   'cast.state': none,
   'player.probe': z.object({ webContentsId: id }),
-  'player.control': z.object({ webContentsId: id, action: z.enum(['play', 'pause', 'seek']), value: z.number().optional() }),
+  'player.control': z.object({ webContentsId: id, action: z.enum(['play', 'pause', 'seek', 'resync']), value: z.number().finite().min(0).max(604800).optional() }),
 
   'adblock.stats': none,
   'app.info': none,
+  'app.openGraphicsSettings': none,
   'app.openExternal': z.object({ url }),
   'app.cacheClear': none,
 

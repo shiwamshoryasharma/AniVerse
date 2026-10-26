@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="240" viewBox="0 0 1080 240">
+<defs><linearGradient id="bg"><stop stop-color="#0d231b"/><stop offset="1" stop-color="#111a18"/></linearGradient></defs>
+<rect width="1080" height="240" rx="18" fill="url(#bg)"/><g font-family="Segoe UI,Arial,sans-serif">
+<rect x="24" y="25" width="480" height="190" rx="13" fill="#152820" stroke="#345d38"/><text x="45" y="60" fill="#b9e771" font-size="17" font-weight="700">NVIDIA VIDEO SETTINGS</text>
+<text x="45" y="100" fill="#e2f0e3" font-size="17">RTX Video Super Resolution</text><rect x="409" y="78" width="65" height="30" rx="15" fill="#79b900"/><circle cx="457" cy="93" r="11" fill="#fff"/><text x="45" y="135" fill="#8eab98" font-size="13">Enable on compatible RTX hardware</text><text x="45" y="184" fill="#8eab98" font-size="12">Illustrated guide · controls vary by driver version</text>
+<path d="m533 106 13 13-13 13" fill="none" stroke="#79b900" stroke-width="3"/>
+<rect x="578" y="25" width="478" height="190" rx="13" fill="#152820" stroke="#345d38"/><rect x="598" y="43" width="176" height="114" rx="9" fill="#263841"/><path d="m598 143 48-48 42 26 42-52 44 74" fill="#47786d"/><rect x="785" y="43" width="251" height="114" rx="9" fill="#1d4b38"/><path d="m785 143 58-62 40 31 54-58 99 89" fill="#81b94b"/><text x="602" y="186" fill="#a6c7b4" font-size="13">Source video</text><text x="789" y="186" fill="#c9f687" font-size="13">Driver enhancement · when eligible</text></g></svg>

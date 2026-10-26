@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export const windowsSecurityModule = "Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop; ";
 
 /** config/signing.json (thumbprint, publisher, pinned update signers), with ANIVERSE_SIGN_SHA1 overriding the thumbprint. */
 export function signingInfo() {
@@ -17,7 +18,9 @@ export function signingInfo() {
     .replace(/[\s:]/g, '')
     .toUpperCase();
   if (!/^[0-9A-F]{40}$/.test(sha1)) throw new Error('Set the signing certificate thumbprint in config/signing.json or ANIVERSE_SIGN_SHA1.');
-  const found = spawnSync('powershell.exe', ['-NoProfile', '-Command', `if (Test-Path Cert:\\CurrentUser\\My\\${sha1}) { 'yes' }`], { encoding: 'utf8' });
+  const certificatePath = ['Cert:', 'CurrentUser', 'My', sha1].join(path.win32.sep);
+  const found = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', windowsSecurityModule + `if (Test-Path -LiteralPath '${certificatePath}') { 'yes' }`], { encoding: 'utf8', windowsHide: true });
+  if (found.error || found.status !== 0) throw new Error('Could not query the signing certificate: ' + (found.stderr?.trim() || found.error?.message || 'PowerShell failed.'));
   if (found.stdout.trim() !== 'yes') {
     throw new Error(`Code-signing certificate ${sha1} is not in this user's certificate store (CurrentUser\\My). Import its .pfx backup first.`);
   }

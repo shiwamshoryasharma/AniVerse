@@ -1,0 +1,4 @@
+interface:
+  display_name: "AniVerse Development"
+  short_description: "Maintain AniVerse across its existing layers"
+  default_prompt: "Use $aniverse-development to inspect the affected AniVerse code and implement a focused change."

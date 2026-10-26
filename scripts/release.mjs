@@ -9,7 +9,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { root, signingInfo } from './releaseConfig.mjs';
+import { root, signingInfo, windowsSecurityModule } from './releaseConfig.mjs';
 
 const fail = (message) => {
   console.error(`release: ${message}`);
@@ -41,7 +41,7 @@ if (!new RegExp(`^version: ${version.replace(/\./g, '\\.')}$`, 'm').test(feed)) 
 const { sha1 } = signingInfo();
 const sig = spawnSync(
   'powershell.exe',
-  ['-NoProfile', '-NonInteractive', '-Command', `$s = Get-AuthenticodeSignature -LiteralPath '${installer.replace(/'/g, "''")}'; "$([int]$s.Status) $($s.SignerCertificate.Thumbprint)"`],
+  ['-NoProfile', '-NonInteractive', '-Command', windowsSecurityModule + `$s = Get-AuthenticodeSignature -LiteralPath '${installer.replace(/'/g, "''")}'; "$([int]$s.Status) $($s.SignerCertificate.Thumbprint)"`],
   { encoding: 'utf8' },
 );
 const [status, thumbprint] = sig.stdout.trim().split(' ');

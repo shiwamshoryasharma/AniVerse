@@ -1,0 +1,4 @@
+interface:
+  display_name: "AniVerse Source Navigation"
+  short_description: "Maintain source adapters and website navigation"
+  default_prompt: "Use $aniverse-source-navigation to inspect and fix AniVerse source matching or website navigation."

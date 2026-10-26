@@ -3,7 +3,7 @@ import type { Settings } from '../../../app/shared/types';
 /** Used only until the main process answers `settings.get` (mirrors app/core/settings.ts defaults). */
 export const DEFAULT_SETTINGS_FALLBACK: Settings = {
   profile: { name: 'Viewer', bio: '', avatar: null, banner: null },
-  appearance: { accent: 'ember', density: 'compact', reduceMotion: false, titleLanguage: 'english', showAdult: false },
+  appearance: { accent: 'ember', density: 'compact', fontFamily: 'inter', reduceMotion: false, titleLanguage: 'english', showAdult: false },
   player: {
     autoplay: true,
     autoNext: true,

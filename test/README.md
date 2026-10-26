@@ -10,4 +10,6 @@
 | `artifacts/` | Screenshots from E2E runs — git-ignored |
 | `images/` | Image assets for tests (currently unused by the suites) |
 
-Run `npm run build` before the E2E scripts — they launch `dist/`.
+Run `npm run build` before the application E2E scripts — they launch `dist/`.
+
+`node test/e2e/player-focus.mjs` independently bundles the real focus/media DOM scripts into `test/cache/` and runs neutral fixtures in hidden Electron. It covers overlays, hidden/challenge frames, original player controls/captions, probe/control selection and recovery without stream-URL access. Reports and screenshots go to `test/artifacts/`. `node test/e2e/gpu.mjs` checks the actual high-performance/system startup flags and GPU Settings UI using separate hidden profiles. `node test/e2e/fonts.mjs` verifies UI font switching and persistence across app restarts. Unit suites also cover GPU adapter classification, playback-health counters and font defaults/persistence/sanitization; the Vitest cache stays in `test/cache/vite/`.
