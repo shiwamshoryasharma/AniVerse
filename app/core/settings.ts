@@ -1,10 +1,12 @@
 import type { DeepPartial, Settings } from '../shared/types';
 import type { Store } from './db/store';
 import { clamp, deepMerge } from './util';
+import { DEFAULT_UPSCALE, upscaleSchema } from '../shared/upscale';
 
 export const DEFAULT_SETTINGS: Settings = {
   profile: { name: 'Viewer', bio: '', avatar: null, banner: null },
   appearance: {
+    style: 'classic',
     accent: 'ember',
     density: 'compact',
     fontFamily: 'inter',
@@ -25,6 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
     preferredQuality: 'auto',
     theater: false,
     siteFocus: true,
+    upscale: { ...DEFAULT_UPSCALE },
     subtitleStyle: { size:28, color:'white', background:0.65, offset:0 },
   },
   accounts: {
@@ -54,6 +57,12 @@ export class SettingsService {
     this.cache = sanitize(deepMerge(DEFAULT_SETTINGS, store.getKv<unknown>(KEY, {})));
   }
 
+  reload(): Settings {
+    this.cache = sanitize(deepMerge(DEFAULT_SETTINGS, this.store.getKv<unknown>(KEY, {})));
+    for (const listener of this.listeners) listener(this.cache);
+    return this.cache;
+  }
+
   get(): Settings {
     return this.cache;
   }
@@ -76,6 +85,7 @@ export function sanitize(s: Settings): Settings {
     ...s,
     appearance: {
       ...s.appearance,
+      style: ['classic', 'aurora', 'paper'].includes(s.appearance.style) ? s.appearance.style : 'classic',
       spoilerShield: s.appearance.spoilerShield !== false,
       fontFamily: ['inter', 'system', 'arial', 'serif', 'mono'].includes(s.appearance.fontFamily) ? s.appearance.fontFamily : 'inter',
     },
@@ -87,6 +97,7 @@ export function sanitize(s: Settings): Settings {
     },
     player: {
       ...s.player,
+      upscale: upscaleSchema.safeParse(s.player.upscale).success ? upscaleSchema.parse(s.player.upscale) : { ...DEFAULT_UPSCALE },
       volume: clamp(Number(s.player.volume) || 0, 0, 1),
       speed: clamp(Number(s.player.speed) || 1, 0.25, 3),
       seekStep: clamp(Math.round(Number(s.player.seekStep) || 10), 1, 60),

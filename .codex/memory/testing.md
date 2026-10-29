@@ -1,6 +1,6 @@
 # Testing and image-input policy
 
-Inspected 2026-10-26. See [test/README.md](../../test/README.md), [package.json](../../package.json), and [.claude/memory/testing-practice.md](../../.claude/memory/testing-practice.md).
+Rechecked 2026-10-29; initially inspected 2026-10-26. See [test/README.md](../../test/README.md), [package.json](../../package.json), and [.claude/memory/testing-practice.md](../../.claude/memory/testing-practice.md).
 
 ## Required locations
 
@@ -69,6 +69,7 @@ These contact live services/sites; historical artifacts cannot establish present
 The current harnesses are not all fully contained:
 
 - `test/vitest.config.ts` now explicitly sets Vite's `cacheDir` to `test/cache/vite/`. Keep task-specific tool/npm/temp caches under `test/cache/` as well.
+- When `ELECTRON_BUILDER_CACHE` is inside this ESM repository, put a `package.json` with `type: commonjs` at that test-cache root. Builder's downloaded CommonJS icon helper otherwise inherits the app's `type: module` and fails. Keep the fence in `test/cache/`, not in application source.
 - A custom check may need task-scoped `TEMP`, `TMP`, and `TMPDIR` redirected under `test/cache/`; restore prior values afterward.
 - `test/e2e/guard-probe.cjs` does not set `ANIVERSE_DATA_DIR` itself. Do not use its unmodified default invocation as an isolated test.
 - Installer tests modify real Windows installation, HKCU records and shortcuts. Updater E2E also temporarily moves the shared `%LOCALAPPDATA%\aniverse-updater` cache.
@@ -79,6 +80,16 @@ Do not run installer/updater/release workflows for routine validation or documen
 ## Playback/GPU/font checks added in 0.3.0
 
 `node test/e2e/player-focus.mjs` runs neutral rendered focus/media fixtures (no application build needed). `node test/e2e/gpu.mjs` checks actual startup preferences, separate graphics menus, illustrations, icon layout and path removal. It accepts `E2E_EXE` for a packaged app. `node test/e2e/fonts.mjs` checks UI font changes and persistence across restarts. The release summary is `test/artifacts/release-0.3.0-validation.json`.
+
+## Release 1.5.2 checks
+
+`node test/e2e/release-1.5.2.mjs` checks three styles, controlled Drive OAuth/import/export through real IPC, all six native GPU modes, compact menu controls and embedded cast availability. Google transport is controlled; no real account is used. `node test/e2e/cast-4k.mjs` runs real embedded FFmpeg/Anime4K/HEVC/AAC encoding and HLS token/range checks with a receiver transport fixture; no physical TV is controlled. `E2E_EXE` selects a packaged app for the UI harness; `E2E_MEDIA_RESOURCES` selects packaged tool/shader resources for the encoding harness. Evidence is `test/artifacts/release-1.5.2-*`.
+
+## Context refresh (2026-10-29)
+
+For the current context-only validation, use `test/cache/codex-context-2026-10-29/validate_context.py`; its report is `test/artifacts/codex-context-2026-10-29.json`. The older context validator has a fixed three-skill list and an October 26 baseline; it does not validate the expanded skill set or establish preservation across this refresh. The new validator discovers project skills and compares against a fresh baseline.
+
+The image directory was rechecked and still contains only `.gitkeep`. No image/model check ran. Application build/runtime checks are unnecessary for these context-only changes.
 
 ## Original context-only update
 

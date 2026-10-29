@@ -1,6 +1,6 @@
 # Version 1 workspace
 
-Inspected 2026-10-26. Read current files before treating this map as runtime evidence.
+Rechecked 2026-10-29; initially inspected 2026-10-26. Read current files before treating this map as runtime evidence. Use [the Workspace skill](../skills/aniverse-workspace/SKILL.md) for implementation workflow.
 
 ## Product boundaries
 
@@ -27,9 +27,11 @@ Do not claim novel-in-the-world functionality or guaranteed GPU/AI enhancement. 
 
 Real file paths remain in main/SQLite. UI/RPC DTOs use filenames and capability URLs. A collection match is user confirmation, not license verification. Deleting an index entry never deletes its video.
 
+Manual Google Drive app-data export (1.5.2) may include scene notes, skip maps and weekly plans at the user's direction. It excludes local collection paths, credentials, configured sources and watch-insight sessions; it does not enqueue account-list sync. Imported skip maps start disabled. See [Drive setup](../../docs/GOOGLE-DRIVE.md).
+
 Watch insights default false and stay local. They estimate observable playing intervals; skips, seeks, pauses and unobservable/hidden playback do not prove viewing. Do not describe frame drops as lip-sync measurements.
 
-Skip ranges require explicit automatic enabling, identical source and similar recorded duration. Website timing is sampled every three seconds. Cross-edition reuse needs user review.
+Skip ranges require explicit automatic enabling, identical source and similar recorded duration. The current `canAutoSkip()` tolerance is `max(5 seconds, recorded duration * 0.02)`; the caller separately checks enabled state and range position. Website timing is sampled every three seconds. Cross-edition reuse needs user review.
 
 Subtitle Studio applies inside the native AniVerse player. Custom dual captions do not carry to website players, operating-system PiP or cast receivers. Imported subtitle files must be UTF-8 SRT/VTT, bounded in main, displayed as text and cleaned up on unmount.
 

@@ -1,0 +1,8 @@
+{
+  "version": "9.0.2",
+  "archive": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-full_build.7z",
+  "sha256": "f0e46253c70dfe902bac915dfb4224f0cf1b7c6eeab9da2ccc9a5581f9a71b13",
+  "source": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+  "sourceCommit": "946fcce07b",
+  "license": "GPL-3.0-or-later"
+}

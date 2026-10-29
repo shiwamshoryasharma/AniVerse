@@ -40,7 +40,7 @@ export function writeReleaseConfig(overrides = {}) {
   const { sha1, publisherName } = signingInfo();
   const yaml = createRequire(createRequire(import.meta.url).resolve('app-builder-lib'))('js-yaml');
   const config = yaml.load(readFileSync(path.join(root, 'electron-builder.yml'), 'utf8'));
-  config.extraResources = [{ from: 'config', to: 'config', filter: ['filters.txt'] }];
+  config.extraResources = [{ from: 'config', to: 'config', filter: ['filters.txt'] }, { from: 'build/vendor/ffmpeg', to: 'ffmpeg' }, { from: 'assets/anime4k', to: 'anime4k' }];
   config.win = {
     ...config.win,
     signtoolOptions: { certificateSha1: sha1, signingHashAlgorithms: ['sha256'], ...(publisherName ? { publisherName: [publisherName] } : {}) },

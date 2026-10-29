@@ -26,6 +26,20 @@ Sources: [Electron GPU switches](https://www.electronjs.org/docs/latest/api/comm
 
 Graphics & GPU has separate Overview, Laptop GPU setup and NVIDIA RTX Video menus, with colored status icons and illustrated steps. It does not show the executable's filesystem path. Profile & appearance has a saved UI font selector and live preview: Inter, system UI, Arial, Georgia and Consolas, using local font fallbacks without external downloads.
 
+## Anime4K and sender-side 4K casting (1.5.2)
+
+Settings → Player and native-player 4K controls expose six Anime4K presets plus darken/thin effects. GPU filters process the existing decoded video, preserving audio and the source timeline. Native output fits within 3840 × 2160 without stretching. Website frames are filtered only when WebGL pixel access is allowed; CORS/protected-media failures keep the original player running. Disabling or changing sources releases filter resources.
+
+For TV output, open a local video and choose Cast → **4K · process on this device**. The sender runs the embedded FFmpeg/FFprobe 9.0.2 tools, applies bundled Anime4K shaders through Vulkan/libplacebo, and encodes HEVC video plus AAC audio into HLS. Frames are fitted and padded to exactly 3840 × 2160. NVIDIA, Intel and AMD encoder availability is tested before use; CPU encoding is a fallback and may be too slow for real-time 4K.
+
+The TV receives a processed media stream and decodes it; it does not perform Anime4K. It must support 4K HEVC and Google Cast. Older/1080p receivers cannot become 4K devices through software. LAN bandwidth and sender GPU/CPU capacity remain practical limits. Direct casting retains its existing media-URL path. Website streams are not extracted for casting.
+
+The temporary HLS server uses a per-session random token, restricts filenames, supports byte ranges and bounds the rolling segment window. Stop, connection failure and app shutdown terminate owned encoding work and close the server. Pause/seek/resume can restart the encoder at the selected media position. No system FFmpeg installation or runtime executable download is used.
+
+Native browser caption overlays are not burned into the FFmpeg output. Existing receiver-supported subtitle tracks remain separate. Browser upscaling does not follow into system PiP; use the dedicated sender path for processed TV output.
+
+[Google Cast codec support](https://developers.google.com/cast/docs/media), [FFmpeg libplacebo](https://ffmpeg.org/ffmpeg-filters.html#libplacebo), [embedded notices](THIRD-PARTY.md).
+
 ## Checks
 
 All test machinery is under `test/`. `npm test` covers GPU classification and video-health logic. `node test/e2e/player-focus.mjs` exercises the real focus CSS, serialized DOM operations and media probe/control scripts in hidden Electron with neutral fixtures.

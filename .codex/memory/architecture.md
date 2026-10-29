@@ -1,13 +1,13 @@
 # Architecture and extension seams
 
-Inspected 2026-10-26. Start with [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) for the maintained architecture narrative and [package.json](../../package.json) for current scripts/dependencies.
+Rechecked 2026-10-29; initially inspected 2026-10-26. See [the folder map](project-structure.md) for the maintained directory tree. Start with [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) for the maintained architecture narrative and [package.json](../../package.json) for current scripts/dependencies.
 
 ## Directory map
 
 | Path | Responsibility |
 | --- | --- |
 | `app/core/` | Plain TypeScript domain services: metadata, config parsing, SQLite, sources, settings, comments, sync. No Electron imports found in this layer. |
-| `app/shared/` | Shared data types, typed RPC/events, release gating. |
+| `app/shared/` | Shared data types, typed RPC/events, release gating, graphics/playback, workspace/subtitle/theme helpers. |
 | `electron/` | Main process, preload, IPC validation, session security, OAuth, site navigation, local media, casting, updater. |
 | `frontend/` | React renderer, hash routes, TanStack Query, custom controls, native media player, theme styles. |
 | `config/` | Local site list/recipes, adblock rules, OAuth setup, signing pins. Some files are intentionally untracked/private. |
@@ -50,6 +50,8 @@ Version 1 adds local Workspace and Episode Toolkit seams. Read [workspace.md](wo
 - Comments: core normalization plus `frontend/src/lib/richText.ts` and `components/RichText.tsx`; preserve safe link handling and React rendering instead of raw provider HTML.
 - Playback diagnostics/recovery: `electron/mediaPage.ts` probes/controls the existing media element; `app/shared/playback.ts` derives frame/clock health; `frontend/src/components/PlaybackRescue.tsx` exposes it in Watch. Probe and control share a selected frame.
 - GPU startup/diagnostics: `electron/main.ts` requests the documented discrete GPU preference before ready and adds actual GPU data to `app.info`; `app/shared/graphics.ts` normalizes/classifies adapters; `GraphicsPanel.tsx` reports the result in separate Graphics & GPU menus. UI font choice is a persisted `appearance.fontFamily` setting applied through the root CSS font token; coordinate defaults, sanitizer, fallback and IPC enum when extending it. See [PLAYBACK.md](../../docs/PLAYBACK.md).
-- Casting: `electron/cast/` implements CASTV2/mDNS and temporary token-protected LAN serving for local files. Website playback is not a castable extracted stream.
+- Drive: `app/shared/backup.ts` defines the strict version-1 portable format; `app/core/backup.ts` validates/merges without credentials, sources or local paths. `app/core/driveClient.ts` constrains Drive file operations; `electron/driveOAuth.ts` and `googleDrive.ts` own PKCE loopback auth, encrypted credentials and preview tickets. See [Drive setup](../../docs/GOOGLE-DRIVE.md).
+- Anime4K: `app/shared/upscaleRuntime.ts` is browser-only WebGL code; `electron/upscaleGuest.ts` is bundled as a fixed guest script by `scripts/build.mjs`. Never import the DOM runtime into core/main directly. Guest-shader changes need a development restart to refresh the embedded script. Persisted settings use an explicit no-default partial IPC schema.
+- Casting: `electron/cast/` implements CASTV2/mDNS and temporary token-protected LAN serving for local files. Website playback is not a castable extracted stream. `sender4k.ts` adds local-file-only Anime4K/Vulkan/HEVC HLS processing with embedded FFmpeg/FFprobe. `config/ffmpeg.json` pins tools; `scripts/prepare-media.mjs` verifies/prepares them for app resources.
 - Updates: `electron/updater.ts`, `updateSignature.ts`, renderer update components. Installed signed Windows NSIS builds use pinned Authenticode verification; other supported run modes report updates disabled. See [UPDATES.md](../../docs/UPDATES.md).
 - Build: `scripts/build.mjs` bundles Electron to `dist/electron/{main,preload}.cjs` and Vite to `dist/renderer/`. Dev uses `127.0.0.1:5273` with a strict port. Build clears renderer output, overwrites Electron bundles in place.

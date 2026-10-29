@@ -374,6 +374,7 @@ export interface Settings {
     banner: string | null;
   };
   appearance: {
+    style: 'classic' | 'aurora' | 'paper';
     accent: AccentName;
     density: 'compact' | 'comfortable';
     fontFamily: 'inter' | 'system' | 'arial' | 'serif' | 'mono';
@@ -395,6 +396,7 @@ export interface Settings {
     theater: boolean;
     /** Show only the site's player (not the whole page) when watching on a website. */
     siteFocus: boolean;
+    upscale: import('./upscale').UpscaleSettings;
     subtitleStyle: { size:number; color:'white'|'yellow'|'cyan'|'green'; background:number; offset:number };
   };
   accounts: {
@@ -558,9 +560,12 @@ export interface CastMedia {
   image?: string;
   startAt?: number;
   subtitles?: SubtitleTrack[];
+  /** Process an opened local video on the sender before streaming it to a 4K receiver. */
+  upscale4k?: boolean;
 }
 
 export interface CastState {
+  processing?: { width: number; height: number; encoder: string } | null;
   device: { id: string; name: string } | null;
   status: 'idle' | 'connecting' | 'buffering' | 'playing' | 'paused' | 'ended' | 'error';
   currentTime: number;

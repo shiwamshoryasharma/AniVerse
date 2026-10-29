@@ -120,8 +120,10 @@ export class CastClient extends EventEmitter {
 
   connect(host: string, port = 8009): Promise<void> {
     return new Promise((resolve, reject) => {
+      let ready = false;
       // Cast devices present self-signed certificates on the local network.
       const socket = tls.connect({ host, port, rejectUnauthorized: false, timeout: 8000 }, () => {
+        ready = true;
         this.lastSeen = Date.now();
         this.open(RECEIVER);
         this.heartbeat = setInterval(() => {
@@ -136,7 +138,7 @@ export class CastClient extends EventEmitter {
         reject(err);
         this.close(err);
       });
-      socket.on('close', () => this.close());
+      socket.on('close', () => { if (!ready) reject(new Error('Cast connection closed before it was ready.')); this.close(); });
       this.socket = socket;
     });
   }

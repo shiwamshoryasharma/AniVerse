@@ -5,6 +5,7 @@ export const themePresetSchema = z
     name: z.string().trim().min(1).max(60),
     appearance: z
       .object({
+        style: z.enum(['classic', 'aurora', 'paper']).default('classic'),
         accent: z.enum(['ember', 'aqua', 'violet', 'sakura', 'crimson']),
         density: z.enum(['compact', 'comfortable']),
         fontFamily: z.enum(['inter', 'system', 'arial', 'serif', 'mono']),

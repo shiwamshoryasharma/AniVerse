@@ -23,7 +23,7 @@ const MIME: Record<string, string> = {
 export function registerSchemes() {
   protocol.registerSchemesAsPrivileged([
     { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
-    { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+    { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
   ]);
 }
 
@@ -71,12 +71,12 @@ export class MediaProtocols {
         if (start >= size || start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
         return new Response(Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream, {
           status: 206,
-          headers: { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes' },
+          headers: { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' },
         });
       }
       return new Response(Readable.toWeb(createReadStream(file)) as ReadableStream, {
         status: 200,
-        headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes' },
+        headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' },
       });
     });
   }
@@ -106,6 +106,7 @@ export class MediaProtocols {
   }
 }
 
+declare const __ANIVERSE_UPSCALE_SCRIPT__: string;
 const PROBE_SCRIPT = mediaPageScript();
 
 /**
@@ -126,6 +127,8 @@ export class MediaProbe {
     return wc;
   }
 
+  private upscaleOperations = new Map<number, Promise<import('../app/shared/upscale').UpscaleStatus>>();
+
   private async selected(wc: WebContents) {
     let best: { value: Omit<ProbeResult, 'url'>; frame: WebContents['mainFrame'] } | null = null;
     for (const frame of wc.mainFrame.framesInSubtree) {
@@ -139,6 +142,28 @@ export class MediaProbe {
       }
     }
     return best;
+  }
+
+  async upscale(id: number, options: import('../app/shared/upscale').UpscaleSettings): Promise<import('../app/shared/upscale').UpscaleStatus> {
+    const previous = this.upscaleOperations.get(id);
+    const operation = (previous ?? Promise.resolve()).catch(() => undefined).then(() => this.applyUpscale(id, options));
+    this.upscaleOperations.set(id, operation);
+    try { return await operation; } finally { if (this.upscaleOperations.get(id) === operation) this.upscaleOperations.delete(id); }
+  }
+
+  private async applyUpscale(id: number, options: import('../app/shared/upscale').UpscaleSettings): Promise<import('../app/shared/upscale').UpscaleStatus> {
+    const wc = this.guest(id);
+    if (!wc) throw new Error('This is not an AniVerse source player.');
+    if (!options.enabled) {
+      for (const frame of wc.mainFrame.framesInSubtree) await frame.executeJavaScript('globalThis.__aniverseUpscale?.stop()').catch(() => undefined);
+      return { state: 'off', message: 'Anime4K is off' };
+    }
+    const selected = await this.selected(wc);
+    if (!selected) return { state: 'waiting', message: 'Waiting for a compatible website video…' };
+    for (const frame of wc.mainFrame.framesInSubtree) if (frame !== selected.frame) await frame.executeJavaScript('globalThis.__aniverseUpscale?.stop()').catch(() => undefined);
+    const script = 'if (!globalThis.__aniverseUpscale) { ' + __ANIVERSE_UPSCALE_SCRIPT__ + '; globalThis.__aniverseUpscale = AniVerseUpscale; } globalThis.__aniverseUpscale.apply(' + JSON.stringify(options) + ')';
+    try { return await selected.frame.executeJavaScript(script) as import('../app/shared/upscale').UpscaleStatus; }
+    catch { return { state: 'unavailable', message: 'This source does not permit Anime4K filtering.' }; }
   }
 
   async probe(id: number): Promise<ProbeResult | null> {

@@ -2,6 +2,8 @@ import '@fontsource-variable/inter';
 import './styles/app.css';
 import './styles/controls.css';
 import './styles/workspace.css';
+import './styles/themes.css';
+import './styles/upscale.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

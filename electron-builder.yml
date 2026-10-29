@@ -22,6 +22,10 @@ files:
 # Shipped defaults; on first run they are copied to <userData>/config (or a
 # portable <exe dir>/config is used when present) — see electron/paths.ts.
 extraResources:
+  - from: build/vendor/ffmpeg
+    to: ffmpeg
+  - from: assets/anime4k
+    to: anime4k
   - from: config
     to: config
     filter:
@@ -30,6 +34,8 @@ extraResources:
       - site-recipes.json
 
 win:
+  # Preserve the vendor tool hashes; AniVerse.exe and the installer remain signed.
+  signExts: ['!ffmpeg.exe', '!ffprobe.exe']
   icon: build/icon.png
   target:
     - target: nsis

@@ -1,6 +1,7 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
 import { AppError, errorMessage } from '../app/core/util';
+import { upscaleSchema } from '../app/shared/upscale';
 import { RPC_CHANNEL, type RpcContract, type RpcError, type RpcMethod } from '../app/shared/rpc';
 
 const id = z.number().int().positive();
@@ -58,6 +59,7 @@ const settingsPatch = z
     profile: z.object({ name: text(40), bio: text(280) }).partial(),
     appearance: z
       .object({
+        style: z.enum(['classic', 'aurora', 'paper']),
         accent: z.enum(['ember', 'aqua', 'violet', 'sakura', 'crimson']),
         density: z.enum(['compact', 'comfortable']),
         fontFamily: z.enum(['inter', 'system', 'arial', 'serif', 'mono']),
@@ -80,6 +82,7 @@ const settingsPatch = z
         preferredQuality: z.enum(['auto', '1080', '720', '480']),
         theater: z.boolean(),
         siteFocus: z.boolean(),
+        upscale: z.object({ enabled: z.boolean(), mode: z.enum(['A', 'B', 'C', 'A+A', 'B+B', 'C+A']), darken: z.boolean(), thin: z.boolean() }).partial().strict(),
         subtitleStyle:z.object({size:z.number().finite().min(16).max(48),color:z.enum(['white','yellow','cyan','green']),background:z.number().finite().min(0).max(1),offset:z.number().finite().min(-15).max(15)}).partial(),
       })
       .partial(),
@@ -96,6 +99,15 @@ const settingsPatch = z
   .partial();
 
 export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
+  'drive.state': none,
+  'drive.configure': none,
+  'drive.connect': z.object({ shared: z.boolean() }),
+  'drive.cancel': none,
+  'drive.disconnect': none,
+  'drive.folder': z.object({ value: text(500) }),
+  'drive.export': none,
+  'drive.preview': none,
+  'drive.import': z.object({ ticket: z.uuid(), applySettings: z.boolean() }),
   'meta.home': none,
   'meta.browse': browse,
   'meta.details': z.object({ id }),
@@ -215,12 +227,14 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
 
   'player.openFile': none,
 
+  'cast.capabilities': none,
   'cast.devices': none,
   'cast.start': z.object({
     deviceId: z.string().min(1).max(200),
     media: z.object({
       url: z.string().max(4000).refine((u) => /^(https?:\/\/|media:\/\/local\/)/i.test(u), 'Only http(s) streams or opened files can be cast'),
       kind: z.enum(['hls', 'dash', 'mp4']),
+      upscale4k: z.boolean().optional(),
       title: text(300),
       subtitle: text(300).optional(),
       image: url.optional(),
@@ -231,6 +245,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'cast.control': z.object({ action: z.enum(['play', 'pause', 'seek', 'volume']), value: z.number().optional() }),
   'cast.stop': none,
   'cast.state': none,
+  'player.upscale': z.object({ webContentsId: id, options: upscaleSchema }),
   'player.probe': z.object({ webContentsId: id }),
   'player.control': z.object({ webContentsId: id, action: z.enum(['play', 'pause', 'seek', 'resync']), value: z.number().finite().min(0).max(604800).optional() }),
 

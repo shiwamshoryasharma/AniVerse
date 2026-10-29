@@ -1,6 +1,6 @@
 # Privacy and local data
 
-_Last updated: 26 October 2026 · AniVerse 1.0_
+_Last updated: 29 October 2026 · AniVerse 1.5.2_
 
 AniVerse has no account system or developer-operated usage-analytics endpoint of its own. Most personal records stay on the device. Websites and external services receive requests when their features are used.
 
@@ -15,6 +15,8 @@ AniVerse has no account system or developer-operated usage-analytics endpoint of
 | Imported subtitles | Selected file is read locally, converted to WebVTT and held for the native player session; original file unchanged |
 | Optional watch insights | Disabled by default; local session timestamps, media/episode/source identifiers, playing-time estimates and available frame counters |
 | Website cookies, logins, cache and local storage | Separate Chromium session per configured website |
+| Google Drive backups | Explicit export uploads library, progress, history, favourites, notes, skip maps, themes and plans; import previews and merges. No video files, source lists, credentials or local paths are uploaded. |
+| Embedded 4K casting | Selected local video is processed on the sender; bounded temporary HLS segments are served over a token-protected LAN URL and removed when stopped. |
 | OAuth tokens | Main process, using Electron's operating-system secure storage when available |
 | Source and OAuth configuration | Local files; do not commit or share them |
 
@@ -32,6 +34,7 @@ Theme import/export accepts only a strict visual/player schema. It excludes cred
 | Websites and their third parties | Normal browser requests, cookies, scripts, media and addresses loaded by the page; blocking is best effort |
 | Filter-list distributors | Downloads when blocker lists need updating |
 | GitHub Releases and asset hosts | Update checks/downloads; automatic unless disabled in Settings → About |
+| Google Drive / Google OAuth | Only after user setup/sign-in and explicit import/export; fixed app-data backup and OAuth credentials sent only to Google's official endpoints |
 | Selected cast device | Media address/playback information; local files can be served temporarily over a token-protected LAN URL |
 
 Services ordinarily see request metadata such as IP address, time and user agent. Their own privacy policies apply. Local scene notes and watch-insight records are not copied to an AniVerse analytics service.
@@ -45,6 +48,7 @@ Account sign-in uses the provider's official OAuth page in the system browser. A
 - **Insights:** enable/disable in Workspace → Watch insights or Settings → Privacy & blocking. Disabling stops new samples; **Clear insights** deletes existing samples while keeping progress and bookmarks.
 - **Bookmarks and skip maps:** delete individual records in Workspace or Episode Toolkit.
 - **Collection:** removing an entry deletes its index record, not the file. Refreshing a remembered folder can index it again.
+- **Google Drive:** disconnect clears local tokens and attempts revocation. Cloud backups persist until separately deleted in Drive; folder sharing is managed there. Notes leave the device only when you explicitly export/share a backup. [Setup and data scope](docs/GOOGLE-DRIVE.md).
 - **Themes:** delete presets in Settings → Theme presets. Exported files remain where you saved them until separately deleted.
 - **Website sessions:** use the source-session clearing controls. Disconnecting AniList/MyAnimeList removes that integration's local token.
 - **Metadata:** clear cached metadata in Privacy & blocking; library records and logins remain.

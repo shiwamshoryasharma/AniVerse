@@ -132,7 +132,7 @@ describe('portable themes', () => {
     player: { theater: true, preferredQuality: '1080' },
   };
   it('accepts visual settings while rejecting secrets and unknown properties', () => {
-    expect(themePresetSchema.parse(preset)).toEqual(preset);
+    expect(themePresetSchema.parse(preset)).toEqual({ ...preset, appearance: { ...preset.appearance, style: 'classic' } });
     expect(() => themePresetSchema.parse({ ...preset, accounts: { token: 'never-import' } })).toThrow();
     expect(() => themePresetSchema.parse({ ...preset, appearance: { ...preset.appearance, fontFamily: 'url(unsafe)' } })).toThrow();
   });

@@ -1,10 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Download, Info, KeyRound, LogOut, Palette, Play, RefreshCw, RotateCw, Search, Shield, UserRound, Globe, Link2, X, Cpu } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, Info, KeyRound, LogOut, Palette, Play, RefreshCw, RotateCw, Search, Shield, UserRound, Globe, Link2, X, Cpu, ContactRound } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import type { AccentName, AccountInfo, DeepPartial, Provider, Settings, SourceInfo } from '../../../app/shared/types';
 import { SourceIcon, Spinner, Switch } from '../components/common';
 import { Disclaimer } from '../components/Disclaimer';
+import { Anime4KPanel } from '../components/Anime4K';
+import { ThemeStyles } from '../components/ThemeStyles';
+import { GoogleDrivePanel } from '../components/GoogleDrivePanel';
 import { ThemePresets } from '../components/ThemePresets';
 import { GraphicsPanel } from '../components/GraphicsPanel';
 import { updateSummary, useInstallUpdate } from '../lib/updates';
@@ -15,8 +18,9 @@ import { keys, useAccounts, useAdblockStats, useAppInfo, useSettings, useSources
 import { useToast } from '../lib/useToast';
 
 const SECTIONS = [
-  { id: 'general', label: 'Profile & appearance', icon: Palette },
-  { id: 'themes', label: 'Theme presets', icon: Palette },
+  { id: 'general', label: 'Profile & appearance', icon: ContactRound },
+  { id: 'themes', label: 'Interface themes', icon: Palette },
+  { id: 'drive', label: 'Google Drive sync', icon: RefreshCw },
   { id: 'player', label: 'Player', icon: Play },
   { id: 'graphics', label: 'Graphics & GPU', icon: Cpu },
   { id: 'sources', label: 'Sources', icon: Globe },
@@ -51,7 +55,8 @@ export function SettingsPage() {
         <div style={{ minWidth: 0 }}>
           {section === 'general' && <GeneralSection />}
           {section === 'player' && <PlayerSection />}
-          {section === 'themes' && <ThemePresets />}
+          {section === 'themes' && <><ThemeStyles /><ThemePresets /></>}
+          {section === 'drive' && <GoogleDrivePanel />}
           {section === 'graphics' && <GraphicsPanel />}
           {section === 'sources' && <SourcesSection />}
           {section === 'accounts' && <AccountsSection />}
@@ -185,6 +190,7 @@ function PlayerSection() {
   const save = useSave();
   return (
     <>
+    <Group title="Anime4K · up to 4K"><div className="card-pad"><Anime4KPanel /></div></Group>
     <Group title="Playback">
       <Setting title="Autoplay" desc="Start playing as soon as a stream loads.">
         <Switch label="Autoplay" on={s.autoplay} onChange={(v) => save({ player: { autoplay: v } })} />

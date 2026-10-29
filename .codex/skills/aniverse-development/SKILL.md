@@ -20,12 +20,14 @@ Read [the memory index](../../memory/MEMORY.md), then [architecture](../../memor
 
 ## Workspace changes
 
-For bookmarks, ranges, plans, collection files, portable themes, local insights or native captions, read [the workspace map](../../memory/workspace.md). Retain the browser-only website workflow, opt-in statistics, main-process file grants and strict visual-theme schema. Watch Together was explicitly removed by the user; do not infer its inclusion from older notes.
+For bookmarks, ranges, plans, collection files, portable themes, local insights or native captions, use [the Workspace skill](../aniverse-workspace/SKILL.md), which routes to the affected modules and [workspace map](../../memory/workspace.md). Retain the browser-only website workflow, opt-in statistics, main-process file grants and strict visual-theme schema. Watch Together was explicitly removed by the user; do not infer its inclusion from older notes.
 
 ## Choose relevant validation
 
 Use [the validation skill](../aniverse-validation/SKILL.md). Application changes follow the repository's typecheck/lint/test/build requirements and relevant runtime checks; documentation-only edits need focused context validation.
 
-For source adapters or website behavior, load [source navigation](../aniverse-source-navigation/SKILL.md). For accounts, signing or updater work, read the relevant existing `docs/ACCOUNTS.md`, `docs/INSTALLER.md`, or `docs/UPDATES.md` instead of copying their manuals into memory.
+For source adapters or website behavior, load [source navigation](../aniverse-source-navigation/SKILL.md). For Google Drive, backup or embedded 4K casting changes, read `docs/GOOGLE-DRIVE.md`, `docs/PLAYBACK.md` and the architecture memory. Keep the fixed Drive names/schema stable; do not use a default-filled schema to parse partial settings patches. FFmpeg/FFprobe must resolve inside app resources, never from PATH.
+
+For accounts, signing or updater work, read the relevant existing `docs/ACCOUNTS.md`, `docs/INSTALLER.md`, or `docs/UPDATES.md` instead of copying their manuals into memory.
 
 Keep all new test scripts/configs/cache/output under `test/`. Preserve `.claude/`. Update Codex memory with dated, evidence-backed changes; do not record an implementation or old screenshot as a current test pass.

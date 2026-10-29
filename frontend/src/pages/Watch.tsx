@@ -37,6 +37,7 @@ import { call, errorText, onEvent } from '../lib/bridge';
 import { availableEpisodes, countdown, cx, formatLabel, mediaRefOf, pendingRelease, snapshotOf, statusLabel, titleOf } from '../lib/format';
 import { keys, useDetails, useLibraryState, useMarkWatched, useMatch, useSaveProgress, useSettings, useSources, useStreams, useToggleFavourite, useUpdateSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
+import { SiteAnime4K } from '../components/Anime4K';
 import { VideoPlayer, type PlayerControls } from '../player/VideoPlayer';
 
 /** YouTube asks embedded players in native apps to identify themselves with an app referrer. */
@@ -464,6 +465,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
             )}
           </div>
 
+          {isSite && webContentsId && <SiteAnime4K key={siteKey + ':anime4k'} webContentsId={webContentsId} />}
           {isSite && webContentsId && <PlaybackRescue key={siteKey + ':' + episode} probe={playbackProbe} health={playbackStatus} webContentsId={webContentsId} busy={siteBusy || !!choosing} />}
 
           {(local.data || webContentsId || (stream && stream.type !== 'web' && stream.type !== 'youtube')) && <EpisodeToolkit key={media.id+':'+episode+':'+(sourceId ?? localId)} media={snapshot} episode={episode} sourceId={sourceId} webContentsId={localId?null:webContentsId} native={player} probe={localId?null:playbackProbe} initialTime={search.has('t') && Number.isFinite(Number(search.get('t'))) && Number(search.get('t'))>=0 ? Number(search.get('t')) : null} />}

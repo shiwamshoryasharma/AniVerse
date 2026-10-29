@@ -29,5 +29,7 @@ config/streaming-sites.txt
 config/site-recipes.json
 .claude/private-notes.md
 
+build/vendor/
+
 # generated installer art (scripts/make-installer-art.cjs)
 build/installer/

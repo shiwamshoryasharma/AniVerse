@@ -48,6 +48,15 @@ import type {
 } from './types';
 
 export interface RpcContract {
+  'drive.state': [void, import('./drive').DriveState];
+  'drive.configure': [void, import('./drive').DriveState];
+  'drive.connect': [{ shared: boolean }, import('./drive').DriveState];
+  'drive.cancel': [void, void];
+  'drive.disconnect': [void, import('./drive').DriveState];
+  'drive.folder': [{ value: string }, import('./drive').DriveState];
+  'drive.export': [void, import('./drive').DriveState];
+  'drive.preview': [void, import('./drive').DrivePreview];
+  'drive.import': [{ ticket: string; applySettings: boolean }, import('./drive').BackupSummary];
   'meta.home': [void, HomeData];
   'meta.browse': [BrowseQuery, Page<MediaCard>];
   'meta.details': [{ id: number }, MediaDetails];
@@ -132,11 +141,13 @@ export interface RpcContract {
 
   'player.openFile': [void, { url: string; name: string } | null];
 
+  'cast.capabilities': [void, { available: boolean; version: string | null; message: string }];
   'cast.devices': [void, CastDevice[]];
   'cast.start': [{ deviceId: string; media: CastMedia }, CastState];
   'cast.control': [{ action: 'play' | 'pause' | 'seek' | 'volume'; value?: number }, CastState];
   'cast.stop': [void, CastState];
   'cast.state': [void, CastState];
+  'player.upscale': [{ webContentsId: number; options: import('./upscale').UpscaleSettings }, import('./upscale').UpscaleStatus];
   'player.probe': [{ webContentsId: number }, ProbeResult | null];
   'player.control': [{ webContentsId: number; action: 'play' | 'pause' | 'seek' | 'resync'; value?: number }, boolean];
 

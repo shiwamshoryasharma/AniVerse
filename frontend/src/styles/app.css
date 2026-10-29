@@ -1994,7 +1994,7 @@ button.chip.off {
   letter-spacing: 0.1em;
   color: var(--text-3);
 }
-.player-menu button {
+.player-menu > button {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2008,10 +2008,10 @@ button.chip.off {
   cursor: pointer;
   font-size: var(--fs-sm);
 }
-.player-menu button:hover {
+.player-menu > button:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-.player-menu button.on {
+.player-menu > button.on {
   color: var(--accent);
 }
 .player-flash {

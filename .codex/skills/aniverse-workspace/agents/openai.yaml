@@ -1,0 +1,4 @@
+interface:
+  display_name: "AniVerse Workspace"
+  short_description: "Maintain the local episode workspace"
+  default_prompt: "Use $aniverse-workspace to inspect and update AniVerse local Workspace or Episode Toolkit behavior."

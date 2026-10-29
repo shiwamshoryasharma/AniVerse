@@ -25,6 +25,7 @@ import { CastMenu, CastOverlay } from './Cast';
 import { isCasting, useCastState } from './useCastState';
 import { Range } from '../components/controls';
 import { clock, cx } from '../lib/format';
+import { Anime4KPanel, Anime4KSurface } from '../components/Anime4K';
 import { SubtitleStudio } from './SubtitleStudio';
 
 export interface PlayerSource {
@@ -92,7 +93,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
   const [speed, setSpeed] = useState(prefs.speed);
   const [levels, setLevels] = useState<Level[]>([]);
   const [level, setLevel] = useState(-1);
-  const [menu, setMenu] = useState<'speed' | 'quality' | null>(null);
+  const [menu, setMenu] = useState<'speed' | 'quality' | 'upscale' | null>(null);
   const [idle, setIdle] = useState(false);
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -119,7 +120,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
     }
   }, [casting, cast.currentTime, cast.duration, cast.status]);
 
-  const startCast = async (device: CastDevice) => {
+  const startCast = async (device: CastDevice, upscale4k = false) => {
     setCastMenu(false);
     const v = video.current!;
     v.pause();
@@ -130,6 +131,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
         media: {
           url: source.url,
           kind: source.type,
+          upscale4k,
           title: title ?? 'AniVerse',
           subtitle,
           image: poster && /^https?:/.test(poster) ? poster : undefined,
@@ -394,12 +396,13 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
       onMouseLeave={() => playing && setIdle(true)}
       aria-label="Video player"
     >
-      <video ref={video} playsInline crossOrigin={source.subtitles.length ? 'anonymous' : undefined} onClick={toggle} onDoubleClick={toggleFs}>
+      <video ref={video} playsInline crossOrigin={source.subtitles.length || source.url.startsWith('media:') ? 'anonymous' : undefined} onClick={toggle} onDoubleClick={toggleFs}>
         {source.subtitles.map((s, i) => (
           <track key={s.url} kind="subtitles" src={s.url} srcLang={s.lang} label={s.label} default={i === 0} />
         ))}
       </video>
 
+      <Anime4KSurface key={source.url + JSON.stringify(prefs.upscale)} video={video} sourceKey={source.url} disabled={casting} />
       <SubtitleStudio key={source.url} video={video} style={prefs.subtitleStyle} />
       {title && <div className="player-title ellipsis">{title}</div>}
 
@@ -418,7 +421,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
       {flash && <div className="player-flash">{flash}</div>}
 
       {casting && <CastOverlay state={cast} poster={poster} onStop={() => void stopCast()} />}
-      {castMenu && <CastMenu state={cast} onPick={(d) => void startCast(d)} onStop={() => void stopCast()} onClose={() => setCastMenu(false)} />}
+      {castMenu && <CastMenu state={cast} canUpscale={source.url.startsWith('media://local/')} onPick={(d, upscale4k) => void startCast(d, upscale4k)} onStop={() => void stopCast()} onClose={() => setCastMenu(false)} />}
 
       {error && (
         <div className="player-error">
@@ -433,7 +436,8 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
       )}
 
       {menu && (
-        <div className="player-menu" onMouseLeave={() => setMenu(null)}>
+        <div className={cx('player-menu', menu === 'upscale' && 'anime4k-menu')} onMouseLeave={() => setMenu(null)}>
+          {menu === 'upscale' && <Anime4KPanel />}
           {menu === 'speed' && (
             <>
               <h5>Playback speed</h5>
@@ -516,6 +520,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
           <button className="btn xs" style={{ background: 'rgba(255,255,255,.12)', border: 0, color: '#fff' }} onClick={() => seekBy(prefs.skipStep)} title="Skip opening (S)">
             Skip +{prefs.skipStep}s
           </button>
+          <button className={cx('btn xs', prefs.upscale.enabled && 'on')} aria-label="Anime4K Upscale" onClick={() => setMenu(menu === 'upscale' ? null : 'upscale')}>4K</button>
           <button className="icon-btn" aria-label="Speed" onClick={() => setMenu(menu === 'speed' ? null : 'speed')}>
             <Gauge size={17} />
           </button>

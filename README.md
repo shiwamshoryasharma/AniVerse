@@ -22,7 +22,7 @@ AniVerse brings the websites **you choose** and the media **you provide** into o
 
 The project does not operate a public episode-hosting service or internet stream relay. Official signed installers contain no streaming-site list. Adding a website does not establish that its content is licensed, and AniVerse does not grant permission to access or redistribute anyone else's work. Read the [disclaimer](DISCLAIMER.md) and [privacy notice](PRIVACY.md).
 
-## Version 1 features
+## Version 1.5.2 features
 
 | Menu | What you can do |
 | --- | --- |
@@ -37,6 +37,10 @@ The project does not operate a public episode-hosting service or internet stream
 | 💬 **Subtitle Studio** | Select two native-player caption tracks, adjust their offsets, style captions or import UTF-8 SRT/WebVTT files. |
 | 🗓️ **Workspace → Weekly planner** | Fit available unwatched episodes from your library into a daily time budget over seven days. |
 | 📁 **Workspace → Local collection** | Index video filenames, confirm title/episode matches and play files without relocating them. |
+| 🖌️ **Settings → Interface themes** | Choose Classic, Aurora or Paper; save/import/export visual presets. |
+| ✨ **Anime4K Upscale** | GPU restore/denoise presets and optional line effects, up to 4K on compatible players. |
+| ☁️ **Settings → Google Drive sync** | Import/export app-data backups using your own Desktop OAuth JSON and a stable shared-folder format. |
+| 📺 **4K casting** | Process opened local videos on this device with embedded Anime4K/FFmpeg and stream HEVC 4K to compatible Cast receivers. |
 | 🎨 **Settings → Theme presets** | Save, apply, import and export visual preferences, including your UI font. |
 | 📊 **Workspace → Watch insights** | Opt in to local playing-time estimates, title totals and observed dropped-frame ratios. |
 | 🖥️ **Settings → Graphics & GPU** | Inspect GPUs and the active renderer; follow illustrated laptop setup and NVIDIA RTX Video guidance. |
@@ -116,7 +120,13 @@ Watch insights start disabled. Enable them explicitly if wanted and clear stored
 
 Configure your own OAuth client IDs following [Accounts](docs/ACCOUNTS.md). Do not put secrets in frontend code or committed configuration. Without client IDs, browsing, discovery and the local library still work.
 
-Sign-in uses the provider's official page in your system browser. Tokens stay in the main process. Local notes, collection paths, skip maps and plans are excluded from list sync.
+Sign-in uses the provider's official page in your system browser. Tokens stay in the main process. Local notes, collection paths, skip maps and plans are excluded from AniList/MAL list sync. Manual [Google Drive backup](docs/GOOGLE-DRIVE.md) can include notes, skip maps and plans, with credentials and device-specific paths excluded.
+
+### 8. Google Drive and 4K
+
+Use **Settings → Google Drive sync** to upload your own **Desktop app OAuth JSON**, connect Google and export/import app data. Keep **AniVerse Sync/aniverse-backup.v1.json** unchanged. See [Drive setup and shared folders](docs/GOOGLE-DRIVE.md).
+
+Choose **Settings → Player → Anime4K** or the native player's **4K** control for GPU upscaling. For sender-side TV processing, open a local video, open Cast and enable **4K · process on this device**. The bundled encoder produces HEVC 4K; a compatible receiver, Vulkan-capable sender and adequate network are required. [Playback details](docs/PLAYBACK.md).
 
 ## Privacy and trust
 
@@ -199,7 +209,7 @@ A4:E9:77:36:B3:50:B8:DB:5D:71:A7:A6:0B:D2:AA:94:BE:AA:8D:70:FB:0F:19:E2:27:D9:BF
 Inspect **Properties → Digital Signatures → Details → View Certificate**. From your download directory, PowerShell 7 can print the fingerprints:
 
 ~~~powershell
-$certificate = (Get-AuthenticodeSignature -LiteralPath '.\AniVerse-Setup-1.0.0.exe').SignerCertificate
+$certificate = (Get-AuthenticodeSignature -LiteralPath '.\AniVerse-Setup-1.5.2.exe').SignerCertificate
 if ($null -eq $certificate) { throw 'No signer certificate found.' }
 $certificate.Thumbprint
 [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($certificate.RawData))
@@ -213,6 +223,8 @@ The certificate is self-signed, not publicly trusted. Compare fingerprints and r
 | --- | --- |
 | [Architecture](docs/ARCHITECTURE.md) | Layers, data flow and trust boundaries |
 | [Accounts](docs/ACCOUNTS.md) | OAuth and list sync |
+| [Google Drive](docs/GOOGLE-DRIVE.md) | Personal OAuth JSON, portable backups and shared folders |
+| [Third-party components](docs/THIRD-PARTY.md) | Embedded FFmpeg/FFprobe and Anime4K source/license information |
 | [Installer](docs/INSTALLER.md) · [Updates](docs/UPDATES.md) | Installation, feed, signatures and publishing |
 | [Version 1 notes](docs/releases/1.0.0.md) | Changes, checks and known limits |
 | [Disclaimer](DISCLAIMER.md) · [Privacy](PRIVACY.md) | Rights, product scope, local data and notices |

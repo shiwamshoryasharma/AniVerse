@@ -11,7 +11,7 @@ Read [testing policy and harness details](../../memory/testing.md) before choosi
 
 Use the repository's `test/` for every testing script, config, profile, cache, temporary file and generated result. Use `test/cache/` for disposable data and `test/artifacts/` for reports/screenshots. Do not put testing helpers inside this skill or modify production config for a test.
 
-Image-based model generation or validation must take inputs from `test/images/`. Inspect the directory first: at the 2026-10-26 snapshot it held only `.gitkeep`. If the requested check requires images and none are available, report the missing input and continue only independent work; do not substitute unrelated images or claim success. No model-generation pipeline was identified in the inspected app.
+Image-based model generation or validation must take inputs from `test/images/`. Inspect the directory first: at the 2026-10-29 inspection it held only `.gitkeep`. If the requested check requires images and none are available, report the missing input and continue only independent work; do not substitute unrelated images or claim success. No model-generation pipeline was identified in the inspected app.
 
 ## Match the check to the change
 

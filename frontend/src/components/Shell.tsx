@@ -59,6 +59,7 @@ export function Shell() {
 
   useEffect(() => {
     const root = document.documentElement;
+    root.dataset.style = settings.appearance.style;
     root.dataset.accent = settings.appearance.accent;
     root.dataset.density = settings.appearance.density;
     root.dataset.font = settings.appearance.fontFamily;

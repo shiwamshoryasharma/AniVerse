@@ -1,13 +1,17 @@
 import { Cast, Pause, Play, RotateCcw, RotateCw, ScreenShareOff, Tv } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { CastDevice, CastState } from '../../../app/shared/types';
+import { Switch } from '../components/common';
 import { Range } from '../components/controls';
 import { call, errorText } from '../lib/bridge';
 import { isCasting } from './useCastState';
 import { clock, cx } from '../lib/format';
 
 /** Device picker shown from the player's Cast button. */
-export function CastMenu({ state, onPick, onStop, onClose }: { state: CastState; onPick: (d: CastDevice) => void; onStop: () => void; onClose: () => void }) {
+export function CastMenu({ state, onPick, onStop, onClose, canUpscale }: { canUpscale: boolean; state: CastState; onPick: (d: CastDevice, upscale4k: boolean) => void; onStop: () => void; onClose: () => void }) {
+  const [upscale4k, setUpscale4k] = useState(false);
+  const [capability, setCapability] = useState<{ available: boolean; version: string | null; message: string } | null>(null);
+  useEffect(() => { void call('cast.capabilities').then(setCapability).catch(() => undefined); }, []);
   const [devices, setDevices] = useState<CastDevice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = () =>
@@ -31,6 +35,7 @@ export function CastMenu({ state, onPick, onStop, onClose }: { state: CastState;
   return (
     <div className="player-menu cast-menu" onMouseLeave={onClose}>
       <h5>Cast media to</h5>
+      <div className="cast-4k-choice"><label className="row"><Switch label="Process 4K on this device" on={upscale4k} onChange={(on) => setUpscale4k(on && canUpscale && !!capability?.available)} />4K · process on this device</label><p>{canUpscale ? (capability?.message ?? 'Checking embedded encoder…') : '4K sender processing is available for opened local videos.'}</p><p>Requires a 4K HEVC-capable Google Cast TV/receiver, Vulkan GPU and sufficient LAN bandwidth. No system FFmpeg needed.</p></div>
       {isCasting(state) && (
         <button className="on" onClick={onStop}>
           <span className="row" style={{ gap: 8 }}>
@@ -48,7 +53,7 @@ export function CastMenu({ state, onPick, onStop, onClose }: { state: CastState;
         </div>
       ) : (
         devices.map((d) => (
-          <button key={d.id} className={cx(state.device?.id === d.id && 'on')} onClick={() => onPick(d)}>
+          <button key={d.id} className={cx(state.device?.id === d.id && 'on')} onClick={() => onPick(d, upscale4k)}>
             <span className="row" style={{ gap: 8, minWidth: 0 }}>
               <Tv size={14} />
               <span className="ellipsis">{d.name}</span>
@@ -78,6 +83,7 @@ export function CastOverlay({ state, poster, onStop }: { state: CastState; poste
       <div className="cast-badge">
         <Cast size={16} /> Casting to <b>{state.device?.name}</b>
       </div>
+      {state.processing && <div className="cast-badge">Anime4K {state.processing.width} × {state.processing.height} · computed on sender · {state.processing.encoder}</div>}
       <div className="cast-title ellipsis">{state.title}</div>
       <div className="faint" style={{ fontSize: 'var(--fs-sm)' }}>
         {state.status === 'connecting' ? 'Connecting…' : state.status === 'buffering' ? 'Buffering on the TV…' : state.status === 'ended' ? 'Finished' : state.status === 'paused' ? 'Paused' : 'Playing on the TV'}

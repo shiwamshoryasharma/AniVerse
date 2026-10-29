@@ -27,12 +27,14 @@ import { isDev, resolvePaths } from './paths';
 import { browserUserAgent, SessionManager } from './sessions';
 import { SiteNavigator } from './siteNavigator';
 import { CastService } from './cast/castService';
+import { Sender4K } from './cast/sender4k';
 import { UpdateService } from './updater';
 import { WorkspaceService } from '../app/core/workspace';
 import { buildWatchPlan, type WatchPlan } from '../app/shared/workspace';
 import { pendingRelease } from '../app/shared/release';
 import { subtitleTextToVtt } from '../app/shared/subtitles';
 import { LocalCollection } from './collection';
+import { GoogleDriveService } from './googleDrive';
 import { summarizeGraphics, type GpuPreference } from '../app/shared/graphics';
 
 // Ask Chromium for the discrete adapter on hybrid laptops before GPU initialization.
@@ -215,6 +217,7 @@ async function bootstrap() {
   const settings = new SettingsService(store);
   const workspace = new WorkspaceService(store);
   const apiFetch: FetchFn = (url, init) => session.defaultSession.fetch(url, init);
+  const drive = new GoogleDriveService(store, credentials.codec, credentials.secure, apiFetch, app.getVersion(), () => mainWindow, (url) => shell.openExternal(url));
 
   const adblock = new Adblocker(paths.adblockCache, paths.filtersFile, (stats) => emit('adblock.stats', stats));
   const cloudflare = new CloudflareSolver(
@@ -288,9 +291,13 @@ async function bootstrap() {
   const protocols = new MediaProtocols(paths.renderer, paths.profileDir);
   protocols.install();
   const collection = new LocalCollection(store,protocols,()=>mainWindow);
-  const cast = new CastService(
+  const mediaResources = app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build/vendor');
+  let cast!: CastService;
+  const sender4k = new Sender4K(path.join(mediaResources, 'ffmpeg'), app.isPackaged ? path.join(process.resourcesPath, 'anime4k') : path.join(app.getAppPath(), 'assets/anime4k'), path.join(paths.dataDir, 'cast-4k'), () => { void cast.stop(); emit('app.notice', { level: 'error', message: 'Sender-side 4K encoding stopped. Check GPU support and retry.' }); });
+  cast = new CastService(
     (s) => emit('cast.status', s),
     (u) => protocols.localPath(u),
+    sender4k,
   );
   const probe = new MediaProbe(
     () => mainWindow?.webContents ?? null,
@@ -323,6 +330,15 @@ async function bootstrap() {
   };
 
   const handlers: Handlers = {
+    'drive.state': () => drive.snapshot(),
+    'drive.configure': () => drive.configure(),
+    'drive.connect': ({ shared }) => drive.connect(shared),
+    'drive.cancel': () => drive.cancel(),
+    'drive.disconnect': () => drive.disconnect(),
+    'drive.folder': ({ value }) => drive.selectFolder(value),
+    'drive.export': () => drive.export(),
+    'drive.preview': () => drive.preview(),
+    'drive.import': async ({ ticket, applySettings }) => { const result = await drive.import(ticket, applySettings); settings.reload(); return result; },
     'meta.home': () => anilist.home(),
     'meta.browse': (q) => anilist.browse(q),
     'meta.details': ({ id }) => anilist.details(id),
@@ -498,11 +514,13 @@ async function bootstrap() {
 
     'player.openFile': () => protocols.pick(mainWindow),
 
+    'cast.capabilities': () => cast.capabilities(),
     'cast.devices': () => cast.scan(),
-    'cast.start': ({ deviceId, media }) => cast.start(deviceId, media),
+    'cast.start': ({ deviceId, media }) => cast.start(deviceId, media, settings.get().player.upscale),
     'cast.control': ({ action, value }) => cast.control(action, value),
     'cast.stop': () => cast.stop(),
     'cast.state': () => cast.snapshot(),
+    'player.upscale': ({ webContentsId, options }) => probe.upscale(webContentsId, options),
     'player.probe': ({ webContentsId }) => probe.probe(webContentsId),
     'player.control': ({ webContentsId, action, value }) => probe.control(webContentsId, action, value),
 
@@ -564,6 +582,7 @@ async function bootstrap() {
     if (process.platform !== 'darwin') app.quit();
   });
   app.on('before-quit', () => {
+    drive.cancel();
     config.stop();
     updates.stop();
     void cast.stop();

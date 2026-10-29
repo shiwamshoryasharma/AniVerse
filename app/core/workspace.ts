@@ -170,9 +170,9 @@ export class WorkspaceService {
     return entry;
   }
   saveTheme(name: string, settings: Settings) {
-    const { accent, density, fontFamily, reduceMotion } = settings.appearance,
+    const { style, accent, density, fontFamily, reduceMotion } = settings.appearance,
       { theater, preferredQuality } = settings.player;
-    return this.importTheme({ version: 1, name, appearance: { accent, density, fontFamily, reduceMotion }, player: { theater, preferredQuality } });
+    return this.importTheme({ version: 1, name, appearance: { style, accent, density, fontFamily, reduceMotion }, player: { theater, preferredQuality } });
   }
   theme(id: string): ThemePreset {
     const entry = this.themes().find((theme) => theme.id === id);

@@ -1,0 +1,49 @@
+/* Classic uses the original tokens unchanged. */
+:root[data-style='aurora'] {
+  --bg:#080c20; --bg-2:#0d1430; --surface:#121d3c; --surface-2:#19264a; --surface-3:#23325b; --surface-hover:#2c3d66;
+  --line:rgba(160,185,255,.12); --line-2:rgba(160,185,255,.24); --text:#edf3ff; --text-2:#b3c1e2; --text-3:#8498c1;
+  --radius-sm:10px; --radius:15px; --radius-lg:22px; --shadow:0 18px 60px -20px #000a;
+}
+[data-style='aurora'] .main { background:radial-gradient(ellipse at 80% 0%,#34377738,transparent 55%),var(--bg); }
+[data-style='aurora'] .card { box-shadow:0 10px 35px -22px #809aff55; }
+:root[data-style='paper'] {
+  --bg:#f4f0e8; --bg-2:#fcf9f2; --surface:#fffdf8; --surface-2:#eee8dc; --surface-3:#e6dece; --surface-hover:#e2d9c8;
+  --line:rgba(49,42,30,.12); --line-2:rgba(49,42,30,.23); --text:#272b34; --text-2:#555d68; --text-3:#687078;
+  --radius-sm:5px; --radius:9px; --radius-lg:12px; --shadow:0 10px 30px -18px #544b3955;
+  --ok:#157447; --warn:#986100; --err:#ba253e; --info:#2462a5; color-scheme:light;
+}
+:root[data-style='paper'][data-accent='ember'] { --accent:#ad4800; --accent-2:#d06112; --accent-ink:#fff; --accent-soft:#bb500014; }
+:root[data-style='paper'][data-accent='aqua'] { --accent:#087a6b; --accent-2:#0d9682; --accent-ink:#fff; --accent-soft:#087a6b17; }
+:root[data-style='paper'][data-accent='violet'] { --accent:#6542bc; --accent-2:#7954d4; --accent-ink:#fff; --accent-soft:#6542bc17; }
+:root[data-style='paper'][data-accent='sakura'] { --accent:#b12e6a; --accent-2:#c9437e; --accent-ink:#fff; --accent-soft:#b12e6a17; }
+:root[data-style='paper'][data-accent='crimson'] { --accent:#b9283b; --accent-2:#d23c4e; --accent-ink:#fff; --accent-soft:#b9283b17; }
+[data-style='paper'] .card { box-shadow:0 3px 12px #4a382008; }
+[data-style='paper'] ::-webkit-scrollbar-thumb { background:#272b3430 content-box; }
+.player { color:#fff; }
+.theme-styles { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:24px; }
+.theme-style { text-align:left; padding:14px; border:1px solid var(--line-2); border-radius:var(--radius-lg); background:var(--surface); cursor:pointer; min-width:0; }
+.theme-style.selected { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+.theme-style small { display:block; color:var(--accent); margin:8px 0; }
+.theme-style p { color:var(--text-2); font-size:var(--fs-sm); margin:0; }
+.theme-style-preview { height:128px; display:flex; gap:10px; padding:12px; margin-bottom:16px; border-radius:9px; background:#08090e; border:1px solid #ffffff12; }
+.theme-style-preview>i { width:20px; border-radius:5px; background:#202530; }
+.theme-style-preview>div { flex:1; min-width:0; }
+.theme-style-preview b { display:block; width:62%; height:9px; background:#f47a28; border-radius:4px; margin-bottom:8px; }
+.theme-style-preview span { display:block; height:4px; background:#606878; border-radius:3px; margin:4px 0; width:75%; }
+.preview-posters { display:flex; gap:6px; margin-top:12px; height:53px; }
+.preview-posters em { flex:1; background:linear-gradient(140deg,#2d3544,#53627d); border-radius:5px; }
+.theme-style.aurora .theme-style-preview { background:linear-gradient(140deg,#111a37,#28245c); }
+.theme-style.aurora .theme-style-preview b { background:#83b5fa; }
+.theme-style.aurora .theme-style-preview i { background:#354b78; }
+.theme-style.aurora .preview-posters em { border-radius:9px; background:linear-gradient(140deg,#334f8c,#8c75ab); }
+.theme-style.paper .theme-style-preview { background:#f4f0e8; border-color:#342a231a; }
+.theme-style.paper .theme-style-preview b { background:#9c5e39; }
+.theme-style.paper .theme-style-preview span { background:#88857a; }
+.theme-style.paper .theme-style-preview i { background:#e1d7c5; }
+.theme-style.paper .preview-posters em { border-radius:3px; background:linear-gradient(140deg,#d0c5b1,#8c9c99); }
+.drive-panel { gap:18px; }
+.drive-setup { margin:0; padding-left:22px; color:var(--text-2); line-height:1.8; }
+.drive-contract,.drive-preview { padding:18px; background:var(--surface-2); border:1px solid var(--line-2); border-radius:var(--radius); }
+.drive-contract code { display:block; margin:10px 0; color:var(--accent); overflow-wrap:anywhere; }
+.drive-contract p,.drive-panel p { margin:0; line-height:1.6; }
+@media(max-width:1150px) { .theme-styles { grid-template-columns:1fr; } .theme-style-preview { height:100px; } }

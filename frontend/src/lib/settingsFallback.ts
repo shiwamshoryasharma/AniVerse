@@ -3,7 +3,7 @@ import type { Settings } from '../../../app/shared/types';
 /** Used only until the main process answers `settings.get` (mirrors app/core/settings.ts defaults). */
 export const DEFAULT_SETTINGS_FALLBACK: Settings = {
   profile: { name: 'Viewer', bio: '', avatar: null, banner: null },
-  appearance: { accent: 'ember', density: 'compact', fontFamily: 'inter', reduceMotion: false, titleLanguage: 'english', showAdult: false, spoilerShield:true },
+  appearance: { style: 'classic', accent: 'ember', density: 'compact', fontFamily: 'inter', reduceMotion: false, titleLanguage: 'english', showAdult: false, spoilerShield:true },
   player: {
     autoplay: true,
     autoNext: true,
@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS_FALLBACK: Settings = {
     preferredQuality: 'auto',
     theater: false,
     siteFocus: true,
+    upscale: { enabled: false, mode: 'A', darken: false, thin: false },
     subtitleStyle: { size:28, color:'white', background:0.65, offset:0 },
   },
   accounts: {
