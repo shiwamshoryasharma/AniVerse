@@ -7,7 +7,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import makeMdns from 'multicast-dns';
+import { discoverCastDevices } from './discovery';
 import { AppError } from '../../app/core/util';
 import type { CastDevice, CastMedia, CastState } from '../../app/shared/types';
 import { CastClient, type MediaStatus } from './castv2';
@@ -15,40 +15,7 @@ import { CastClient, type MediaStatus } from './castv2';
 const CONTENT_TYPES: Record<CastMedia['kind'], string> = { hls: 'application/x-mpegurl', dash: 'application/dash+xml', mp4: 'video/mp4' };
 const FILE_TYPES: Record<string, string> = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.mov': 'video/mp4', '.vtt': 'text/vtt' };
 
-/** Finds Google Cast devices on the local network (mDNS `_googlecast._tcp.local`). */
-export function discoverCastDevices(timeoutMs = 3000): Promise<CastDevice[]> {
-  return new Promise((resolve) => {
-    const mdns = makeMdns();
-    const found = new Map<string, CastDevice>();
-    const hosts = new Map<string, string>();
-    mdns.on('response', (res) => {
-      const records = [...res.answers, ...res.additionals] as unknown as { name: string; type: string; data?: unknown }[];
-      for (const r of records) if (r.type === 'A') hosts.set(r.name, r.data as string);
-      for (const r of records) {
-        if (r.type !== 'SRV' || !r.name.includes('_googlecast')) continue;
-        const srv = r.data as { port: number; target: string };
-        const txt = records.find((t) => t.type === 'TXT' && t.name === r.name);
-        const fields: Record<string, string> = {};
-        for (const b of ((txt?.data as Buffer[] | undefined) ?? [])) {
-          const [k, ...v] = b.toString().split('=');
-          fields[k] = v.join('=');
-        }
-        const host = hosts.get(srv.target) ?? records.find((a) => a.type === 'A')?.data;
-        if (!host || typeof host !== 'string') continue;
-        const id = fields.id || r.name;
-        found.set(id, { id, name: fields.fn || r.name.split('._googlecast')[0], model: fields.md || 'Chromecast', host, port: srv.port });
-      }
-    });
-    const ask = () => mdns.query({ questions: [{ name: '_googlecast._tcp.local', type: 'PTR' }] });
-    ask();
-    const again = setTimeout(ask, 1000);
-    setTimeout(() => {
-      clearTimeout(again);
-      mdns.destroy();
-      resolve([...found.values()].sort((a, b) => a.name.localeCompare(b.name)));
-    }, timeoutMs);
-  });
-}
+export { discoverCastDevices } from './discovery';
 
 /** Local IPv4 address on the same network as the Cast device (for serving local files). */
 function lanAddressFor(deviceHost: string): string | null {

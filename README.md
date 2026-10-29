@@ -8,7 +8,7 @@
 
 A desktop browser with anime discovery, isolated website sessions, a native media player, and a local workspace.
 
-[Download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Getting started](#getting-started) · [Features](#version-153-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
+[Download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Getting started](#getting-started) · [Features](#version-156-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
 
 Windows 10 / 11 · Electron · React · TypeScript · GPL-3.0-or-later
 
@@ -22,7 +22,7 @@ AniVerse brings the websites **you choose** and the media **you provide** into o
 
 The project does not operate a public episode-hosting service or internet stream relay. Official signed installers contain no streaming-site list. Adding a website does not establish that its content is licensed, and AniVerse does not grant permission to access or redistribute anyone else's work. Read the [disclaimer](DISCLAIMER.md) and [privacy notice](PRIVACY.md).
 
-## Version 1.5.3 features
+## Version 1.5.6 features
 
 | Menu | What you can do |
 | --- | --- |
@@ -38,9 +38,9 @@ The project does not operate a public episode-hosting service or internet stream
 | 🗓️ **Workspace → Weekly planner** | Fit available unwatched episodes from your library into a daily time budget over seven days. |
 | 📁 **Workspace → Local collection** | Index video filenames, confirm title/episode matches and play files without relocating them. |
 | 🖌️ **Settings → Interface themes** | Choose actual Classic, Studio or Cinema layouts; save/import/export visual presets. |
-| ✨ **Anime4K Upscale** | GPU restore/denoise presets and optional line effects, up to 4K on compatible players. |
+| ✨ **Anime4K Upscale** | GPU restore/denoise presets and optional line effects, plus compatibility capture for origin-blocked website players. |
 | ☁️ **Settings → Google Drive sync** | Import/export app-data backups using your own Desktop OAuth JSON and a stable shared-folder format. |
-| 📺 **4K casting** | Use the visible Cast to TV action for native media or selected website video/audio mirroring; optional embedded sender-side Anime4K/HEVC 4K. |
+| 📺 **4K casting** | Connect TVs found by Windows + K through the Windows wireless-display chooser, or use Google Cast with optional embedded sender-side Anime4K/HEVC 4K. |
 | 🆕 **What’s new / Settings → Changelog** | See update highlights automatically and browse coloured release cards with icons inside the app. |
 | 🎨 **Settings → Theme presets** | Save, apply, import and export visual preferences, including your UI font. |
 | 📊 **Workspace → Watch insights** | Opt in to local playing-time estimates, title totals and observed dropped-frame ratios. |
@@ -210,7 +210,7 @@ A4:E9:77:36:B3:50:B8:DB:5D:71:A7:A6:0B:D2:AA:94:BE:AA:8D:70:FB:0F:19:E2:27:D9:BF
 Inspect **Properties → Digital Signatures → Details → View Certificate**. From your download directory, PowerShell 7 can print the fingerprints:
 
 ~~~powershell
-$certificate = (Get-AuthenticodeSignature -LiteralPath '.\AniVerse-Setup-1.5.3.exe').SignerCertificate
+$certificate = (Get-AuthenticodeSignature -LiteralPath '.\AniVerse-Setup-1.5.6.exe').SignerCertificate
 if ($null -eq $certificate) { throw 'No signer certificate found.' }
 $certificate.Thumbprint
 [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($certificate.RawData))

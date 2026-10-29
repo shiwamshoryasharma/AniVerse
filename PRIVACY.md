@@ -63,3 +63,9 @@ Use [GitHub issues](https://github.com/shiwamshoryasharma/AniVerse/issues) for p
 ## Optional website casting
 
 When you select a TV for a website episode, AniVerse can capture the selected source view and optionally its audio. Encoded video/audio is served temporarily to the Cast receiver over your local network with an unguessable per-session URL. The desktop, camera, microphone and unrelated application audio are not captured. Stop casting or leave the episode to revoke capture and delete the owned rolling media cache. Mirroring is optional; normal website playback does not activate it.
+
+## Windows wireless displays and compatibility upscaling (1.5.6)
+
+Windows wireless display is a separate, optional system projection route. Its menu explains that Windows can share your screen and audio, including other visible apps. Windows controls discovery, pairing, display/audio modes and disconnection. AniVerse opens fixed Windows system destinations; it does not read or export the Windows device list.
+
+Compatibility upscaling requests video-only capture of the selected owned source view, including rendered player frames. It captures no desktop or audio and records no file. Original source audio continues independently. Capture is stopped on disable, explicit Stop, navigation or episode exit. This recovery path does not extract stream URLs or remove protected-media restrictions.

@@ -22,7 +22,7 @@ When adding a kind, coordinate `SourceKind`, URL classification, adapter registr
 
 Preserve navigation allowlists, source ownership, download/popup guards and adblock hook ownership. Do not add private API access, stream extraction, access-control bypass or automated CAPTCHA solving.
 
-Keep pinned/learned links, season checks, SUB/DUB/server preferences and the loader before guest attachment. Website streams are not extracted for direct casting. Since 1.5.3, user-initiated casting can mirror the selected owned site view and only its audio through `WebsiteMirror` and embedded FFmpeg; never broaden this to desktop, system audio, camera or microphone capture. Do not assume development recipes are present in a fresh signed release.
+Keep pinned/learned links, season checks, SUB/DUB/server preferences and the loader before guest attachment. Website streams are not extracted for direct casting. Since 1.5.3, user-initiated casting can mirror the selected owned site view and only its audio through `WebsiteMirror` and embedded FFmpeg; never broaden the owned-view capture broker to desktop, system audio, camera or microphone sources. The separately labelled Windows Miracast route opens the system chooser and explicitly discloses Windows screen/audio sharing. Do not assume development recipes are present in a fresh signed release.
 
 ## Verify the cause
 

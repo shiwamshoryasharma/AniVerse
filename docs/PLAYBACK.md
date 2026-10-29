@@ -1,6 +1,6 @@
 # Playback and GPU support
 
-AniVerse preserves the website's original media element/player. Its audio, subtitle tracks, controls and decoder continue to use that player's timeline. It does not extract private stream URLs or build a second unsynchronized media pipeline.
+AniVerse preserves the website's original media element/player. Its audio, subtitle tracks, controls and decoder continue to use that player's timeline. It does not extract private stream URLs. Compatibility upscaling (below) adds a video-only compositor capture for rendering; audio stays with the original player.
 
 Player-only mode rejects hidden/CAPTCHA frames and hides unrelated website siblings without deleting DOM nodes. Layout remains available to the existing SUB/DUB/server discovery.
 
@@ -55,3 +55,13 @@ Electron captures the owned source webContents and its audio through a short-liv
 Classic keeps the original rail. Studio has a permanent labelled sidebar and dashboard navigation. Cinema has horizontal navigation, a wide player and episodes below it. Settings → Interface themes selects structure; accent and typography are separate preferences.
 
 Release notes are bundled offline in app/shared/changelog.ts. New versions show highlights once per profile acknowledgement, with a persistent header action and Settings → Changelog history.
+
+## Miracast and compatibility upscaling (1.5.6)
+
+Windows + K displays use Miracast, independently of the Google Cast list. Both AniVerse casting menus provide a fixed, validated Windows chooser action. Windows owns discovery, pairing, screen/audio sharing and display resolution; a successful launch is not a paired-TV claim. Use Windows + K to disconnect. The Google Cast HEVC option does not change Windows projection modes.
+
+When direct website filtering fails, Use compatibility upscaling captures only the owned source view (video only), feeds those origin-clean displayed frames through Anime4K in the host renderer, and overlays the result with pointer events disabled. Source audio/controls remain with the original player. A shared PlayerCapture broker prevents conflicting handlers and restricts fresh grants to the trusted host frame and owned source webContents. It does not relax web security or extract media URLs.
+
+Capture may introduce some video delay; protected content and unavailable GPUs remain limits. [Recovery instructions](TROUBLESHOOTING-CAST-UPSCALE.md) cover both routes.
+
+The 1.5.6 line-effect adapter fixes WebGL 1 shader compilation in both native and website paths. Rendering has one GPU frame in flight; completed output older than the 80 ms render/media-clock deadline is hidden. Sustained lateness tries smaller shader models, then stops the filtered overlay. This keeps the original player authoritative and avoids seeking audio to compensate for an accumulating GPU queue. It does not repair a source that is already out of sync.

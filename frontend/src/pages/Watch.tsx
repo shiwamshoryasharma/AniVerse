@@ -116,6 +116,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const [webContentsId, setWebContentsId] = useState<number | null>(null);
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const player = useRef<PlayerControls | null>(null);
+  const screenHost = useRef<HTMLDivElement | null>(null);
   const progressAt = useRef<{ position: number; duration: number } | null>(null);
   const [playbackProbe, setPlaybackProbe] = useState<ProbeResult | null>(null);
   const [playbackStatus, setPlaybackStatus] = useState<PlaybackHealth | null>(null);
@@ -433,7 +434,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
       </div>
       <div className={cx('watch', theater && 'theater')}>
         <div className="stage" style={{ minWidth: 0 }}>
-          <div className={cx('screen', isSite && !focused && (!siteBusy || needsUser) && !choosing && 'site')}>{screen}</div>
+          <div ref={screenHost} className={cx('screen', isSite && !focused && (!siteBusy || needsUser) && !choosing && 'site')}>{screen}</div>
 
           <div className="toolbar">
             <button className="btn ghost" disabled={!hasPrev} onClick={prev}>
@@ -486,7 +487,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
           </div>
 
           {layout === 'cinema' && episodePanel}
-          {isSite && webContentsId && <SiteAnime4K key={siteKey + ':anime4k'} webContentsId={webContentsId} />}
+          {isSite && webContentsId && <SiteAnime4K key={siteKey + ':anime4k'} webContentsId={webContentsId} surface={screenHost} />}
           {isSite && webContentsId && <PlaybackRescue key={siteKey + ':' + episode} probe={playbackProbe} health={playbackStatus} webContentsId={webContentsId} busy={siteBusy || !!choosing} />}
 
           {(local.data || webContentsId || (stream && stream.type !== 'web' && stream.type !== 'youtube')) && <EpisodeToolkit key={media.id+':'+episode+':'+(sourceId ?? localId)} media={snapshot} episode={episode} sourceId={sourceId} webContentsId={localId?null:webContentsId} native={player} probe={localId?null:playbackProbe} initialTime={search.has('t') && Number.isFinite(Number(search.get('t'))) && Number(search.get('t'))>=0 ? Number(search.get('t')) : null} />}

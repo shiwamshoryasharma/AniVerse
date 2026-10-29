@@ -6,6 +6,7 @@ import { useCastState, isCasting } from '../player/useCastState';
 import { useToast } from '../lib/useToast';
 import { call, errorText, onEvent } from '../lib/bridge';
 import { startWebsiteMirror } from '../lib/websiteMirror';
+import { WirelessDisplay } from './WirelessDisplay';
 import { Switch } from './common';
 export function EpisodeCast({ native, webContentsId, title }: { native: RefObject<PlayerControls | null>; webContentsId: number | null; title: string }) {
   const state = useCastState(), toast = useToast();
@@ -43,12 +44,12 @@ export function EpisodeCast({ native, webContentsId, title }: { native: RefObjec
     {capture && <span role="status" className="mirror-live-indicator"><Cast size={13} />{state.status === 'connecting' ? 'Preparing website stream…' : 'Mirroring to ' + state.device?.name}</span>}
     <dialog ref={dialog} className="episode-cast-dialog" aria-label="Cast episode to TV" onCancel={(e) => { e.preventDefault(); if (!busy) setOpen(false); }}>
       <header><div className="row"><Tv size={23} /><div><h2>Cast episode to TV</h2><p>{title}</p></div></div><button className="icon-btn" aria-label="Close TV chooser" disabled={busy} onClick={() => setOpen(false)}><X size={19} /></button></header>
-      <div className="stack"><div className="mirror-explanation"><MonitorPlay size={21} /><div><strong>Mirror this website’s player</strong><p>Sends the selected site view and its audio to your TV. Your desktop and other apps are not captured. Keep the player visible; leaving the episode stops mirroring. Protected video may not be capturable.</p></div></div>
+      <div className="stack"><WirelessDisplay /><h3 className="cast-protocol-heading">Chromecast / Google TV</h3><div className="mirror-explanation"><MonitorPlay size={21} /><div><strong>Mirror this website’s player</strong><p>Sends the selected site view and its audio to your TV. Your desktop and other apps are not captured. Keep the player visible; leaving the episode stops mirroring. Protected video may not be capturable.</p></div></div>
         <label className="row between">Include website audio<Switch label="Include website audio" on={audio} onChange={setAudio} disabled={busy} /></label>
         <label className="row between">Anime4K · process 4K on this device<Switch label="Mirror in 4K" on={upscale} onChange={setUpscale} disabled={busy || !available} /></label>
         <p className="faint">Standard mirroring uses H.264 at 1080p. 4K needs a Vulkan-capable sender and a 4K HEVC Cast receiver. All filtering and encoding run here. TV playback is delayed by a few seconds; use the website player to seek.</p>
         <div className="row between"><strong>Available TVs</strong><button className="btn sm" disabled={busy || devices === null} onClick={() => void scan()}><RefreshCw size={13} />Scan again</button></div>
-        {devices === null ? <p className="row faint"><span className="spinner sm" />Looking for Chromecast / Google TV…</p> : !devices.length ? <div className="cast-empty"><Tv size={26} /><p>{error || 'No Cast TV found. Connect your TV and this device to the same local network.'}</p></div> :
+        {devices === null ? <p className="row faint"><span className="spinner sm" />Looking for Chromecast / Google TV…</p> : !devices.length ? <div className="cast-empty"><Tv size={26} /><p>{error || 'No Google Cast receiver found. For TVs shown in Windows + K, use Windows wireless display above.'}</p></div> :
           devices.map((device) => <button className="cast-device-card" disabled={busy || !available} key={device.id} onClick={() => void start(device)}><Tv size={20} /><span><strong>{device.name}</strong><small>{device.model}</small></span><Cast size={17} /></button>)}
         {!!error && !!devices?.length && <p className="err" role="alert">{error}</p>}
       </div>

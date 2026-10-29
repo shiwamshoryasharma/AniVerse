@@ -5,6 +5,15 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  { version: '1.5.6', date: '2026-10-29', title: 'Casting, upscaling and playback timing fixes.',
+    summary: 'Find Windows wireless displays, restore line effects and keep filtered video from falling behind playback.',
+    items: [
+      { kind: 'fixed', icon: 'cast', title: 'Windows wireless display support', description: 'Open the Windows Miracast chooser from either cast menu for TVs shown by Windows + K. Screen sharing and Google Cast have clearly separate controls.', action: { label: 'Choose an episode', path: '/library' } },
+      { kind: 'fixed', icon: 'sparkles', title: 'Compatibility upscaling for website players', description: 'If direct Anime4K fails, choose Use compatibility upscaling. It processes a capture of the selected site view on your GPU while keeping source audio and controls. Protected video may still refuse capture.', action: { label: 'Player settings', path: '/settings/player' } },
+      { kind: 'fixed', icon: 'fix', title: 'Darken and Thin shaders repaired', description: 'Corrected line-effect shader code that failed to compile under WebGL 1 and could stop upscaling across native and website sources.' },
+      { kind: 'fixed', icon: 'history', title: 'Scaling keeps up with playback', description: 'Filtered frames no longer build a delayed GPU queue. Slow rendering switches to lighter processing, then the original picture if needed, while the original audio and media clock continue.' },
+      { kind: 'improved', icon: 'fix', title: 'More reliable Google Cast discovery', description: 'Discovery scans active IPv4 interfaces, combines device records received in separate packets and resolves missing addresses instead of assigning unrelated devices.' },
+    ] },
   { version: '1.5.3', date: '2026-10-29', title: 'A new layout. A visible way to cast.',
     summary: 'Choose how AniVerse is organised, cast from the episode page, and discover changes right here.',
     items: [

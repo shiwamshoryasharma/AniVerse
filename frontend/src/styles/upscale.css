@@ -15,4 +15,4 @@
 .cast-4k-choice p { color:var(--text-2); font-size:11px; line-height:1.5; margin:10px 0 0; }
 .site-anime4k { padding:14px 18px; }
 .site-anime4k summary { cursor:pointer; display:flex; gap:16px; justify-content:space-between; }
-.site-anime4k[open] .anime4k-panel { margin-top:20px; }
+.site-anime4k details[open] .anime4k-panel { margin-top:20px; }

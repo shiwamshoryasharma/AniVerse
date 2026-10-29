@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { registerRpc } from '../../../electron/ipc';
 import { isPlayerCapturePermission } from '../../../electron/cast/capturePermission';
+import { PlayerCapture } from '../../../electron/playerCapture';
 import { WebsiteMirror } from '../../../electron/cast/websiteMirror';
 import { CastService } from '../../../electron/cast/castService';
 import { Sender4K } from '../../../electron/cast/sender4k';
@@ -24,7 +25,9 @@ app.whenReady().then(async()=>{
  const cast=new CastService(s=>mirror?.onCastState(s),()=>null,sender,()=>new Receiver());
  (cast as any).devices.set('fixture',{id:'fixture',name:'TV fixture',model:'Receiver fixture',host:'127.0.0.1',port:8009});
  const guest=(id:number)=>{const wc=webContents.fromId(id);if(!wc||wc.getType()!=='webview'||wc.hostWebContents!==host.webContents)throw new Error('Unowned view');return wc;};
- mirror=new WebsiteMirror(cast,sender,()=>host,guest,message=>errors.push(message));
+ const captures=new PlayerCapture(()=>host,guest,event=>host.webContents.send('aniverse:event','player.captureEnded',event));
+ session.defaultSession.setDisplayMediaRequestHandler((request,callback)=>captures.handle(request,callback));
+ mirror=new WebsiteMirror(cast,sender,captures,guest,message=>errors.push(message));
  session.defaultSession.setPermissionRequestHandler((wc,p,cb,details)=>cb(isPlayerCapturePermission(p,details)&&mirror.canCapture(wc)));
  session.defaultSession.setPermissionCheckHandler((wc,p)=>p==='display-capture'&&mirror.canCapture(wc));
  const source=session.fromPartition('persist:src-mirror-fixture');

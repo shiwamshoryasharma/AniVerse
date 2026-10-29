@@ -98,3 +98,7 @@ No application tests, builds, live website checks, image/model checks, installer
 ## Release 1.5.3 checks
 
 release-1.5.3.mjs adds first-launch highlights/receipt persistence, coloured history, structural layout geometry and visible native/website Cast controls. website-mirror.mjs uses actual webContents video/audio capture, production RPC schemas, embedded H.264/HEVC/AAC encoding and a controlled receiver. E2E_MEDIA_RESOURCES can select packaged tools. No physical TV is used. Evidence is test/artifacts/release-1.5.3-*; unit count is 161 at this change.
+
+## Release 1.5.6 checks
+
+release-1.5.6.mjs uses a real cross-origin iframe plus a third-origin video without CORS to reproduce direct GPU SecurityError and exercise all six compatibility presets, source audio/playback and stop/navigation cleanup. Windows chooser/display/audio RPC actions are controlled in the UI suite. A separate contained native-launch probe checks the real registered system URI without selecting a TV. Current unit count is 177; physical TV pairing and universal website compatibility are not certified.

@@ -340,7 +340,7 @@ export class AniListClient {
     const now = nowSec();
     type R = Record<'spotlight' | 'trending' | 'popularSeason' | 'upcoming' | 'topRated', { media: RawMedia[] }> & { recent: { airingSchedules: RawAiring[] } };
     const showAdult = this.options.showAdult();
-    const data = await this.query<R>(homeQuery(showAdult), { season: season.season, year: season.year, since: now - 3 * 86400, now: roundTo(now, 300) }, { ttl: 600 });
+    const data = await this.query<R>(homeQuery(showAdult), { season: season.season, year: season.year, since: roundTo(now, 300) - 3 * 86400, now: roundTo(now, 300) }, { ttl: 600 });
     // Titles that haven't premiered get their own "Coming soon" section instead of
     // the hero, charts and season grid (which would otherwise offer to play them).
     const released = (m: MediaCard) => !pendingRelease(m)?.title;

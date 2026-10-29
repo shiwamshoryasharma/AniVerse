@@ -2,7 +2,7 @@
 
 Last inspected: 2026-10-29, Asia/Calcutta. Repository: `E:\14-OCT-2026\aniverse`.
 
-AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 1.5.3; read the current package file before relying on versions.
+AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 1.5.6; read the current package file before relying on versions.
 
 Read the relevant reference only:
 

@@ -29,6 +29,8 @@ import { SiteNavigator } from './siteNavigator';
 import { CastService } from './cast/castService';
 import { Sender4K } from './cast/sender4k';
 import { isPlayerCapturePermission } from './cast/capturePermission';
+import { PlayerCapture } from './playerCapture';
+import { WindowsDisplay } from './cast/windowsDisplay';
 import { WebsiteMirror } from './cast/websiteMirror';
 import { UpdateService } from './updater';
 import { WorkspaceService } from '../app/core/workspace';
@@ -332,8 +334,11 @@ async function bootstrap() {
     return settings.update({ profile: { [kind]: `media://profile/${kind}.${ext}?v=${Date.now()}` } });
   };
 
-  mirror = new WebsiteMirror(cast, sender4k, () => mainWindow, (id) => guestFor(id), (message) => emit('app.notice', { level: 'error', message }));
-  hardenDefaultSession((wc) => mirror?.canCapture(wc) ?? false);
+  const captures = new PlayerCapture(() => mainWindow, (id) => guestFor(id), (event) => emit('player.captureEnded', event));
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => captures.handle(request, callback));
+  const windowsDisplay = new WindowsDisplay(process.platform, (uri) => shell.openExternal(uri, { activate: true }));
+  mirror = new WebsiteMirror(cast, sender4k, captures, (id) => guestFor(id), (message) => emit('app.notice', { level: 'error', message }));
+  hardenDefaultSession((wc) => captures.canCapture(wc));
 
   const handlers: Handlers = {
     'changelog.state': () => changelog.state(),
@@ -525,6 +530,9 @@ async function bootstrap() {
     'cast.mirrorPrepare': ({ webContentsId, deviceId, title, upscale }) => mirror!.prepare(webContentsId, deviceId, title, upscale, settings.get().player.upscale),
     'cast.mirrorChunk': ({ ticket, sequence, bytes }) => mirror!.push(ticket, sequence, bytes),
     'cast.mirrorStop': ({ ticket }) => mirror!.stop(ticket),
+    'cast.windowsDisplay': ({ target }) => windowsDisplay.open(target),
+    'player.capturePrepare': ({ webContentsId }) => captures.prepare(webContentsId, 'upscale'),
+    'player.captureStop': ({ ticket }) => captures.stop(ticket),
     'cast.capabilities': () => cast.capabilities(),
     'cast.devices': () => cast.scan(),
     'cast.start': ({ deviceId, media }) => cast.start(deviceId, media, settings.get().player.upscale),
@@ -593,6 +601,7 @@ async function bootstrap() {
     if (process.platform !== 'darwin') app.quit();
   });
   app.on('before-quit', () => {
+    captures.stopAll();
     void mirror?.stop();
     drive.cancel();
     config.stop();

@@ -1,6 +1,7 @@
 import { Cast, Pause, Play, RotateCcw, RotateCw, ScreenShareOff, Tv } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { CastDevice, CastState } from '../../../app/shared/types';
+import { WirelessDisplay } from '../components/WirelessDisplay';
 import { Switch } from '../components/common';
 import { Range } from '../components/controls';
 import { call, errorText } from '../lib/bridge';
@@ -34,7 +35,9 @@ export function CastMenu({ state, onPick, onStop, onClose, canUpscale }: { canUp
 
   return (
     <div className="player-menu cast-menu" onMouseLeave={onClose}>
-      <h5>Cast media to</h5>
+      <h5>Cast to TV</h5>
+      <WirelessDisplay />
+      <h5 className="cast-protocol-heading">Chromecast / Google TV</h5>
       <div className="cast-4k-choice"><label className="row"><Switch label="Process 4K on this device" on={upscale4k} onChange={(on) => setUpscale4k(on && canUpscale && !!capability?.available)} />4K · process on this device</label><p>{canUpscale ? (capability?.message ?? 'Checking embedded encoder…') : '4K sender processing is available for opened local videos.'}</p><p>Requires a 4K HEVC-capable Google Cast TV/receiver, Vulkan GPU and sufficient LAN bandwidth. No system FFmpeg needed.</p></div>
       {isCasting(state) && (
         <button className="on" onClick={onStop}>
@@ -49,7 +52,7 @@ export function CastMenu({ state, onPick, onStop, onClose, canUpscale }: { canUp
         </div>
       ) : devices.length === 0 ? (
         <div className="faint" style={{ padding: '6px 10px 8px', fontSize: 'var(--fs-sm)', maxWidth: 240 }}>
-          {error ?? 'No Chromecast or Google TV found on this network.'}
+          {error ?? 'No Google Cast receiver found. For a TV listed in Windows + K, use Windows wireless display above.'}
         </div>
       ) : (
         devices.map((d) => (

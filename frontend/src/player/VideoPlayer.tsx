@@ -530,7 +530,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
               <Settings2 size={17} />
             </button>
           )}
-          <button className={cx('icon-btn', casting && 'on')} aria-label="Cast to a TV" title="Cast to Chromecast / Google TV" onClick={() => setCastMenu((v) => !v)}>
+          <button className={cx('icon-btn', casting && 'on')} aria-label="Cast to a TV" title="Cast to TV · Windows wireless display or Google Cast" onClick={() => setCastMenu((v) => !v)}>
             <CastIcon size={17} />
           </button>
           <button className="icon-btn" aria-label="Picture in picture" onClick={() => void togglePip()}>

@@ -2,6 +2,16 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 1.5.6 — 2026-10-29
+
+- 📺 **TV compatibility:** Windows Miracast chooser in both casting menus, with clear screen-sharing and 4K mode guidance.
+- ✨ **Upscaling recovery:** GPU processing of selected-site capture when direct video pixel access fails, including cross-origin frames.
+- 🖌️ **Line effects:** repaired Darken/Thin shader compilation across native and website video.
+- ⏱️ **Playback timing:** bounded GPU work, lighter processing and original-picture fallback prevent delayed filtered-frame queues.
+- 🔎 **Google Cast discovery:** cross-packet records, missing-record queries, interface scanning and network-error handling.
+
+[Full 1.5.6 release notes](docs/releases/1.5.6.md) · [Recovery steps](docs/TROUBLESHOOTING-CAST-UPSCALE.md)
+
 ## 1.5.3 — 2026-10-29
 
 - 🧩 **Layouts:** Classic, Studio and Cinema change navigation and episode placement.

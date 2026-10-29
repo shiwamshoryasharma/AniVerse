@@ -10,6 +10,7 @@ const EVENT_NAMES: Record<EventName, true> = {
   'app.notice': true,
   'site.status': true,
   'cast.status': true,
+  'player.captureEnded': true,
   'update.status': true,
 };
 const EVENTS: ReadonlySet<string> = new Set(Object.keys(EVENT_NAMES));

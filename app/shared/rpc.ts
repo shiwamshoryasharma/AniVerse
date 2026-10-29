@@ -146,6 +146,9 @@ export interface RpcContract {
   'cast.mirrorPrepare': [{ webContentsId: number; deviceId: string; title: string; upscale: boolean }, { ticket: string }];
   'cast.mirrorChunk': [{ ticket: string; sequence: number; bytes: Uint8Array }, void];
   'cast.mirrorStop': [{ ticket: string }, void];
+  'cast.windowsDisplay': [{ target: 'connect' | 'display' | 'sound' }, { opened: 'connect' | 'display' | 'sound'; fallback: boolean }];
+  'player.capturePrepare': [{ webContentsId: number }, { ticket: string }];
+  'player.captureStop': [{ ticket: string }, void];
   'cast.capabilities': [void, { available: boolean; version: string | null; message: string }];
   'cast.devices': [void, CastDevice[]];
   'cast.start': [{ deviceId: string; media: CastMedia }, CastState];
@@ -181,6 +184,7 @@ export interface EventContract {
   'adblock.stats': AdblockStats;
   'app.notice': AppNotice;
   'site.status': SiteStatusEvent;
+  'player.captureEnded': { ticket: string; purpose: 'mirror' | 'upscale' };
   'cast.status': CastState;
   'update.status': UpdateState;
 }

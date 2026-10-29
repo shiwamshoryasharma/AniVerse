@@ -1,14 +1,16 @@
-import { call } from './bridge';
+import { call, onEvent } from './bridge';
 /** User-initiated capture; main grants only the selected, owned source webContents. */
 export async function startWebsiteMirror(ticket: string, audio: boolean, onError: (message: string) => void): Promise<() => void> {
   let stream: MediaStream | null = null, recorder: MediaRecorder | null = null;
   let stopped = false, sequence = 0, queued = 0, tail = Promise.resolve();
+  let detach: () => void = () => undefined;
   const stop = () => {
-    if (stopped) return; stopped = true;
+    if (stopped) return; stopped = true; detach();
     if (recorder && recorder.state !== 'inactive') recorder.stop();
     stream?.getTracks().forEach((track) => track.stop());
     void call('cast.mirrorStop', { ticket }).catch(() => undefined);
   };
+  detach = onEvent('player.captureEnded', (event) => { if (event.ticket === ticket) stop(); });
   try {
     const mimeType = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'].find((type) => MediaRecorder.isTypeSupported(type));
     if (!mimeType) throw new Error('This device cannot encode a browser capture.');

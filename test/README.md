@@ -19,3 +19,7 @@ Run `npm run build` before the application E2E scripts — they launch `dist/`.
 `node test/e2e/release-1.5.3.mjs` checks automatic/acknowledged release highlights, coloured history, actual navigation geometry for Classic/Studio/Cinema, native and website TV actions, controlled Drive backup and all Anime4K modes. `E2E_EXE` selects a packaged app.
 
 `node test/e2e/website-mirror.mjs` captures a real isolated neutral webview with audio, passes chunks through production IPC validation, and verifies embedded H.264 1080p / HEVC 4K plus AAC output, HLS serving and navigation cleanup. Receiver transport is controlled; no physical TV is used. `E2E_MEDIA_RESOURCES` selects packaged tools/shaders. Its Electron fixture is under `test/e2e/fixtures/`; profiles, temp files and outputs remain under `test/`.
+
+`node test/e2e/release-1.5.6.mjs` reproduces blocked WebGL pixel access using a neutral cross-origin iframe/video fixture. It verifies all six compatibility presets, visible processed output, original audio/playback, lifecycle cleanup, release highlights, and both Windows casting menus through validated IPC. Windows URI actions are controlled in this UI suite; it does not pair a TV. `E2E_EXE` selects a packaged run.
+
+The 1.5.6 harness also checks Darken/Thin on native and captured video, and injects a 130 ms render delay to verify that late filtered output is hidden while source playback/audio continue. Unit suites test the actual vendor shader fragments and frame-deadline policy. These checks do not measure physical audio/video lip sync.

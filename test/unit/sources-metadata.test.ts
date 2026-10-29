@@ -123,20 +123,24 @@ describe('AniList client', () => {
     expect(currentSeason(new Date(2026, 11, 5))).toEqual({ season: 'WINTER', year: 2027 });
   });
 
-  it('caches responses and serves stale data when offline', async () => {
-    const store = new Store(':memory:');
-    const fetchFn = vi.fn(async () => new Response(JSON.stringify(home), { status: 200 }));
-    const client = new AniListClient(fetchFn, store, { showAdult: () => false, token: () => null });
-    const first = await client.home();
-    expect(first.trending.length).toBe(20);
-    expect(first.spotlight.every((m) => m.banner)).toBe(true);
-    await client.home();
-    expect(fetchFn).toHaveBeenCalledTimes(1);
-
-    store.cachePurge(true);
-    store.cacheSet('dummy', 1, 1);
-    const offline = new AniListClient(vi.fn(async () => { throw new Error('offline'); }), store, { showAdult: () => false, token: () => null });
-    await expect(offline.home()).rejects.toThrow(/failed/);
+  it('caches nearby home requests and fails offline without cached data', async () => {
+    const initialNow=Date.now();
+    const bucketStart=initialNow-initialNow%300000;
+    const clock=vi.spyOn(Date,'now').mockReturnValue(bucketStart+10000);
+    const store=new Store(':memory:');
+    try {
+      const fetchFn=vi.fn(async()=>new Response(JSON.stringify(home),{status:200}));
+      const client=new AniListClient(fetchFn,store,{showAdult:()=>false,token:()=>null});
+      const first=await client.home();
+      expect(first.trending.length).toBe(20);
+      expect(first.spotlight.every(m=>m.banner)).toBe(true);
+      clock.mockReturnValue(bucketStart+12000);
+      await client.home();
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+      store.cachePurge(true);
+      const offline=new AniListClient(vi.fn(async()=>{throw new Error('offline');}),store,{showAdult:()=>false,token:()=>null});
+      await expect(offline.home()).rejects.toThrow(/failed/);
+    } finally { store.close();clock.mockRestore(); }
   });
 
   it('requires a token for authenticated operations', async () => {

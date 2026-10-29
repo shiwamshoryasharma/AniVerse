@@ -2,6 +2,16 @@
 
 Snapshot: 2026-10-29, Asia/Calcutta. Scoped source/runtime validation is recorded below; it is not certification of every external service or device.
 
+## Version 1.5.6 (2026-10-29)
+
+The requested release addresses three reported paths: Windows + K TVs use Miracast rather than Google Cast; origin-blocked video needs compositor-capture compatibility filtering; and the pinned Darken/Thin GLSL fragments do not compile in WebGL 1. WindowsDisplay opens fixed system chooser/display/audio destinations. PlayerCapture brokers the sole display-media handler for owned source views. lineEffects.ts specializes vendor Gaussian loops locally; node_modules and global WebGL APIs are unchanged.
+
+Rendering completes one GPU frame at a time, rejects output beyond an 80 ms render/media-clock deadline, tries smaller shader models after sustained lateness and returns to the original picture if necessary. Source audio, seeks and playback rate remain authoritative. This controls filter-induced lag; it is not a physical lip-sync measurement or a repair for mistimed source tracks.
+
+Verified: 177 unit tests, typecheck/lint, signed production build, eight packaged casting/upscaling/timing checks and ten packaged Workspace checks. The real neutral fixture covers a cross-origin iframe and third-origin video without CORS, all six presets, Darken/Thin, original audio/playback, a forced 130 ms render delay, and navigation/stop cleanup. Native system URI launching returned success without TV selection; desktop tooling did not establish a physical TV connection. Physical pairing, DRM, every live source and actual installer/update installation remain unverified. Evidence is test/artifacts/release-1.5.6-* and test/cache/release-1.5.6/verify-release.py.
+
+An existing time-dependent metadata-cache key was exposed during the final unit run. The since/now variables now share a time bucket, with a deterministic second-boundary regression.
+
 ## Version 1.5.3 (2026-10-29)
 
 The user clarified themes as structural layouts. Classic/Studio/Cinema now select different navigation and episode placement while retaining old persisted style IDs. Watch has an explicit Cast to TV button for native media and scoped website-view/audio mirroring. ChangelogService and bundled release data provide automatic per-version highlights, coloured/icon history and feature links.

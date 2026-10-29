@@ -232,6 +232,9 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'cast.mirrorPrepare': z.object({ webContentsId: id, deviceId: text(200).min(1), title: text(300), upscale: z.boolean() }),
   'cast.mirrorChunk': z.object({ ticket: z.uuid(), sequence: z.number().int().nonnegative(), bytes: z.instanceof(Uint8Array).refine((bytes) => bytes.length > 0 && bytes.length <= 2_000_000, 'Invalid capture chunk size') }),
   'cast.mirrorStop': z.object({ ticket: z.uuid() }),
+  'cast.windowsDisplay': z.object({ target: z.enum(['connect', 'display', 'sound']) }),
+  'player.capturePrepare': z.object({ webContentsId: id }),
+  'player.captureStop': z.object({ ticket: z.uuid() }),
   'cast.capabilities': none,
   'cast.devices': none,
   'cast.start': z.object({
