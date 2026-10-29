@@ -2,6 +2,18 @@
 
 Snapshot: 2026-10-29, Asia/Calcutta. Scoped source/runtime validation is recorded below; it is not certification of every external service or device.
 
+## Version 1.5.7 (2026-10-29)
+
+New user evidence shows Chrome actively tab-casting to a TV that AniVerse could not discover. Windows + K visibility alone did not establish the TV's complete protocol support; the earlier Miracast-only diagnosis was insufficient. AniVerse's direct CASTV2/Default Media Receiver HLS path is not Chrome tab mirroring.
+
+ChromeCast now uses installed Chrome's Media Router via inherited CDP pipes, a dedicated app-owned profile and a token-protected loopback companion. The shared CastService transport seam retains direct casting and embedded sender processing. Chrome gets selected-player media, not source pages/cookies or the Windows desktop. Unique names start tab mirroring; duplicate friendly names require a native Chrome-menu choice after player load. An unused discovery window expires after two minutes. CDP Cast is experimental; physical output quality remains receiver/Chrome-dependent.
+
+Removed the cast backdrop blur, bounded the native chooser to its player, made cast/upscale/quality/speed menus mutually exclusive, kept failures visible and restored previous playback after failed native starts. Native startup is invalidated during URL preparation/previous-sender teardown; route end and polling failure close the transport. Pending Chrome clients are revoked immediately on closure.
+
+Verified source checks: typecheck, clean lint, 188 tests/32 files; nine Electron UI checks including real Chrome discovery through trusted IPC, unchanged zoom/viewport/DPR and no backdrop blur; real Chrome MP4 and embedded HEVC 3840 × 2160 HLS decoding with advancing frame counters; six real owned-webview capture/encoding checks. The signed package additionally passed nine feature checks, ten Workspace regressions, package/signature/feed verification and embedded tool/shader hash checks. The latest mirror run had <=22 ms complete-segment audio/video timestamp gaps across its sustained sample. These are presentation timestamps, not measured TV lip sync.
+
+The test host received no mDNS/SSDP TV announcements and Chrome reported no receivers; the user confirmed the TV was off/unavailable during verification. Physical TV pairing/playback, final TV resolution and lip sync remain unverified. Evidence stays under test/artifacts/chrome-cast*, release-1.5.7-*, and test/cache/cast-diagnosis. Do not describe a mocked Cast driver or successful companion playback as a successful TV connection.
+
 ## Version 1.5.6 (2026-10-29)
 
 The requested release addresses three reported paths: Windows + K TVs use Miracast rather than Google Cast; origin-blocked video needs compositor-capture compatibility filtering; and the pinned Darken/Thin GLSL fragments do not compile in WebGL 1. WindowsDisplay opens fixed system chooser/display/audio destinations. PlayerCapture brokers the sole display-media handler for owned source views. lineEffects.ts specializes vendor Gaussian loops locally; node_modules and global WebGL APIs are unchanged.

@@ -151,6 +151,8 @@ export interface RpcContract {
   'player.captureStop': [{ ticket: string }, void];
   'cast.capabilities': [void, { available: boolean; version: string | null; message: string }];
   'cast.devices': [void, CastDevice[]];
+  'cast.chromeDevices': [void, CastDevice[]];
+  'cast.chromeClose': [void, void];
   'cast.start': [{ deviceId: string; media: CastMedia }, CastState];
   'cast.control': [{ action: 'play' | 'pause' | 'seek' | 'volume'; value?: number }, CastState];
   'cast.stop': [void, CastState];

@@ -12,8 +12,8 @@ export function WirelessDisplay() {
   };
   return <section className="wireless-display">
     <div className="wireless-heading"><MonitorUp size={22}/><div><strong>Windows wireless display</strong><span>Miracast · TVs found by Windows + K</span></div></div>
-    <p>For Samsung and other TVs shown in Windows Cast. Windows discovers and connects the display.</p>
-    <p className="wireless-sharing">Shares your Windows screen and its audio. Other visible apps can appear on the TV. Use Extend and move AniVerse to the TV for a separate screen.</p>
+    <p>Uses Windows projection, separately from Google Chrome casting. Windows discovers and connects the display.</p>
+    <p className="wireless-sharing">Windows projection can change the desktop’s resolution or scaling. Shares your Windows screen and its audio. Other visible apps can appear on the TV. Use Extend and move AniVerse to the TV for a separate screen.</p>
     <button className="btn primary" disabled={busy} onClick={()=>void open('connect')}><Monitor size={16}/>Find wireless displays</button>
     {opened&&<p role="status">Select your TV in Windows, approve the connection on the TV, then play the episode. Use Windows + K to disconnect.</p>}
     <div className="wireless-settings"><button className="btn sm" disabled={busy} onClick={()=>void open('display')}><Settings2 size={13}/>Display settings</button><button className="btn sm" disabled={busy} onClick={()=>void open('sound')}><Volume2 size={13}/>TV audio</button></div>

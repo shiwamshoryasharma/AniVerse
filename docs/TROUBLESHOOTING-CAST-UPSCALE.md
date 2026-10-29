@@ -1,5 +1,21 @@
 # Casting and upscaling: recovery steps
 
+## Chrome can cast to the TV but AniVerse cannot
+
+Install 1.5.7 or newer and choose **Cast to TV → Find TVs with Chrome → your TV**. This uses installed Google Chrome’s Media Router rather than AniVerse’s direct CASTV2/Default Media Receiver path. A separate, app-owned Chrome window receives the selected video. It does not use the normal Chrome profile or change Windows display resolution.
+
+If several receivers have the same name, AniVerse prepares the player and asks you to use **Chrome’s Cast menu → Sources → Cast tab** in that window. Choose the correct TV there. Stop through AniVerse or close the companion. Do not close/minimize the source episode while mirroring.
+
+For website episodes, keep **Include website audio** enabled and use the TV’s speakers. All filtering/encoding stays on the sender. Chrome negotiates final TV output quality; a processed 4K input is not a guarantee of 4K tab output. Try standard 1080p if HEVC decoding or GPU load is a problem.
+
+The 1.5.7 test host verified real Chrome video/HEVC playback and discovery API access but received no TV announcements. A physical-TV connection and lip-sync result are still unverified.
+
+## AniVerse looks blurry after clicking Cast
+
+Version 1.5.7 removes the cast dialog’s intentional background blur and checks that opening/closing the chooser preserves app zoom, viewport and device pixel ratio. Chrome casting does not invoke Windows projection.
+
+If you already connected through Windows wireless display, Windows may have changed desktop resolution or scaling. Disconnect through Windows + K and restore the monitor’s recommended resolution/scale in Windows Display settings. AniVerse does not force global display modes.
+
 ## The TV appears in Windows Cast but AniVerse’s Google Cast list is empty
 
 Windows + K discovers **Miracast wireless displays**. Chromecast / Google TV uses **Google Cast**. A TV can support one without the other.

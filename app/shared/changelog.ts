@@ -5,6 +5,14 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  { version: '1.5.7', date: '2026-10-29', title: 'Cast with Chrome. Keep AniVerse sharp.',
+    summary: 'Use Google Chrome’s TV discovery and tab casting when AniVerse’s direct receiver connection fails.',
+    items: [
+      { kind: 'added', icon: 'cast', title: 'Chrome-backed TV casting', description: 'Choose Cast to TV → Find TVs with Chrome. An isolated Chrome window receives the selected player and uses Chrome’s own TV discovery and tab-casting transport. Chrome must be installed.' },
+      { kind: 'fixed', icon: 'layout', title: 'Sharp casting controls', description: 'Removed cast-dialog backdrop blur, kept the native chooser inside the player and prevented overlapping player menus. Opening the chooser does not change app zoom or Windows display mode.' },
+      { kind: 'improved', icon: 'shield', title: 'Separate screen projection', description: 'Windows Miracast is an optional, clearly labelled route. Chrome casting shares the selected player rather than the Windows desktop; normal browser profile data is not copied.' },
+      { kind: 'fixed', icon: 'fix', title: 'Reliable stop and receiver choices', description: 'Cancelled starts no longer reconnect later. Duplicate TV names require an explicit choice in Chrome’s Cast menu. Closing or leaving the companion stops the owned connection.' },
+    ] },
   { version: '1.5.6', date: '2026-10-29', title: 'Casting, upscaling and playback timing fixes.',
     summary: 'Find Windows wireless displays, restore line effects and keep filtered video from falling behind playback.',
     items: [

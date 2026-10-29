@@ -102,3 +102,9 @@ release-1.5.3.mjs adds first-launch highlights/receipt persistence, coloured his
 ## Release 1.5.6 checks
 
 release-1.5.6.mjs uses a real cross-origin iframe plus a third-origin video without CORS to reproduce direct GPU SecurityError and exercise all six compatibility presets, source audio/playback and stop/navigation cleanup. Windows chooser/display/audio RPC actions are controlled in the UI suite. A separate contained native-launch probe checks the real registered system URI without selecting a TV. Current unit count is 177; physical TV pairing and universal website compatibility are not certified.
+
+## Chrome casting checks (1.5.7)
+
+test/e2e/chrome-cast.mjs launches installed Chrome with a fresh profile under test/cache/chrome-cast and private inherited pipes. It uses the production companion and CastService media server to verify MP4 plus embedded 4K HEVC HLS playback, advancing media/frame counters, screenshots and shutdown. The receiver is a local-player test double; physical TV output is not tested. E2E_MEDIA_RESOURCES selects packaged embedded tools.
+
+release-1.5.6.mjs now derives artifact/version names from package.json, retains earlier upscaling/timing regressions and adds real Chrome discovery through trusted IPC plus app zoom, viewport, DPR and non-blurred backdrop checks. Its Windows URI actions remain controlled. On 2026-10-29, the host had no receiver announcements; do not infer receiver support or physical connection from these checks.

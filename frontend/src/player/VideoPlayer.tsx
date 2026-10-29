@@ -124,6 +124,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
   const startCast = async (device: CastDevice, upscale4k = false) => {
     setCastMenu(false);
     const v = video.current!;
+    const wasPlaying = !v.paused;
     v.pause();
     castEnded.current = false;
     try {
@@ -141,7 +142,9 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
         },
       });
     } catch (err) {
+      setCastMenu(true);
       showFlash(errorText(err));
+      if (wasPlaying && video.current === v) void v.play().catch(() => undefined);
     }
   };
   const stopCast = async () => {
@@ -312,7 +315,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
     showFlash(`${d > 0 ? '+' : '−'}${Math.abs(d)}s`);
   };
   useEffect(() => {
-    if (controlsRef) controlsRef.current = { seekBy, seekTo, toggle, openCast: () => setCastMenu(true), state: () => {
+    if (controlsRef) controlsRef.current = { seekBy, seekTo, toggle, openCast: () => { setMenu(null); setCastMenu(true); }, state: () => {
       const v=video.current;
       if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return null;
       const quality=v.getVideoPlaybackQuality?.();
@@ -521,16 +524,16 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
           <button className="btn xs" style={{ background: 'rgba(255,255,255,.12)', border: 0, color: '#fff' }} onClick={() => seekBy(prefs.skipStep)} title="Skip opening (S)">
             Skip +{prefs.skipStep}s
           </button>
-          <button className={cx('btn xs', prefs.upscale.enabled && 'on')} aria-label="Anime4K Upscale" onClick={() => setMenu(menu === 'upscale' ? null : 'upscale')}>4K</button>
-          <button className="icon-btn" aria-label="Speed" onClick={() => setMenu(menu === 'speed' ? null : 'speed')}>
+          <button className={cx('btn xs', prefs.upscale.enabled && 'on')} aria-label="Anime4K Upscale" onClick={() => { setCastMenu(false); setMenu(menu === 'upscale' ? null : 'upscale'); }}>4K</button>
+          <button className="icon-btn" aria-label="Speed" onClick={() => { setCastMenu(false); setMenu(menu === 'speed' ? null : 'speed'); }}>
             <Gauge size={17} />
           </button>
           {levels.length > 1 && (
-            <button className="icon-btn" aria-label="Quality" onClick={() => setMenu(menu === 'quality' ? null : 'quality')}>
+            <button className="icon-btn" aria-label="Quality" onClick={() => { setCastMenu(false); setMenu(menu === 'quality' ? null : 'quality'); }}>
               <Settings2 size={17} />
             </button>
           )}
-          <button className={cx('icon-btn', casting && 'on')} aria-label="Cast to a TV" title="Cast to TV · Windows wireless display or Google Cast" onClick={() => setCastMenu((v) => !v)}>
+          <button className={cx('icon-btn', casting && 'on')} aria-label="Cast to a TV" title="Cast to TV · Windows wireless display or Google Cast" onClick={() => { setMenu(null); setCastMenu((v) => !v); }}>
             <CastIcon size={17} />
           </button>
           <button className="icon-btn" aria-label="Picture in picture" onClick={() => void togglePip()}>

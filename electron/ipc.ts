@@ -237,6 +237,8 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'player.captureStop': z.object({ ticket: z.uuid() }),
   'cast.capabilities': none,
   'cast.devices': none,
+  'cast.chromeDevices': none,
+  'cast.chromeClose': none,
   'cast.start': z.object({
     deviceId: z.string().min(1).max(200),
     media: z.object({

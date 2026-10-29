@@ -65,3 +65,15 @@ When direct website filtering fails, Use compatibility upscaling captures only t
 Capture may introduce some video delay; protected content and unavailable GPUs remain limits. [Recovery instructions](TROUBLESHOOTING-CAST-UPSCALE.md) cover both routes.
 
 The 1.5.6 line-effect adapter fixes WebGL 1 shader compilation in both native and website paths. Rendering has one GPU frame in flight; completed output older than the 80 ms render/media-clock deadline is hidden. Sustained lateness tries smaller shader models, then stops the filtered overlay. This keeps the original player authoritative and avoids seeking audio to compensate for an accumulating GPU queue. It does not repair a source that is already out of sync.
+
+## Chrome-backed tab casting (1.5.7)
+
+Both pickers offer **Find TVs with Chrome**. The main process launches installed Chrome with a dedicated cast-chrome profile, an inherited debugging pipe and a token-protected loopback companion. Normal Chrome profile data is never copied. Chrome supplies receiver discovery and Cast tab routing; AniVerse does not emulate Chrome’s proprietary/browser mirroring pipeline.
+
+Website capture retains the same owned-source grant and embedded encoding path. Chrome fetches the resulting HLS locally on 127.0.0.1, avoiding TV access to AniVerse’s LAN HTTP port. Native local files use the existing token-protected server. The companion bundles hls.js; it does not fetch external scripts or source-site cookies.
+
+A unique receiver name starts tab mirroring through Chrome’s Cast API. Duplicate names require a native Chrome-menu choice after the selected player is loaded. Stop, companion closure/navigation, route end and application shutdown release owned resources; unused discovery windows expire after two minutes. CDP's Cast domain is experimental, so errors stay visible and direct Google Cast remains available.
+
+Opening a picker does not launch Windows projection or change AniVerse zoom/DPI. The website dialog dims its backdrop without blur. Windows Miracast is a separate optional section with explicit screen-sharing and display-mode guidance.
+
+The 4K option controls sender filtering/encoding, not Chrome’s final mirroring resolution. Chrome/receiver/network capabilities determine TV quality. Physical TV casting and lip sync require hardware validation.

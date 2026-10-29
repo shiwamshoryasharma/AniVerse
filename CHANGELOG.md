@@ -2,6 +2,16 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 1.5.7 — 2026-10-29
+
+- 📺 **Chrome casting:** uses installed Google Chrome’s native receiver discovery and tab-casting transport with an isolated companion window.
+- 🔍 **Sharp UI:** removes cast backdrop blur; opening a cast chooser keeps AniVerse’s zoom, viewport and pixel ratio unchanged.
+- 🧭 **Clear choices:** Windows Miracast is optional and separate; duplicate Chrome receiver names use an explicit native-menu choice.
+- 🛑 **Cleanup:** cancelled native starts do not connect later; owned Chrome and media resources close when casting stops.
+- 🎞️ **Sender processing:** existing embedded 4K HEVC input works in the companion. Chrome negotiates TV output resolution; 4K tab output is not guaranteed.
+
+[Full 1.5.7 release notes](docs/releases/1.5.7.md)
+
 ## 1.5.6 — 2026-10-29
 
 - 📺 **TV compatibility:** Windows Miracast chooser in both casting menus, with clear screen-sharing and 4K mode guidance.

@@ -544,6 +544,7 @@ export interface HoverInfo {
 // ---------------------------------------------------------------- casting
 
 export interface CastDevice {
+  transport?: 'chrome';
   id: string;
   name: string;
   model: string;
@@ -565,6 +566,7 @@ export interface CastMedia {
 }
 
 export interface CastState {
+  transport?: 'chrome' | 'direct' | null;
   processing?: { width: number; height: number; encoder: string; live?: boolean } | null;
   device: { id: string; name: string } | null;
   status: 'idle' | 'connecting' | 'buffering' | 'playing' | 'paused' | 'ended' | 'error';

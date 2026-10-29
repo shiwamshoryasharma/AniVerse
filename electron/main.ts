@@ -27,6 +27,8 @@ import { isDev, resolvePaths } from './paths';
 import { browserUserAgent, SessionManager } from './sessions';
 import { SiteNavigator } from './siteNavigator';
 import { CastService } from './cast/castService';
+import { CastClient } from './cast/castv2';
+import { ChromeCast } from './cast/chromeCast';
 import { Sender4K } from './cast/sender4k';
 import { isPlayerCapturePermission } from './cast/capturePermission';
 import { PlayerCapture } from './playerCapture';
@@ -298,6 +300,7 @@ async function bootstrap() {
   protocols.install();
   const collection = new LocalCollection(store,protocols,()=>mainWindow);
   const mediaResources = app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build/vendor');
+  const chromeCast = new ChromeCast(path.join(paths.dataDir, 'cast-chrome'), undefined, undefined, (message) => emit('app.notice', { level: 'info', message }));
   let cast!: CastService;
   let mirror: WebsiteMirror | null = null;
   const sender4k = new Sender4K(path.join(mediaResources, 'ffmpeg'), app.isPackaged ? path.join(process.resourcesPath, 'anime4k') : path.join(app.getAppPath(), 'assets/anime4k'), path.join(paths.dataDir, 'cast-4k'), () => { void cast.stop(); emit('app.notice', { level: 'error', message: 'Sender-side 4K encoding stopped. Check GPU support and retry.' }); });
@@ -305,6 +308,7 @@ async function bootstrap() {
     (s) => { emit('cast.status', s); mirror?.onCastState(s); },
     (u) => protocols.localPath(u),
     sender4k,
+    (device) => device.transport === 'chrome' ? chromeCast.client(device.id) : new CastClient(),
   );
   const probe = new MediaProbe(
     () => mainWindow?.webContents ?? null,
@@ -535,6 +539,8 @@ async function bootstrap() {
     'player.captureStop': ({ ticket }) => captures.stop(ticket),
     'cast.capabilities': () => cast.capabilities(),
     'cast.devices': () => cast.scan(),
+    'cast.chromeDevices': async () => { const devices = cast.rememberDevices(await chromeCast.scan()); if (!HEADLESS) mainWindow?.focus(); return devices; },
+    'cast.chromeClose': () => chromeCast.closeIfIdle(),
     'cast.start': ({ deviceId, media }) => cast.start(deviceId, media, settings.get().player.upscale),
     'cast.control': ({ action, value }) => cast.control(action, value),
     'cast.stop': () => cast.stop(),
@@ -606,7 +612,7 @@ async function bootstrap() {
     drive.cancel();
     config.stop();
     updates.stop();
-    void cast.stop();
+    void cast.stop(); chromeCast.close();
   });
   app.on('will-quit', () => {
     try {

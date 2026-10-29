@@ -10,6 +10,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const guestUpscale = await build({ entryPoints: [path.join(root, 'electron/upscaleGuest.ts')], bundle: true, platform: 'browser', format: 'iife', globalName: 'AniVerseUpscale', minify: true, write: false, logLevel: 'warning' });
 
+const chromePlayer = await build({ entryPoints: [path.join(root, 'electron/cast/chromePlayer.ts')], bundle: true, platform: 'browser', format: 'iife', minify: true, write: false, logLevel: 'warning' });
+
 export const mainOptions = {
   entryPoints: [path.join(root, 'electron/main.ts')],
   outfile: path.join(root, 'dist/electron/main.cjs'),
@@ -21,7 +23,7 @@ export const mainOptions = {
   // Ghostery resolves its preload script from node_modules at runtime.
   external: ['electron', '@ghostery/*', 'node:sqlite'],
   // AniVerse's OAuth client IDs (config/oauth.json) are compiled in; restart `npm run dev` after changing them.
-  define: { ...oauthDefine(), __ANIVERSE_UPSCALE_SCRIPT__: JSON.stringify(guestUpscale.outputFiles[0].text) },
+  define: { ...oauthDefine(), __ANIVERSE_UPSCALE_SCRIPT__: JSON.stringify(guestUpscale.outputFiles[0].text), __ANIVERSE_CHROME_PLAYER_SCRIPT__: JSON.stringify(chromePlayer.outputFiles[0].text) },
   logLevel: 'warning',
 };
 

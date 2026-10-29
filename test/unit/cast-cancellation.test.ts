@@ -26,3 +26,28 @@ it('handles encoder failure even when the selected TV is no longer present', asy
   await expect(cast.startMirror('missing','Fixture',ready,DEFAULT_UPSCALE)).rejects.toThrow(/no longer available/);
   await new Promise<void>(resolve=>setImmediate(resolve));
 });
+
+it('does not connect after a cancelled native cast finishes preparing its media URL', async () => {
+  let created=0;
+  const cast=new CastService(()=>undefined,()=>null,undefined,()=>{created++;return new EventEmitter() as never;});
+  const internal=cast as unknown as {devices:Map<string,unknown>;castableUrl:()=>Promise<string>};
+  internal.devices.set('fixture',{id:'fixture',name:'Fixture',host:'127.0.0.1',port:0,transport:'chrome'});
+  let release!:(url:string)=>void,entered!:()=>void;
+  const gate=new Promise<string>(resolve=>release=resolve),preparing=new Promise<void>(resolve=>entered=resolve);
+  internal.castableUrl=()=>{entered();return gate;};
+  const pending=cast.start('fixture',{url:'media://local/fixture',title:'Fixture',kind:'mp4'});
+  await preparing;await cast.stop();release('http://127.0.0.1/fixture.mp4');
+  await expect(pending).rejects.toThrow(/cancelled/i);
+  expect(created).toBe(0);expect(cast.snapshot().status).toBe('idle');
+});
+
+it('honours stop while a replacement cast is still tearing down its previous sender', async () => {
+  let release!:()=>void,entered!:()=>void,calls=0,created=0;
+  const gate=new Promise<void>(resolve=>release=resolve),preparing=new Promise<void>(resolve=>entered=resolve);
+  const sender={stop:async()=>{if(++calls===1){entered();await gate;}}};
+  const cast=new CastService(()=>undefined,()=>null,sender as never,()=>{created++;return new EventEmitter() as never;});
+  cast.rememberDevices([{id:'fixture',name:'Fixture',model:'Fixture',host:'127.0.0.1',port:0}]);
+  const pending=cast.start('fixture',{url:'https://media-fixture.test/video.mp4',title:'Fixture',kind:'mp4'});
+  await preparing;await cast.stop();release();
+  await expect(pending).rejects.toThrow(/cancelled/i);expect(created).toBe(0);expect(cast.snapshot().status).toBe('idle');
+});

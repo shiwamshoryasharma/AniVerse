@@ -1,6 +1,7 @@
-import { Cast, Pause, Play, RotateCcw, RotateCw, ScreenShareOff, Tv } from 'lucide-react';
+import { X, Cast, Pause, Play, RotateCcw, RotateCw, ScreenShareOff, Tv } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { CastDevice, CastState } from '../../../app/shared/types';
+import { ChromeCastPicker } from '../components/ChromeCastPicker';
 import { WirelessDisplay } from '../components/WirelessDisplay';
 import { Switch } from '../components/common';
 import { Range } from '../components/controls';
@@ -34,10 +35,11 @@ export function CastMenu({ state, onPick, onStop, onClose, canUpscale }: { canUp
   }, []);
 
   return (
-    <div className="player-menu cast-menu" onMouseLeave={onClose}>
-      <h5>Cast to TV</h5>
-      <WirelessDisplay />
-      <h5 className="cast-protocol-heading">Chromecast / Google TV</h5>
+    <div className="player-menu cast-menu">
+      <div className="row between"><h5>Cast to TV</h5><button className="icon-btn" aria-label="Close TV chooser" onClick={onClose}><X size={16}/></button></div>
+      {state.status === 'error' && state.error && <p className="err" role="alert">{state.error}</p>}
+      <ChromeCastPicker onPick={(device) => onPick(device, upscale4k)} />
+      <h5 className="cast-protocol-heading">Direct Google Cast</h5>
       <div className="cast-4k-choice"><label className="row"><Switch label="Process 4K on this device" on={upscale4k} onChange={(on) => setUpscale4k(on && canUpscale && !!capability?.available)} />4K · process on this device</label><p>{canUpscale ? (capability?.message ?? 'Checking embedded encoder…') : '4K sender processing is available for opened local videos.'}</p><p>Requires a 4K HEVC-capable Google Cast TV/receiver, Vulkan GPU and sufficient LAN bandwidth. No system FFmpeg needed.</p></div>
       {isCasting(state) && (
         <button className="on" onClick={onStop}>
@@ -52,7 +54,7 @@ export function CastMenu({ state, onPick, onStop, onClose, canUpscale }: { canUp
         </div>
       ) : devices.length === 0 ? (
         <div className="faint" style={{ padding: '6px 10px 8px', fontSize: 'var(--fs-sm)', maxWidth: 240 }}>
-          {error ?? 'No Google Cast receiver found. For a TV listed in Windows + K, use Windows wireless display above.'}
+          {error ?? 'No direct receiver found. Try “Find TVs with Chrome” above.'}
         </div>
       ) : (
         devices.map((d) => (
@@ -72,6 +74,7 @@ export function CastMenu({ state, onPick, onStop, onClose, canUpscale }: { canUp
           <RotateCw size={13} /> Scan again
         </span>
       </button>
+      <details className="cast-windows-option"><summary>Windows wireless display · Miracast</summary><WirelessDisplay /></details>
     </div>
   );
 }
@@ -84,9 +87,9 @@ export function CastOverlay({ state, poster, onStop }: { state: CastState; poste
   return (
     <div className="cast-overlay" style={poster ? { backgroundImage: `linear-gradient(rgba(7,8,11,.82), rgba(7,8,11,.92)), url("${poster}")` } : undefined}>
       <div className="cast-badge">
-        <Cast size={16} /> Casting to <b>{state.device?.name}</b>
+        <Cast size={16} /> {state.transport === 'chrome' ? 'Casting with Chrome to' : 'Casting to'} <b>{state.device?.name}</b>
       </div>
-      {state.processing && <div className="cast-badge">Anime4K {state.processing.width} × {state.processing.height} · computed on sender · {state.processing.encoder}</div>}
+      {state.processing && <div className="cast-badge">Anime4K {state.processing.width} × {state.processing.height} · computed on sender · {state.processing.encoder}{state.transport === 'chrome' ? ' · TV output negotiated by Chrome' : ''}</div>}
       <div className="cast-title ellipsis">{state.title}</div>
       <div className="faint" style={{ fontSize: 'var(--fs-sm)' }}>
         {state.status === 'connecting' ? 'Connecting…' : state.status === 'buffering' ? 'Buffering on the TV…' : state.status === 'ended' ? 'Finished' : state.status === 'paused' ? 'Paused' : 'Playing on the TV'}

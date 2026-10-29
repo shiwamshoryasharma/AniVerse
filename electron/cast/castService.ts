@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import type { EventEmitter } from 'node:events';
 import { createReadStream, statSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import type { Sender4K, SenderSession } from './sender4k';
@@ -12,6 +13,16 @@ import { AppError } from '../../app/core/util';
 import type { CastDevice, CastMedia, CastState } from '../../app/shared/types';
 import { CastClient, type MediaStatus } from './castv2';
 
+export interface CastTransport extends EventEmitter {
+  connect(host:string,port:number):Promise<void>;
+  launch():Promise<unknown>;
+  load(media:Record<string,unknown>,currentTime?:number):Promise<unknown>;
+  media(type:'PLAY'|'PAUSE'|'STOP'|'SEEK'|'GET_STATUS',extra?:Record<string,unknown>):Promise<unknown>;
+  volume(level:number):Promise<unknown>;
+  stopApp():Promise<unknown>;
+  close(error?:Error):void;
+}
+
 const CONTENT_TYPES: Record<CastMedia['kind'], string> = { hls: 'application/x-mpegurl', dash: 'application/dash+xml', mp4: 'video/mp4' };
 const FILE_TYPES: Record<string, string> = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.mov': 'video/mp4', '.vtt': 'text/vtt' };
 
@@ -19,6 +30,7 @@ export { discoverCastDevices } from './discovery';
 
 /** Local IPv4 address on the same network as the Cast device (for serving local files). */
 function lanAddressFor(deviceHost: string): string | null {
+  if (deviceHost === '127.0.0.1') return '127.0.0.1'; // Chrome fetches locally; the TV receives Chrome's tab stream.
   const target = deviceHost.split('.').map(Number);
   let fallback: string | null = null;
   for (const list of Object.values(os.networkInterfaces())) {
@@ -40,7 +52,7 @@ function lanAddressFor(deviceHost: string): string | null {
  */
 export class CastService {
   private devices = new Map<string, CastDevice>();
-  private client: CastClient | null = null;
+  private client: CastTransport | null = null;
   private server: http.Server | null = null;
   private served = new Map<string, string>();
   private poll: NodeJS.Timeout | null = null;
@@ -53,7 +65,7 @@ export class CastService {
     private emit: (s: CastState) => void,
     private localFile: (mediaUrl: string) => string | null,
     private sender4k?: Sender4K,
-    private makeClient: () => CastClient = () => new CastClient(),
+    private makeClient: (device: CastDevice) => CastTransport = () => new CastClient(),
   ) {}
 
   capabilities() { return this.sender4k?.capabilities() ?? { available: false, version: null, message: 'Embedded 4K casting is unavailable.' }; }
@@ -67,6 +79,8 @@ export class CastService {
     this.emit(this.snapshot());
   }
 
+  rememberDevices(list: CastDevice[]) { for (const device of list) this.devices.set(device.id, device); return list; }
+
   async scan(): Promise<CastDevice[]> {
     const list = await discoverCastDevices();
     for (const d of list) this.devices.set(d.id, d);
@@ -78,20 +92,24 @@ export class CastService {
     const device = this.devices.get(deviceId);
     if (!device) throw new AppError('not-found', 'That Cast device is no longer available — scan again.');
     this.starting = true;
+    const generation = this.generation + 1; // stop() below owns one invalidation; another stop cancels this start.
     await this.stop();
-    this.set({ device: { id: device.id, name: device.name }, status: 'connecting', currentTime: media.startAt ?? 0, duration: 0, title: media.title, error: null });
+    if (generation !== this.generation) throw new AppError('invalid-input', 'Casting was cancelled.');
+    this.starting = true;
+    this.set({ transport: device.transport === 'chrome' ? 'chrome' : 'direct', device: { id: device.id, name: device.name }, status: 'connecting', currentTime: media.startAt ?? 0, duration: 0, title: media.title, error: null });
 
     try {
       const url = media.upscale4k ? await this.processedUrl(media, device.host, options) : await this.castableUrl(media.url, device.host);
-      const client = this.makeClient();
+      if (generation !== this.generation) throw new Error('Casting was cancelled.');
+      const client = this.makeClient(device);
       this.client = client;
-      client.on('media', (s: MediaStatus | null) => this.onMedia(s));
-      client.on('closed', () => this.finish('ended'));
-      client.on('disconnected', (err: Error | null) => this.finish(err ? 'error' : 'idle', err?.message ?? null));
+      client.on('media', (s: MediaStatus | null) => { if (this.client === client) this.onMedia(s); });
+      client.on('closed', () => { if (this.client === client) this.finish('ended'); });
+      client.on('disconnected', (err: Error | null) => { if (this.client === client) this.finish(err ? 'error' : 'idle', err?.message ?? null); });
       await client.connect(device.host, device.port);
-      if (this.client !== client) throw new Error('Casting was cancelled.');
+      if (generation !== this.generation || this.client !== client) throw new Error('Casting was cancelled.');
       await client.launch();
-      if (this.client !== client) throw new Error('Casting was cancelled.');
+      if (generation !== this.generation || this.client !== client) throw new Error('Casting was cancelled.');
       const tracks = await Promise.all(
         (media.subtitles ?? []).map(async (s, i) => ({
           trackId: i + 1,
@@ -103,6 +121,7 @@ export class CastService {
           language: s.lang,
         })),
       );
+      if (generation !== this.generation) throw new Error('Casting was cancelled.');
       const contentType = media.upscale4k ? CONTENT_TYPES.hls : media.kind === 'mp4' ? (FILE_TYPES[path.extname(new URL(media.url).pathname).toLowerCase()] ?? 'video/mp4') : CONTENT_TYPES[media.kind];
       await client.load(
         {
@@ -114,15 +133,15 @@ export class CastService {
         },
         media.upscale4k ? 0 : media.startAt ?? 0,
       );
+      if (generation !== this.generation) throw new Error('Casting was cancelled.');
       // The receiver only reports changes; poll so the remote's progress bar keeps moving.
-      this.poll = setInterval(() => void this.client?.media('GET_STATUS'), 2000);
+      this.startPolling(client);
       return this.snapshot();
     } catch (err) {
       const message = (err as Error).message;
-      await this.stop();
-      this.set({ status: 'error', error: message });
+      if (generation === this.generation) { await this.stop(); this.set({ status: 'error', error: message }); }
       throw new AppError('network', `Casting failed: ${message}`);
-    } finally { this.starting = false; }
+    } finally { if (generation === this.generation) this.starting = false; }
   }
 
 
@@ -133,7 +152,7 @@ export class CastService {
     if (!device) throw new Error('That TV is no longer available. Scan again.');
     const generation = ++this.generation;
     this.starting = true;
-    this.set({ device: { id: device.id, name: device.name }, status: 'connecting', currentTime: 0, duration: 0, title, error: null });
+    this.set({ transport: device.transport === 'chrome' ? 'chrome' : 'direct', device: { id: device.id, name: device.name }, status: 'connecting', currentTime: 0, duration: 0, title, error: null });
     try {
       const session = await ready;
       if (generation !== this.generation) throw new Error('Website casting was cancelled.');
@@ -144,7 +163,7 @@ export class CastService {
       this.set({ processing: { width: session.width, height: session.height, encoder: session.encoder, live: true } });
       const port = await this.ensureServer();
       if (generation !== this.generation) throw new Error('Website casting was cancelled.');
-      const client = this.makeClient();
+      const client = this.makeClient(device);
       this.client = client;
       client.on('media', (state: MediaStatus | null) => { if (this.client === client) this.onMedia(state); });
       client.on('closed', () => { if (this.client === client) this.finish('ended'); });
@@ -156,12 +175,18 @@ export class CastService {
       await client.load({ contentId: `http://${ip}:${port}/processed/${token}/index.m3u8`, contentType: CONTENT_TYPES.hls, streamType: 'LIVE',
         metadata: { metadataType: 0, title, subtitle: 'Mirroring the selected AniVerse player' } }, 0);
       if (generation !== this.generation) throw new Error('Website casting was cancelled.');
-      this.poll = setInterval(() => void this.client?.media('GET_STATUS'), 2000);
+      this.startPolling(client);
       return this.snapshot();
     } catch (error) {
       if (generation === this.generation) { await this.stop(); this.set({ status: 'error', error: (error as Error).message }); }
       throw error;
     } finally { if (generation === this.generation) this.starting = false; }
+  }
+
+  private startPolling(client: CastTransport) {
+    this.poll = setInterval(() => {
+      void client.media('GET_STATUS').catch(error => { if (this.client === client) this.finish('error', (error as Error).message); });
+    }, 2000);
   }
 
   private onMedia(s: MediaStatus | null) {
@@ -212,14 +237,16 @@ export class CastService {
     this.closeServer();
     await this.sender4k?.stop(); this.processing = null;
     this.starting = false;
-    if (this.state.status !== 'idle') this.set({ status: 'idle', device: null, processing: null });
+    if (this.state.status !== 'idle') this.set({ status: 'idle', device: null, processing: null, transport: null });
     return this.snapshot();
   }
 
   private finish(status: CastState['status'], error: string | null = null) {
+    this.generation++; this.starting = false;
     if (this.poll) clearInterval(this.poll);
     this.poll = null;
-    this.client = null;
+    const client = this.client; this.client = null;
+    client?.removeAllListeners(); client?.close();
     this.closeServer();
     void this.sender4k?.stop(); this.processing = null;
     this.set({ status, error, processing: null, device: status === 'ended' ? this.state.device : null });
