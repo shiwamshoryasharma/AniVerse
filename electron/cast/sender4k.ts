@@ -6,7 +6,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { upscaleSize, type UpscaleSettings } from '../../app/shared/upscale';
 const execute = promisify(execFile);
-export type Encoder = 'hevc_nvenc' | 'hevc_qsv' | 'hevc_amf' | 'libx265';
+export type Encoder = 'hevc_nvenc' | 'hevc_qsv' | 'hevc_amf' | 'libx265' | 'h264_nvenc' | 'h264_qsv' | 'h264_amf' | 'libx264';
 export interface SenderSession { folder: string; width: number; height: number; duration: number; startAt: number; encoder: Encoder }
 export function shaderFiles(options: UpscaleSettings): string[] {
   const files = ['Anime4K_Clamp_Highlights.glsl'];
@@ -29,6 +29,21 @@ export function transcodeArgs(file: string, startAt: number, encoder: Encoder, s
     '-hls_fmp4_init_filename', 'init.mp4', '-hls_segment_filename', 'segment-%06d.m4s',
     '-hls_flags', 'delete_segments+independent_segments+temp_file', 'index.m3u8'];
 }
+
+export function mirrorTranscodeArgs(upscale: boolean, encoder: Encoder): string[] {
+  const fit = 'scale=1920:1080:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=1920:1080:(ow-iw)/2:(oh-ih)/2';
+  return ['-hide_banner', '-loglevel', 'warning', '-nostdin', '-y',
+    ...(upscale ? ['-init_hw_device', 'vulkan=vk:0', '-filter_hw_device', 'vk'] : []),
+    '-protocol_whitelist', 'file,pipe', '-probesize', '1000000', '-analyzeduration', '1000000', '-fflags', '+genpts', '-f', 'webm', '-i', 'pipe:0',
+    '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn', '-vf',
+    fit + (upscale ? ',format=yuv420p,hwupload,libplacebo=w=3840:h=2160:custom_shader_path=shader.glsl,hwdownload,format=yuv420p' : ',format=yuv420p'),
+    '-c:v', encoder, ...(encoder.endsWith('_nvenc') ? ['-preset', 'p4', '-tune', 'll'] : encoder === 'libx264' ? ['-preset', 'ultrafast', '-tune', 'zerolatency', '-threads', '4'] : encoder === 'libx265' ? ['-preset', 'ultrafast', '-x265-params', 'log-level=error:pools=4'] : []),
+    ...(upscale ? ['-tag:v', 'hvc1'] : []), '-b:v', upscale ? '18M' : '7M', '-maxrate', upscale ? '28M' : '10M', '-bufsize', upscale ? '40M' : '14M',
+    '-g', '48', '-force_key_frames', 'expr:gte(t,n_forced*2)', '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
+    '-f', 'hls', '-hls_time', '2', '-hls_list_size', '12', '-hls_delete_threshold', '4', '-hls_segment_type', 'fmp4',
+    '-hls_fmp4_init_filename', 'init.mp4', '-hls_segment_filename', 'segment-%06d.m4s', '-hls_flags', 'delete_segments+independent_segments+temp_file', 'index.m3u8'];
+}
+
 export class Sender4K {
   private child: ChildProcess | null = null;
   private folder: string | null = null;
@@ -69,6 +84,7 @@ export class Sender4K {
     const encoder = await this.chooseEncoder();
     await mkdir(this.cache, { recursive: true });
     const folder = await mkdtemp(path.join(this.cache, 'session-'));
+    if (generation !== this.generation) { await rm(folder, { recursive: true, force: true }); throw new Error('Casting was cancelled.'); }
     this.folder = folder;
     const shaders = await Promise.all(shaderFiles(options).map((name) => readFile(path.join(this.shaders, name), 'utf8')));
     await writeFile(path.join(folder, 'shader.glsl'), shaders.join('\n\n'));
@@ -99,13 +115,58 @@ export class Sender4K {
       throw new Error('4K encoder could not prepare the stream in time. This device may be too slow for real-time 4K.');
     } catch (error) { await this.stop(); throw error; }
   }
+
+  async beginMirror(upscale: boolean, options: UpscaleSettings): Promise<{ ready: Promise<SenderSession>; write: (bytes: Uint8Array) => Promise<void> }> {
+    await this.stop();
+    const generation = ++this.generation;
+    if (!this.capabilities().available) throw new Error('Embedded media tools are missing.');
+    const selected = await this.chooseEncoder();
+    if (generation !== this.generation) throw new Error('Website casting was cancelled.');
+    const encoder: Encoder = upscale ? selected : selected === 'libx265' ? 'libx264' : selected.replace('hevc_', 'h264_') as Encoder;
+    await mkdir(this.cache, { recursive: true });
+    const folder = await mkdtemp(path.join(this.cache, 'session-'));
+    if (generation !== this.generation) { await rm(folder, { recursive: true, force: true }); throw new Error('Casting was cancelled.'); }
+    this.folder = folder;
+    if (upscale) {
+      const shaders = await Promise.all(shaderFiles(options).map((name) => readFile(path.join(this.shaders, name), 'utf8')));
+      await writeFile(path.join(folder, 'shader.glsl'), shaders.join('\n\n'));
+    }
+    if (generation !== this.generation) throw new Error('Website casting was cancelled.');
+    const child = spawn(path.join(this.tools, 'ffmpeg.exe'), mirrorTranscodeArgs(upscale, encoder), { cwd: folder, windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
+    this.child = child;
+    let failed = false;
+    child.stdin?.on('error', () => { failed = true; });
+    child.once('error', () => { failed = true; });
+    child.stderr?.on('data', () => undefined);
+    child.once('exit', (code) => { if (generation === this.generation && this.active && code !== 0) this.error('Website capture encoding stopped. Stop casting and retry.'); });
+    const ready = (async () => {
+      const deadline = Date.now() + 45000;
+      while (Date.now() < deadline) {
+        if (generation !== this.generation) throw new Error('Website casting was cancelled.');
+        if (failed || child.exitCode !== null) throw new Error('The captured player could not be encoded. Original playback is unchanged.');
+        const playlist = await readFile(path.join(folder, 'index.m3u8'), 'utf8').catch(() => '');
+        if ((playlist.match(/segment-\d+\.m4s/g) ?? []).length >= 2) {
+          this.active = { folder, width: upscale ? 3840 : 1920, height: upscale ? 2160 : 1080, duration: 0, startAt: 0, encoder };
+          return this.active;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      throw new Error('Website mirroring timed out. Check that the episode is playing and try again.');
+    })().catch(async (error) => { if (generation === this.generation) await this.stop(); throw error; });
+    void ready.catch(() => undefined);
+    return { ready, write: (bytes) => new Promise<void>((resolve, reject) => {
+      if (generation !== this.generation || !child.stdin?.writable) { reject(new Error('Capture encoder is closed.')); return; }
+      child.stdin.write(Buffer.from(bytes), (error) => error ? reject(new Error('The capture encoder stopped accepting frames.')) : resolve());
+    }) };
+  }
+
   async stop() {
     this.generation++; this.active = null;
     const child = this.child; this.child = null;
+    const folder = this.folder; this.folder = null;
     if (child && child.exitCode === null) {
       await new Promise<void>((resolve) => { const timer = setTimeout(resolve, 2500); child.once('exit', () => { clearTimeout(timer); resolve(); }); child.kill(); });
     }
-    const folder = this.folder; this.folder = null;
     if (folder) {
       const relative = path.relative(path.resolve(this.cache), path.resolve(folder));
       if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) await rm(folder, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);

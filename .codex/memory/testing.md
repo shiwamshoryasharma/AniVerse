@@ -94,3 +94,7 @@ The image directory was rechecked and still contains only `.gitkeep`. No image/m
 ## Original context-only update
 
 No application tests, builds, live website checks, image/model checks, installers or releases were required. Validate the skills and local links, record evidence under `test/artifacts/`, and verify existing source/Claude files remain unchanged.
+
+## Release 1.5.3 checks
+
+release-1.5.3.mjs adds first-launch highlights/receipt persistence, coloured history, structural layout geometry and visible native/website Cast controls. website-mirror.mjs uses actual webContents video/audio capture, production RPC schemas, embedded H.264/HEVC/AAC encoding and a controlled receiver. E2E_MEDIA_RESOURCES can select packaged tools. No physical TV is used. Evidence is test/artifacts/release-1.5.3-*; unit count is 161 at this change.

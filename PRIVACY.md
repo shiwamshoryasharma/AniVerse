@@ -59,3 +59,7 @@ Uninstallation normally retains the user-data folder for reinstalling. For compl
 ## Reports
 
 Use [GitHub issues](https://github.com/shiwamshoryasharma/AniVerse/issues) for product questions and [SECURITY.md](SECURITY.md) for security concerns. Share the minimum reproduction details. Do not upload full databases, cookies, private source lists, OAuth files, personal paths or watch records.
+
+## Optional website casting
+
+When you select a TV for a website episode, AniVerse can capture the selected source view and optionally its audio. Encoded video/audio is served temporarily to the Cast receiver over your local network with an unguessable per-session URL. The desktop, camera, microphone and unrelated application audio are not captured. Stop casting or leave the episode to revoke capture and delete the owned rolling media cache. Mirroring is optional; normal website playback does not activate it.

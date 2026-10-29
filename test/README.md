@@ -15,3 +15,7 @@
 Run `npm run build` before the application E2E scripts — they launch `dist/`.
 
 `node test/e2e/player-focus.mjs` independently bundles the real focus/media DOM scripts into `test/cache/` and runs neutral fixtures in hidden Electron. It covers overlays, hidden/challenge frames, original player controls/captions, probe/control selection and recovery without stream-URL access. Reports and screenshots go to `test/artifacts/`. `node test/e2e/gpu.mjs` checks the actual high-performance/system startup flags and GPU Settings UI using separate hidden profiles. `node test/e2e/fonts.mjs` verifies UI font switching and persistence across app restarts. Unit suites also cover GPU adapter classification, playback-health counters and font defaults/persistence/sanitization; the Vitest cache stays in `test/cache/vite/`.
+
+`node test/e2e/release-1.5.3.mjs` checks automatic/acknowledged release highlights, coloured history, actual navigation geometry for Classic/Studio/Cinema, native and website TV actions, controlled Drive backup and all Anime4K modes. `E2E_EXE` selects a packaged app.
+
+`node test/e2e/website-mirror.mjs` captures a real isolated neutral webview with audio, passes chunks through production IPC validation, and verifies embedded H.264 1080p / HEVC 4K plus AAC output, HLS serving and navigation cleanup. Receiver transport is controlled; no physical TV is used. `E2E_MEDIA_RESOURCES` selects packaged tools/shaders. Its Electron fixture is under `test/e2e/fixtures/`; profiles, temp files and outputs remain under `test/`.

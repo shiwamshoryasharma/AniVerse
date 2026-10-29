@@ -31,3 +31,5 @@ For source adapters or website behavior, load [source navigation](../aniverse-so
 For accounts, signing or updater work, read the relevant existing `docs/ACCOUNTS.md`, `docs/INSTALLER.md`, or `docs/UPDATES.md` instead of copying their manuals into memory.
 
 Keep all new test scripts/configs/cache/output under `test/`. Preserve `.claude/`. Update Codex memory with dated, evidence-backed changes; do not record an implementation or old screenshot as a current test pass.
+
+For releases from 1.5.3 onward, update package versions, docs/releases/<version>.md, CHANGELOG.md and app/shared/changelog.ts together. The offline newest release entry must match package.json; changelog-layout.test.ts enforces this. Keep per-profile acknowledgement in ChangelogService. UI layout IDs remain classic/aurora/paper for profile/preset compatibility; visible names/layouts are Classic/Studio/Cinema via app/shared/interface.ts.

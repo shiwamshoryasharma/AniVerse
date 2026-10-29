@@ -2,6 +2,14 @@
 
 Snapshot: 2026-10-29, Asia/Calcutta. Scoped source/runtime validation is recorded below; it is not certification of every external service or device.
 
+## Version 1.5.3 (2026-10-29)
+
+The user clarified themes as structural layouts. Classic/Studio/Cinema now select different navigation and episode placement while retaining old persisted style IDs. Watch has an explicit Cast to TV button for native media and scoped website-view/audio mirroring. ChangelogService and bundled release data provide automatic per-version highlights, coloured/icon history and feature links.
+
+Verified: typecheck/lint, 161 unit tests, production build, eight packaged feature checks, ten packaged Workspace regressions, real owned-webview H.264 1080p / HEVC 3840 × 2160 with AAC, and local-file HEVC/HLS token/range serving using packaged embedded tools. The receiver transport is controlled; no physical TV or real Google account was used. Installer/feed/vendor-hash/skill-link evidence is recorded by test/cache/release-1.5.3/verify-release.py into test/artifacts/release-1.5.3-validation.json.
+
+Regression lessons: bundled Electron 44 reports display capture as a media permission request with an empty device list. Only allow that shape for a fresh owned-player grant and trusted top frame; never grant audio/video device types. Return the capture grant before encoder probing consumes user activation. Observe encoder readiness rejection even when TV validation fails, and guard asynchronous receiver/server startup against stop. Release-dialog header/footer stay visible while its body scrolls.
+
 ## Version 1.5.2 (2026-10-29)
 
 Implemented Classic/Aurora/Paper interface styles, six-mode Anime4K WebGL filtering, personal-OAuth Google Drive app-data backup, and embedded sender-side Anime4K/Vulkan/HEVC 4K casting for opened local videos. FFmpeg/FFprobe 9.0.2 ship inside app resources and never resolve from PATH. The fixed Drive protocol is `AniVerse Sync/aniverse-backup.v1.json`; credentials, site identities, local media paths and watch insights are excluded.

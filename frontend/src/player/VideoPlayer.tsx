@@ -39,6 +39,7 @@ export interface PlayerControls {
   seekTo(seconds: number): void;
   state(): { position:number; duration:number; paused:boolean; totalFrames:number|null; droppedFrames:number|null } | null;
   toggle(): void;
+  openCast(): void;
 }
 
 interface Props {
@@ -311,7 +312,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
     showFlash(`${d > 0 ? '+' : '−'}${Math.abs(d)}s`);
   };
   useEffect(() => {
-    if (controlsRef) controlsRef.current = { seekBy, seekTo, toggle, state: () => {
+    if (controlsRef) controlsRef.current = { seekBy, seekTo, toggle, openCast: () => setCastMenu(true), state: () => {
       const v=video.current;
       if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return null;
       const quality=v.getVideoPlaybackQuality?.();

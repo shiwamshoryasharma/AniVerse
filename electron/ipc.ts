@@ -99,6 +99,8 @@ const settingsPatch = z
   .partial();
 
 export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
+  'changelog.state': none,
+  'changelog.markSeen': z.object({ version: z.string().regex(/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/) }),
   'drive.state': none,
   'drive.configure': none,
   'drive.connect': z.object({ shared: z.boolean() }),
@@ -227,6 +229,9 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
 
   'player.openFile': none,
 
+  'cast.mirrorPrepare': z.object({ webContentsId: id, deviceId: text(200).min(1), title: text(300), upscale: z.boolean() }),
+  'cast.mirrorChunk': z.object({ ticket: z.uuid(), sequence: z.number().int().nonnegative(), bytes: z.instanceof(Uint8Array).refine((bytes) => bytes.length > 0 && bytes.length <= 2_000_000, 'Invalid capture chunk size') }),
+  'cast.mirrorStop': z.object({ ticket: z.uuid() }),
   'cast.capabilities': none,
   'cast.devices': none,
   'cast.start': z.object({

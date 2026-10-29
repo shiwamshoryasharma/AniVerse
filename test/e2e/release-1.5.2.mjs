@@ -94,6 +94,7 @@ store.db
   .run(videoFile, path.basename(videoFile), readFileSync(videoFile).length, 'Fixture Series', 1, 7);
 const workspace = new WorkspaceService(store);
 workspace.saveBookmark({ media, episode: 1, position: 12, duration: 52, sourceId: null, note: 'A fixture scene', tags: ['test'] });
+store.setKv('changelog:lastSeen', JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version);
 store.close();
 
 const reports = [], errors = [];

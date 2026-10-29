@@ -1,11 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Download, Info, KeyRound, LogOut, Palette, Play, RefreshCw, RotateCw, Search, Shield, UserRound, Globe, Link2, X, Cpu, ContactRound } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, Info, KeyRound, LogOut, Palette, Play, RefreshCw, RotateCw, Search, Shield, UserRound, Globe, Link2, X, Cpu, ContactRound, ScrollText } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import type { AccentName, AccountInfo, DeepPartial, Provider, Settings, SourceInfo } from '../../../app/shared/types';
 import { SourceIcon, Spinner, Switch } from '../components/common';
 import { Disclaimer } from '../components/Disclaimer';
 import { Anime4KPanel } from '../components/Anime4K';
+import { ChangelogPage } from '../components/Changelog';
 import { ThemeStyles } from '../components/ThemeStyles';
 import { GoogleDrivePanel } from '../components/GoogleDrivePanel';
 import { ThemePresets } from '../components/ThemePresets';
@@ -26,6 +27,7 @@ const SECTIONS = [
   { id: 'sources', label: 'Sources', icon: Globe },
   { id: 'accounts', label: 'Accounts & sync', icon: UserRound },
   { id: 'privacy', label: 'Privacy & blocking', icon: Shield },
+  { id: 'changelog', label: 'Changelog', icon: ScrollText },
   { id: 'about', label: 'About', icon: Info },
 ] as const;
 
@@ -62,6 +64,7 @@ export function SettingsPage() {
           {section === 'accounts' && <AccountsSection />}
           {section === 'privacy' && <PrivacySection />}
           {section === 'about' && <AboutSection />}
+          {section === 'changelog' && <ChangelogPage />}
         </div>
       </div>
     </div>

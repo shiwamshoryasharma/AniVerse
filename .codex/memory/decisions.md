@@ -30,3 +30,9 @@ Inspected 2026-10-26 against current source, [CONTRIBUTING.md](../../CONTRIBUTIN
 ## Memory hygiene
 
 Preserve existing Claude files. Treat its environment observations, network outcomes and test passes as dated reports. Do not translate them into current successful checks or incomplete-work assumptions. Record substantive changes to these decisions only when supported by user direction or inspected implementation.
+
+## 1.5.3 layout, changelog and casting decisions (2026-10-29)
+
+The user clarified that themes mean structural UI layouts. Classic preserves the original rail; Studio uses a permanent labelled sidebar/dashboard; Cinema uses top navigation and an episode shelf below playback. Legacy style IDs remain compatible. In-app changelogs are bundled offline with icons, Added/Improved/Fixed colours, feature links and a per-profile lastSeen receipt.
+
+For website casting the user delegated the choice of approach. Use scoped mirroring of the owned source webContents plus its own audio. Do not extract website streams or capture desktop/system audio/camera/microphone. Main issues one fresh capture grant to the trusted host top frame; bounded ordered renderer chunks feed embedded FFmpeg. Normal output is H.264 1080p, optional Anime4K output HEVC 4K. Capture ends on navigation/episode exit/stop. Tests use controlled receiver transport; physical-TV compatibility remains unverified.

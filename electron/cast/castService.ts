@@ -77,8 +77,9 @@ export class CastService {
   private server: http.Server | null = null;
   private served = new Map<string, string>();
   private poll: NodeJS.Timeout | null = null;
-  private processing: { media: CastMedia; host: string; options: UpscaleSettings; session: SenderSession; token: string } | null = null;
+  private processing: { media: CastMedia; host: string; options: UpscaleSettings; session: SenderSession; token: string; live?: boolean } | null = null;
   private starting = false;
+  private generation = 0;
   private state: CastState = { device: null, status: 'idle', currentTime: 0, duration: 0, title: null, volume: 1, error: null };
 
   constructor(
@@ -157,6 +158,45 @@ export class CastService {
     } finally { this.starting = false; }
   }
 
+
+  async startMirror(deviceId: string, title: string, ready: Promise<SenderSession>, options: UpscaleSettings): Promise<CastState> {
+    void ready.catch(() => undefined); // Early validation must still observe encoder cancellation.
+    if (this.starting) throw new Error('Casting is already starting.');
+    const device = this.devices.get(deviceId);
+    if (!device) throw new Error('That TV is no longer available. Scan again.');
+    const generation = ++this.generation;
+    this.starting = true;
+    this.set({ device: { id: device.id, name: device.name }, status: 'connecting', currentTime: 0, duration: 0, title, error: null });
+    try {
+      const session = await ready;
+      if (generation !== this.generation) throw new Error('Website casting was cancelled.');
+      const ip = lanAddressFor(device.host);
+      if (!ip) throw new Error('No local network address is available.');
+      const token = randomBytes(24).toString('hex');
+      this.processing = { media: { url: 'capture://selected-player', kind: 'hls', title }, host: device.host, options, session, token, live: true };
+      this.set({ processing: { width: session.width, height: session.height, encoder: session.encoder, live: true } });
+      const port = await this.ensureServer();
+      if (generation !== this.generation) throw new Error('Website casting was cancelled.');
+      const client = this.makeClient();
+      this.client = client;
+      client.on('media', (state: MediaStatus | null) => { if (this.client === client) this.onMedia(state); });
+      client.on('closed', () => { if (this.client === client) this.finish('ended'); });
+      client.on('disconnected', (error: Error | null) => { if (this.client === client) this.finish(error ? 'error' : 'idle', error?.message ?? null); });
+      await client.connect(device.host, device.port);
+      if (generation !== this.generation) throw new Error('Website casting was cancelled.');
+      await client.launch();
+      if (generation !== this.generation) throw new Error('Website casting was cancelled.');
+      await client.load({ contentId: `http://${ip}:${port}/processed/${token}/index.m3u8`, contentType: CONTENT_TYPES.hls, streamType: 'LIVE',
+        metadata: { metadataType: 0, title, subtitle: 'Mirroring the selected AniVerse player' } }, 0);
+      if (generation !== this.generation) throw new Error('Website casting was cancelled.');
+      this.poll = setInterval(() => void this.client?.media('GET_STATUS'), 2000);
+      return this.snapshot();
+    } catch (error) {
+      if (generation === this.generation) { await this.stop(); this.set({ status: 'error', error: (error as Error).message }); }
+      throw error;
+    } finally { if (generation === this.generation) this.starting = false; }
+  }
+
   private onMedia(s: MediaStatus | null) {
     if (!s) return;
     const status: CastState['status'] =
@@ -173,14 +213,15 @@ export class CastService {
   async control(action: 'play' | 'pause' | 'seek' | 'volume', value?: number): Promise<CastState> {
     const c = this.client;
     if (!c) throw new AppError('invalid-input', 'Nothing is casting.');
-    if (this.processing && (action === 'seek' || action === 'play')) {
+    if (this.processing?.live && action === 'seek') throw new Error('Use the website player to seek while mirroring.');
+    if (this.processing && !this.processing.live && (action === 'seek' || action === 'play')) {
       const current = this.processing;
       const at = action === 'seek' ? Math.max(0, value ?? 0) : this.state.currentTime;
       this.set({ status: 'buffering', currentTime: at });
       const url = await this.processedUrl({ ...current.media, startAt: at }, current.host, current.options);
       await c.load({ contentId: url, contentType: CONTENT_TYPES.hls, streamType: 'LIVE', metadata: { metadataType: 0, title: current.media.title } }, 0);
     } else if (action === 'play') await c.media('PLAY');
-    else if (action === 'pause') { await c.media('PAUSE'); if (this.processing) await this.sender4k?.stop(); }
+    else if (action === 'pause') { await c.media('PAUSE'); if (this.processing && !this.processing.live) await this.sender4k?.stop(); }
     else if (action === 'seek') await c.media('SEEK', { currentTime: Math.max(0, value ?? 0) });
     else if (action === 'volume') {
       await c.volume(value ?? 1);
@@ -191,6 +232,7 @@ export class CastService {
 
   /** Stops playback on the device and tears down the session and file server. */
   async stop(): Promise<CastState> {
+    this.generation++;
     const c = this.client;
     this.client = null;
     if (this.poll) clearInterval(this.poll);
@@ -202,6 +244,7 @@ export class CastService {
     }
     this.closeServer();
     await this.sender4k?.stop(); this.processing = null;
+    this.starting = false;
     if (this.state.status !== 'idle') this.set({ status: 'idle', device: null, processing: null });
     return this.snapshot();
   }
@@ -260,7 +303,11 @@ export class CastService {
   }
 
   private ensureServer(): Promise<number> {
-    if (this.server) return Promise.resolve((this.server.address() as AddressInfo).port);
+    if (this.server) {
+      const address = this.server.address() as AddressInfo | null;
+      return address ? Promise.resolve(address.port) : Promise.reject(new Error('The Cast server is still starting.'));
+    }
+    const generation = this.generation;
     return new Promise((resolve, reject) => {
       const server = http.createServer((req, res) => {
         if (req.url?.startsWith('/processed/')) { void this.serveProcessed(req, res).catch(() => res.destroy()); return; }
@@ -285,8 +332,9 @@ export class CastService {
         }
       });
       server.on('error', reject);
+      this.server = server;
       server.listen(0, '0.0.0.0', () => {
-        this.server = server;
+        if (this.server !== server || generation !== this.generation) { server.close(); reject(new Error('Casting was cancelled.')); return; }
         resolve((server.address() as AddressInfo).port);
       });
     });

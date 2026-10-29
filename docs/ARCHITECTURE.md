@@ -56,7 +56,7 @@ The renderer only sees a loader and status lines; the site's URL bar is hidden. 
 
 ## Casting
 
-`electron/cast/` implements a minimal CASTV2 sender (TLS + protobuf framing), mDNS discovery (`_googlecast._tcp`) and a session service. The Default Media Receiver streams the URL itself (media only, no mirroring); local files are served from a token-protected LAN HTTP server that exists only while casting. Website sources are not castable because their streams are not extracted.
+`electron/cast/` implements a minimal CASTV2 sender (TLS + protobuf framing), mDNS discovery (`_googlecast._tcp`) and a session service. The Default Media Receiver consumes native media URLs or a token-protected LAN HLS stream. Local files can be cast directly or processed with embedded Anime4K/FFmpeg. `WebsiteMirror` grants capture of one owned source webContents, including only that view’s audio; renderer MediaRecorder chunks pass through validated ordered/bounded IPC into the embedded encoder. Standard mirroring uses H.264 1080p; optional Anime4K uses HEVC 4K. This does not extract website stream URLs or capture the desktop. Navigation/exit/stop revoke the grant and stop encoder/server work.
 
 ## Watch flow
 

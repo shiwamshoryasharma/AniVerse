@@ -28,6 +28,8 @@ import { browserUserAgent, SessionManager } from './sessions';
 import { SiteNavigator } from './siteNavigator';
 import { CastService } from './cast/castService';
 import { Sender4K } from './cast/sender4k';
+import { isPlayerCapturePermission } from './cast/capturePermission';
+import { WebsiteMirror } from './cast/websiteMirror';
 import { UpdateService } from './updater';
 import { WorkspaceService } from '../app/core/workspace';
 import { buildWatchPlan, type WatchPlan } from '../app/shared/workspace';
@@ -35,6 +37,7 @@ import { pendingRelease } from '../app/shared/release';
 import { subtitleTextToVtt } from '../app/shared/subtitles';
 import { LocalCollection } from './collection';
 import { GoogleDriveService } from './googleDrive';
+import { ChangelogService } from '../app/core/changelog';
 import { summarizeGraphics, type GpuPreference } from '../app/shared/graphics';
 
 // Ask Chromium for the discrete adapter on hybrid laptops before GPU initialization.
@@ -215,6 +218,7 @@ async function bootstrap() {
   const store = new Store(paths.db, credentials.codec);
   store.cachePurge();
   const settings = new SettingsService(store);
+  const changelog = new ChangelogService(store, app.getVersion());
   const workspace = new WorkspaceService(store);
   const apiFetch: FetchFn = (url, init) => session.defaultSession.fetch(url, init);
   const drive = new GoogleDriveService(store, credentials.codec, credentials.secure, apiFetch, app.getVersion(), () => mainWindow, (url) => shell.openExternal(url));
@@ -293,9 +297,10 @@ async function bootstrap() {
   const collection = new LocalCollection(store,protocols,()=>mainWindow);
   const mediaResources = app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build/vendor');
   let cast!: CastService;
+  let mirror: WebsiteMirror | null = null;
   const sender4k = new Sender4K(path.join(mediaResources, 'ffmpeg'), app.isPackaged ? path.join(process.resourcesPath, 'anime4k') : path.join(app.getAppPath(), 'assets/anime4k'), path.join(paths.dataDir, 'cast-4k'), () => { void cast.stop(); emit('app.notice', { level: 'error', message: 'Sender-side 4K encoding stopped. Check GPU support and retry.' }); });
   cast = new CastService(
-    (s) => emit('cast.status', s),
+    (s) => { emit('cast.status', s); mirror?.onCastState(s); },
     (u) => protocols.localPath(u),
     sender4k,
   );
@@ -303,8 +308,6 @@ async function bootstrap() {
     () => mainWindow?.webContents ?? null,
     (wc) => sessions.isGuestOf(wc) !== null,
   );
-
-  hardenDefaultSession();
 
   /** Resolves a source webview hosted by the main window (and, optionally, owned by `sourceId`). */
   const guestFor = (webContentsId: number, sourceId?: string): WebContents => {
@@ -329,7 +332,12 @@ async function bootstrap() {
     return settings.update({ profile: { [kind]: `media://profile/${kind}.${ext}?v=${Date.now()}` } });
   };
 
+  mirror = new WebsiteMirror(cast, sender4k, () => mainWindow, (id) => guestFor(id), (message) => emit('app.notice', { level: 'error', message }));
+  hardenDefaultSession((wc) => mirror?.canCapture(wc) ?? false);
+
   const handlers: Handlers = {
+    'changelog.state': () => changelog.state(),
+    'changelog.markSeen': ({ version }) => changelog.markSeen(version),
     'drive.state': () => drive.snapshot(),
     'drive.configure': () => drive.configure(),
     'drive.connect': ({ shared }) => drive.connect(shared),
@@ -514,6 +522,9 @@ async function bootstrap() {
 
     'player.openFile': () => protocols.pick(mainWindow),
 
+    'cast.mirrorPrepare': ({ webContentsId, deviceId, title, upscale }) => mirror!.prepare(webContentsId, deviceId, title, upscale, settings.get().player.upscale),
+    'cast.mirrorChunk': ({ ticket, sequence, bytes }) => mirror!.push(ticket, sequence, bytes),
+    'cast.mirrorStop': ({ ticket }) => mirror!.stop(ticket),
     'cast.capabilities': () => cast.capabilities(),
     'cast.devices': () => cast.scan(),
     'cast.start': ({ deviceId, media }) => cast.start(deviceId, media, settings.get().player.upscale),
@@ -582,6 +593,7 @@ async function bootstrap() {
     if (process.platform !== 'darwin') app.quit();
   });
   app.on('before-quit', () => {
+    void mirror?.stop();
     drive.cancel();
     config.stop();
     updates.stop();
@@ -619,12 +631,12 @@ function isAppUrl(url: string): boolean {
   }
 }
 
-function hardenDefaultSession() {
+function hardenDefaultSession(canCapture: (wc: WebContents | null) => boolean = () => false) {
   const ses = session.defaultSession;
-  // The app itself may use fullscreen and the clipboard (copy/paste menu); nothing else.
+  // Display capture additionally requires a fresh owned-player grant. Device media stays denied.
   const allowed = new Set(['fullscreen', 'clipboard-sanitized-write', 'clipboard-read']);
-  ses.setPermissionRequestHandler((wc, permission, callback) => callback(isAppUrl(wc.getURL()) && allowed.has(permission)));
-  ses.setPermissionCheckHandler((wc, permission) => !!wc && isAppUrl(wc.getURL()) && allowed.has(permission));
+  ses.setPermissionRequestHandler((wc, permission, callback, details) => callback(isAppUrl(wc.getURL()) && (allowed.has(permission) || (isPlayerCapturePermission(permission, details) && canCapture(wc)))));
+  ses.setPermissionCheckHandler((wc, permission) => !!wc && isAppUrl(wc.getURL()) && (allowed.has(permission) || (permission === 'display-capture' && canCapture(wc))));
   ses.on('will-download', (event) => event.preventDefault());
 }
 

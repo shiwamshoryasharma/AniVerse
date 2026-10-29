@@ -37,6 +37,8 @@ import { call, errorText, onEvent } from '../lib/bridge';
 import { availableEpisodes, countdown, cx, formatLabel, mediaRefOf, pendingRelease, snapshotOf, statusLabel, titleOf } from '../lib/format';
 import { keys, useDetails, useLibraryState, useMarkWatched, useMatch, useSaveProgress, useSettings, useSources, useStreams, useToggleFavourite, useUpdateSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
+import { interfaceStyle } from '../../../app/shared/interface';
+import { EpisodeCast } from '../components/EpisodeCast';
 import { SiteAnime4K } from '../components/Anime4K';
 import { VideoPlayer, type PlayerControls } from '../player/VideoPlayer';
 
@@ -80,6 +82,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const qc = useQueryClient();
   const snapshot = useMemo(() => snapshotOf(media, lang), [media, lang]);
   const title = titleOf(media, lang);
+  const layout = interfaceStyle(settings.appearance.style).layout;
 
   const localId = Number(search.get('local')) || null;
   const local = useQuery({queryKey:['local-open',localId],queryFn:()=>call('collection.open',{id:localId!}),enabled:!!localId,retry:false,staleTime:Infinity});
@@ -409,8 +412,25 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
     [media, episode, stream],
   );
 
+  const episodePanel = (
+        <EpisodePanel
+          total={total}
+          current={episode}
+          watched={watched}
+          available={available}
+          titles={titles}
+          thumbs={thumbs}
+          onSelect={(n) => goEpisode(n)}
+          sourceLabel={localId ? 'Local collection' : source?.name}
+          spoilerShield={settings.appearance.spoilerShield}
+        />
+  );
+
   return (
     <div className={cx('page wide', lightsOff && 'lights-off')}>
+      <div className="watch-heading"><div><span className="eyebrow">NOW WATCHING</span><h1 className="ellipsis">{title}<span>Episode {episode}</span></h1></div>
+        <EpisodeCast key={media.id + ':' + episode + ':' + (sourceId ?? localId)} native={player} webContentsId={webContentsId} title={`${title} · Episode ${episode}`} />
+      </div>
       <div className={cx('watch', theater && 'theater')}>
         <div className="stage" style={{ minWidth: 0 }}>
           <div className={cx('screen', isSite && !focused && (!siteBusy || needsUser) && !choosing && 'site')}>{screen}</div>
@@ -465,6 +485,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
             )}
           </div>
 
+          {layout === 'cinema' && episodePanel}
           {isSite && webContentsId && <SiteAnime4K key={siteKey + ':anime4k'} webContentsId={webContentsId} />}
           {isSite && webContentsId && <PlaybackRescue key={siteKey + ':' + episode} probe={playbackProbe} health={playbackStatus} webContentsId={webContentsId} busy={siteBusy || !!choosing} />}
 
@@ -575,17 +596,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
           <SpoilerGuard key={media.id+':'+episode} label="Comments"><CommentsPanel query={commentsQuery} /></SpoilerGuard>
         </div>
 
-        <EpisodePanel
-          total={total}
-          current={episode}
-          watched={watched}
-          available={available}
-          titles={titles}
-          thumbs={thumbs}
-          onSelect={(n) => goEpisode(n)}
-          sourceLabel={localId ? 'Local collection' : source?.name}
-          spoilerShield={settings.appearance.spoilerShield}
-        />
+        {layout !== 'cinema' && episodePanel}
       </div>
     </div>
   );

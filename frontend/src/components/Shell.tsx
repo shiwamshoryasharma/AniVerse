@@ -26,6 +26,8 @@ import { useAccounts, useAdblockStats, useBridgeEvents, useSearch, useSettings }
 import { useToast } from '../lib/useToast';
 import { Logo, Spinner } from './common';
 import { ContextMenuProvider } from './ContextMenu';
+import { interfaceStyle } from '../../../app/shared/interface';
+import { ReleaseAnnouncements } from './Changelog';
 import { UpdateBadge } from './Updates';
 
 const NAV = [
@@ -52,6 +54,7 @@ export function Shell() {
   useBridgeEvents(qc);
   const settings = useSettings();
   const [open, setOpen] = useState(readRailPref);
+  const layout = interfaceStyle(settings.appearance.style).layout;
   const navigate = useNavigate();
   const toast = useToast();
   const location = useLocation();
@@ -60,6 +63,7 @@ export function Shell() {
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.style = settings.appearance.style;
+    root.dataset.layout = interfaceStyle(settings.appearance.style).layout;
     root.dataset.accent = settings.appearance.accent;
     root.dataset.density = settings.appearance.density;
     root.dataset.font = settings.appearance.fontFamily;
@@ -93,12 +97,12 @@ export function Shell() {
   };
 
   return (
-    <div className={cx('app', open && 'rail-open')}>
+    <div className={cx('app', layout === 'classic' && open && 'rail-open', 'layout-' + layout)}>
       <header className={cx('topbar', platform === 'win32' && 'win')}>
         <div className="brand">
-          <button className="icon-btn" aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'} onClick={toggleRail}>
+          {layout === 'classic' && <button className="icon-btn" aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'} onClick={toggleRail}>
             {open ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-          </button>
+          </button>}
           <Logo />
           <span className="word">
             Ani<b>Verse</b>
@@ -106,6 +110,7 @@ export function Shell() {
         </div>
         <SearchBox />
         <div className="spacer" />
+        <ReleaseAnnouncements />
         <UpdateBadge />
         <RefreshButton />
         <AdblockBadge />
@@ -113,6 +118,7 @@ export function Shell() {
       </header>
 
       <nav className="rail" aria-label="Main">
+        {layout === 'studio' && <div className="studio-nav-heading"><span>YOUR WORKSPACE</span><h2>Anime studio</h2><p>Discover, plan and continue.</p></div>}
         {NAV.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cx('rail-item', isActive && 'active')} title={item.label}>
             <item.icon size={19} />

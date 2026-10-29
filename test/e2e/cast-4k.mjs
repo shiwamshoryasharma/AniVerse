@@ -58,5 +58,5 @@ try {
 } catch (error) { errors.push(String(error)); throw error; }
 finally {
   await sender.stop();
-  writeFileSync(path.join(root, 'test/artifacts/release-1.5.2-cast-4k.json'), JSON.stringify(report, null, 2) + '\n');
+  writeFileSync(path.join(root, 'test/artifacts/release-' + JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version + '-cast-4k.json'), JSON.stringify(report, null, 2) + '\n');
 }

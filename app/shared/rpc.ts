@@ -48,6 +48,8 @@ import type {
 } from './types';
 
 export interface RpcContract {
+  'changelog.state': [void, import('./changelog').ChangelogState];
+  'changelog.markSeen': [{ version: string }, import('./changelog').ChangelogState];
   'drive.state': [void, import('./drive').DriveState];
   'drive.configure': [void, import('./drive').DriveState];
   'drive.connect': [{ shared: boolean }, import('./drive').DriveState];
@@ -141,6 +143,9 @@ export interface RpcContract {
 
   'player.openFile': [void, { url: string; name: string } | null];
 
+  'cast.mirrorPrepare': [{ webContentsId: number; deviceId: string; title: string; upscale: boolean }, { ticket: string }];
+  'cast.mirrorChunk': [{ ticket: string; sequence: number; bytes: Uint8Array }, void];
+  'cast.mirrorStop': [{ ticket: string }, void];
   'cast.capabilities': [void, { available: boolean; version: string | null; message: string }];
   'cast.devices': [void, CastDevice[]];
   'cast.start': [{ deviceId: string; media: CastMedia }, CastState];

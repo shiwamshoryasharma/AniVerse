@@ -565,7 +565,7 @@ export interface CastMedia {
 }
 
 export interface CastState {
-  processing?: { width: number; height: number; encoder: string } | null;
+  processing?: { width: number; height: number; encoder: string; live?: boolean } | null;
   device: { id: string; name: string } | null;
   status: 'idle' | 'connecting' | 'buffering' | 'playing' | 'paused' | 'ended' | 'error';
   currentTime: number;

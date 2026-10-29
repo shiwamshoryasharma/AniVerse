@@ -45,3 +45,13 @@ Native browser caption overlays are not burned into the FFmpeg output. Existing 
 All test machinery is under `test/`. `npm test` covers GPU classification and video-health logic. `node test/e2e/player-focus.mjs` exercises the real focus CSS, serialized DOM operations and media probe/control scripts in hidden Electron with neutral fixtures.
 
 The fixture checks retain the original video, controls and captions, reject hidden/decoy/challenge frames, and verify that recovery does not read or change media URLs. They do not certify every live website or physical hybrid-laptop configuration.
+
+## Episode casting and interface layouts (1.5.3)
+
+The Watch page has a labelled **Cast to TV** action above the player. Native/local media opens the existing receiver chooser. Website episodes open a separate chooser for mirroring the selected source view and its optional audio. Standard output is H.264/AAC at 1920 × 1080; the 4K option runs the bundled Anime4K shader and HEVC encoder locally at 3840 × 2160.
+
+Electron captures the owned source webContents and its audio through a short-lived, single-use grant. The app does not capture the desktop, camera, microphone or other app audio. Capture stops on episode/source navigation, unmount, Stop casting or shutdown. Protected media can refuse capture. Keep the site player visible; mirroring has live-stream delay and seeks use the original website player.
+
+Classic keeps the original rail. Studio has a permanent labelled sidebar and dashboard navigation. Cinema has horizontal navigation, a wide player and episodes below it. Settings → Interface themes selects structure; accent and typography are separate preferences.
+
+Release notes are bundled offline in app/shared/changelog.ts. New versions show highlights once per profile acknowledgement, with a persistent header action and Settings → Changelog history.
