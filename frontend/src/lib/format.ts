@@ -16,7 +16,7 @@ export function snapshotOf(m: MediaCard, lang: TitleLanguage): MediaSnapshot {
 
 /** Titles ordered for searching on third-party sites (English first, then romaji, synonyms). */
 export function searchTitles(m: MediaCard | MediaDetails, first?: string): string[] {
-  const list = [first, m.title.english, m.title.romaji, m.title.userPreferred, ...('synonyms' in m ? m.synonyms.slice(0, 3) : []), m.title.native];
+  const list = [first, m.title.english, m.title.romaji, m.title.native, m.title.userPreferred, ...('synonyms' in m ? m.synonyms.slice(0, 3) : []), m.title.native];
   return [...new Set(list.filter((t): t is string => !!t && t.trim().length > 0))].slice(0, 8);
 }
 

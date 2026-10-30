@@ -127,6 +127,7 @@ export class CommentsService {
     try {
       const headers = { 'X-MAL-CLIENT-ID': clientId };
       const cacheKey = `mal:topic:${q.mediaId}:${q.episode}`;
+      const cacheContext=this.store.cacheContext();
       let topicId = this.store.cacheGet<number | 0>(cacheKey);
       if (topicId === null) {
         const topics = await requestJson<{ data: { id: number; title: string }[] }>(this.fetchFn, {
@@ -135,7 +136,7 @@ export class CommentsService {
         });
         const topic = topics.data.find((t) => isEpisodeThread(t.title, q.episode) && titleScore(t.title.replace(/episode.*$/i, ''), q.titles) >= 0.5);
         topicId = topic?.id ?? 0;
-        this.store.cacheSet(cacheKey, topicId, topicId ? 86400 : 3600);
+        this.store.cacheSet(cacheKey, topicId, topicId ? 86400 : 3600, cacheContext);
       }
       if (!topicId) return { channel: { ...channel, status: 'empty', message: `No MyAnimeList discussion found for episode ${q.episode}.` }, items: [] };
       const topic = await requestJson<{ data: { title: string; posts: { id: number; created_at: string; body: string; created_by: { name: string; forum_avator?: string } }[] } }>(this.fetchFn, {

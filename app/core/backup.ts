@@ -21,7 +21,8 @@ export class BackupService {
       bookmarks: b.bookmarks.length, skips: b.skips.length, history: b.history.length, themes: b.themes.length, hasPlan: !!b.plan };
   }
   create(appVersion: string): AppBackup {
-    const rows = (table: string) => this.store.db.prepare('SELECT * FROM ' + table).all() as Row[];
+    if(this.store.isIncognito())throw new Error('Exit incognito before exporting app data.');
+    const rows = (table: string) => (this.store.db.prepare('SELECT * FROM ' + table).all() as Row[]).filter(r=>!this.store.isPrivate(Number(r.media_id)));
     const settings = new SettingsService(this.store).get();
     const library = rows('library').map((r) => ({ mediaId: Number(r.media_id), status: r.status, progress: r.progress, score: r.score, updatedAt: r.updated_at }));
     const progress = rows('progress').map((r) => ({ mediaId: Number(r.media_id), episode: r.episode, position: r.position, duration: r.duration, completed: !!r.completed, updatedAt: r.updated_at }));
@@ -31,13 +32,23 @@ export class BackupService {
     const skips = rows('skip_ranges').map((r) => ({ mediaId: Number(r.media_id), kind: r.kind, start: r.start, end: r.end, duration: r.duration }));
     const ids = new Set([...library, ...progress, ...history, ...favourites, ...bookmarks, ...skips].map((r) => r.mediaId));
     const media = [...ids].map((id) => this.store.getSnapshot(id) ?? { id, idMal: null, title: 'Unknown title', cover: '', banner: null, format: null, episodes: null });
-    const themes = this.store.getKv<SavedTheme[]>('themes:v1', []).map((t) => t.preset).filter((t) => themePresetSchema.safeParse(t).success);
+    const themes = this.store.getKv<SavedTheme[]>('themes:v1', []).map((t) => t.preset).filter((t) => themePresetSchema.safeParse(t).success)
+      .map(preset=>({...preset,appearance:{...preset.appearance,accent:preset.appearance.accent==='festival'?'ember' as const:preset.appearance.accent}}));
+    // Preserve the established v1 portable palette values. The seasonal rollout is device-local.
+    const previous=this.store.getKv<{previous:string}>('theme:festival-2026',{previous:'ember'}).previous;
+    const portableAccent=['ember','aqua','violet','sakura','crimson'].includes(previous)?previous:'ember';
+    const appearance={...settings.appearance,accent:settings.appearance.accent==='festival'?portableAccent:settings.appearance.accent};
     return this.validate({ format: 'aniverse.backup', version: 1, appVersion, createdAt: new Date().toISOString(),
-      settings: { appearance: settings.appearance, player: settings.player }, media, library, progress, history, favourites, bookmarks, skips, themes,
-      plan: this.store.getKv('planner:v1', null) });
+      settings: { appearance, player: settings.player }, media, library, progress, history, favourites, bookmarks, skips, themes,
+      plan: this.privatePlan(this.store.getKv('planner:v1', null)) });
+  }
+  private privatePlan(plan:AppBackup['plan']):AppBackup['plan'] {
+    return plan?{...plan,days:plan.days.map(day=>{const items=day.items.filter(item=>!this.store.isPrivate(item.media.id));return {...day,items,minutes:items.reduce((sum,item)=>sum+item.minutes,0)};})}:null;
   }
   restore(input: unknown, applySettings: boolean): BackupSummary {
-    const b = this.validate(input);
+    if(this.store.isIncognito())throw new Error('Exit incognito before importing app data.');
+    const raw=this.validate(input);
+    const b:AppBackup={...raw,media:raw.media.filter(m=>!this.store.isPrivate(m.id)),library:raw.library.filter(r=>!this.store.isPrivate(r.mediaId)),progress:raw.progress.filter(r=>!this.store.isPrivate(r.mediaId)),history:raw.history.filter(r=>!this.store.isPrivate(r.mediaId)),favourites:raw.favourites.filter(r=>!this.store.isPrivate(r.mediaId)),bookmarks:raw.bookmarks.filter(r=>!this.store.isPrivate(r.mediaId)),skips:raw.skips.filter(r=>!this.store.isPrivate(r.mediaId)),plan:this.privatePlan(raw.plan)};
     const summary = this.summary(b);
     const mediaById = new Map(b.media.map((m) => [m.id, m]));
     // Validate everything before opening a transaction. Merge never deletes local records.

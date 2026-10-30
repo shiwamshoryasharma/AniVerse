@@ -78,10 +78,10 @@ export function searchQueries(titles: string[]): string[] {
     if (q.length >= 3 && !out.some((x) => x.toLowerCase() === q.toLowerCase())) out.push(q);
   };
   if (titles[0]) add(clean(titles[0]));
+  for (const title of titles.slice(1,5)) add(clean(title));
   const head = titles[0]?.split(/\s*[:–—]\s*|\s+-\s+/)[0] ?? '';
   if (head.length >= 4) add(clean(head));
-  for (const t of titles.slice(1, 3)) add(clean(t));
-  return out.slice(0, 3);
+  return out.slice(0, 6);
 }
 
 /** Path segment that identifies the title on the site (`/anime/<slug>` → slug). */
@@ -160,6 +160,7 @@ export class SiteNavigator {
       if (this.focusWanted.get(wc.id)) setTimeout(() => void this.focus(wc, true, null), 1200);
     };
     wc.on('dom-ready', restyle);
+    wc.on('did-frame-finish-load',(_event,isMainFrame)=>{if(!isMainFrame&&this.focusWanted.get(wc.id))void this.focusChildren(wc,true);});
     wc.on('did-navigate-in-page', (_e, _url, isMainFrame) => {
       if (isMainFrame && this.focusWanted.get(wc.id)) setTimeout(() => void this.focus(wc, true, null), 1200);
     });
@@ -169,6 +170,19 @@ export class SiteNavigator {
       this.focusWanted.delete(wc.id);
       this.focusGen.delete(wc.id);
     });
+  }
+
+  /** Player documents inside cross-origin embeds need their own layout repair. No media URLs or source data leave the frame. */
+  private async focusChildren(wc:WebContents,on:boolean) {
+    if(wc.isDestroyed())return;
+    for(const frame of wc.mainFrame.framesInSubtree){
+      if(frame===wc.mainFrame||/recaptcha|hcaptcha|turnstile|challenges\.cloudflare\.com/i.test(frame.url))continue;
+      if(wc.isDestroyed()||this.focusWanted.get(wc.id)!==on)return;
+      const code=on
+        ?'(()=>{const result='+pageScript({op:'markPlayer',keep:true})+';if(!result?.found)return;let style=document.getElementById("aniverse-frame-focus");if(!style){style=document.createElement("style");style.id="aniverse-frame-focus";document.documentElement.append(style);}style.textContent='+JSON.stringify(FOCUS_CSS)+';})()'
+        :pageScript({op:'releasePlayer'})+';document.getElementById("aniverse-frame-focus")?.remove();';
+      await frame.executeJavaScript(code).catch(()=>undefined);
+    }
   }
 
   private async page<T>(wc: WebContents, op: PageOp): Promise<T | null> {
@@ -236,6 +250,7 @@ export class SiteNavigator {
 
     const finish = async (ok: boolean, via: OpenEpisodeResult['via'], message: string | null): Promise<OpenEpisodeResult> => {
       const url = wc.isDestroyed() ? '' : wc.getURL();
+      if(ok&&alive()&&(await this.page<{missing:boolean}>(wc,{op:'availability'}))?.missing)return fail('This source no longer has the requested page.',via,'not-found');
       if (ok && alive() && cache && this.onSite(source, url)) {
         this.store.setSiteLink(source.id, req.mediaId, N, url);
         if (!links[0] && !pinned && titlePage) this.store.setSiteLink(source.id, req.mediaId, 0, titlePage);
@@ -254,10 +269,12 @@ export class SiteNavigator {
       status(null);
       return { ok, url, via, focused, message, options };
     };
-    const fail = (message: string | null, via: OpenEpisodeResult['via'] = null) => {
+    const fail = (message: string | null, via: OpenEpisodeResult['via'] = null, failure: OpenEpisodeResult['failure'] = 'unavailable'): OpenEpisodeResult => {
+      failure = !alive() ? 'cancelled' : isChallengeTitle(wc.getTitle()) ? 'blocked' : failure;
+      if (failure === 'blocked') message = 'Complete this source’s security check, then retry the episode.';
       if (alive()) wc.setAudioMuted(false);
       status(null);
-      return { ok: false, url: wc.isDestroyed() ? '' : wc.getURL(), via, focused: false, message, options: EMPTY_OPTIONS };
+      return { ok: false, failure, url: wc.isDestroyed() ? '' : wc.getURL(), via, focused: false, message, options: EMPTY_OPTIONS };
     };
 
     try {
@@ -290,7 +307,7 @@ export class SiteNavigator {
       } else {
         titlePage = await this.searchTitle(wc, source, recipe, req, alive, status);
         if (!alive()) return fail(null);
-        if (!titlePage) return fail(`Couldn’t find this title on ${source.name}. Try another source, or pick it on the site — AniVerse will remember it.`);
+        if (!titlePage) return fail(`Couldn’t find this title on ${source.name}.`, null, 'not-found');
       }
 
       // 3. Title links that already point at an episode (`/watch/<id>/1`): derive N directly.
@@ -309,9 +326,10 @@ export class SiteNavigator {
       // 4. Episode N on the title page (or its watch page).
       const found = await this.openEpisodeOnPage(wc, recipe, N, slugOf(titlePage), alive, status);
       if (!alive()) return fail(null);
-      if (!found) return fail(`Opened the series on ${source.name}, but couldn’t find episode ${N}. Try another source.`, 'title');
+      if (!found) return fail(`Opened the series on ${source.name}, but couldn’t find episode ${N}.`, 'title', 'not-found');
       return finish(true, 'search', null);
     } catch (err) {
+      if(alive()&&(await this.page<{missing:boolean}>(wc,{op:'availability'}))?.missing)return fail('This source no longer has the requested page.',null,'not-found');
       return fail((err as Error).message);
     }
   }
@@ -320,7 +338,7 @@ export class SiteNavigator {
     const season = Math.max(1, ...req.titles.map((t) => seasonOf(t) ?? 1));
     const titleSelector = recipeSelector(recipe, 'titleLink');
     // Make sure discovery (OpenSearch / GET form / SearchAction) has had a chance first.
-    if (!this.registry.get(source.id).searchTemplate) await this.registry.discover(source.id).catch(() => null);
+    if (!this.registry.get(source.id).searchTemplate && !this.store.isPrivate(req.mediaId)) await this.registry.discover(source.id).catch(() => null);
 
     for (const query of searchQueries(req.titles)) {
       if (!alive()) return null;
@@ -349,7 +367,7 @@ export class SiteNavigator {
           await this.settle(wc, alive, 1800, status);
         }
         const check = await this.page<{ score: number; checked: number }>(wc, { op: 'titleCheck', titles: req.titles, season });
-        if (!check || check.checked === 0 || check.score >= 0.6 || hits.length === 1) return wc.getURL();
+        if (!check || check.checked === 0 || check.score >= 0.6) return wc.getURL();
         if (hit !== hits[hits.length - 1]) await this.load(wc, results, alive, status);
       }
     }
@@ -393,7 +411,7 @@ export class SiteNavigator {
   }
 
   private learnFromUrl(source: SourceInfo, url: string, query: string) {
-    if (!this.onSite(source, url)) return;
+    if (!source.partition.startsWith('persist:') || !this.onSite(source, url)) return;
     const variants = [encodeURIComponent(query), encodeURIComponent(query).replace(/%20/g, '+'), query.replace(/ /g, '+'), query];
     for (const v of variants) {
       if (url.includes(v)) {
@@ -523,6 +541,7 @@ export class SiteNavigator {
     }
     if (!on) {
       await this.page(wc, { op: 'releasePlayer' });
+      await this.focusChildren(wc,false);
       return false;
     }
     let resolved = recipe;
@@ -539,6 +558,7 @@ export class SiteNavigator {
         const key = await wc.insertCSS(FOCUS_CSS).catch(() => null);
         if (key && current()) this.focusCss.set(wc.id, key);
         else if (key) await wc.removeInsertedCSS(key).catch(() => undefined);
+        if(current())await this.focusChildren(wc,true);
         return current();
       }
       await sleep(600);

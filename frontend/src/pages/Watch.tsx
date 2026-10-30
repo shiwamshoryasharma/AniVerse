@@ -21,6 +21,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { usePrivacy, useWatchSources } from '../lib/privacy';
+import { PrivateTitleButton } from '../components/Privacy';
+import { SourceFallback, shouldFallback } from '../../../app/shared/sourceFallback';
 import { episodeFromUrl } from '../../../app/core/sources/text';
 import { playbackHealth, type PlaybackHealth, type PlaybackSample } from '../../../app/shared/playback';
 import type { MediaDetails, ProbeResult, SiteOptions, SourceInfo, Stream } from '../../../app/shared/types';
@@ -35,7 +38,7 @@ import { PlaybackRescue } from '../components/PlaybackRescue';
 import { WebSession, type WebSessionControls } from '../components/WebSession';
 import { call, errorText, onEvent } from '../lib/bridge';
 import { availableEpisodes, countdown, cx, formatLabel, mediaRefOf, pendingRelease, snapshotOf, statusLabel, titleOf } from '../lib/format';
-import { keys, useDetails, useLibraryState, useMarkWatched, useMatch, useSaveProgress, useSettings, useSources, useStreams, useToggleFavourite, useUpdateSettings } from '../lib/queries';
+import { keys, useDetails, useLibraryState, useMarkWatched, useMatch, useSaveProgress, useSettings, useStreams, useToggleFavourite, useUpdateSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { interfaceStyle } from '../../../app/shared/interface';
 import { EpisodeCast } from '../components/EpisodeCast';
@@ -49,7 +52,8 @@ export function WatchPage() {
   const params = useParams();
   const mediaId = Number(params.id);
   const { data, error, refetch } = useDetails(mediaId);
-  const { data: sources } = useSources();
+  const { data: sourceLease } = useWatchSources(mediaId);
+  const sources=sourceLease?.sources;
   const { data: state } = useLibraryState(mediaId);
   const [search] = useSearchParams();
   const [, setReleased] = useState(0);
@@ -74,6 +78,9 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const settings = useSettings();
   const updateSettings = useUpdateSettings();
   const lang = settings.appearance.titleLanguage;
+  const privacy=usePrivacy();
+  const privatePlayback=!!privacy.data&&(privacy.data.incognito||privacy.data.privateMediaIds.includes(media.id));
+  const privateNow=useRef(privatePlayback);privateNow.current=privatePlayback;
   const { data: state } = useLibraryState(media.id);
   const saveProgress = useSaveProgress();
   const markWatched = useMarkWatched();
@@ -96,8 +103,30 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const source = enabled.find((s) => s.id === sourceId) ?? null;
 
   const titleVariants = [...new Set([media.title.english, media.title.romaji, media.title.native].filter((t): t is string => !!t))];
-  const [searchTitle, setSearchTitle] = useState(titleVariants[0]);
+  const [titleChoice,setTitleChoice]=useState({mediaId:media.id,title:titleVariants[0]});
+  const searchTitle=titleChoice.mediaId===media.id?titleChoice.title:titleVariants[0];
+  const setSearchTitle=(title:string)=>setTitleChoice({mediaId:media.id,title});
   const ref = useMemo(() => mediaRefOf(media, searchTitle), [media, searchTitle]);
+  const fallbackScope = media.id+':'+episode+':'+searchTitle;
+  const fallback = useRef(new SourceFallback());
+  const selection = useRef({scope:fallbackScope,sourceId});
+  selection.current = {scope:fallbackScope,sourceId};
+  const [unavailable,setUnavailable] = useState<string|null>(null);
+  const [navAttempt,setNavAttempt] = useState(0);
+  const retrying = useRef(false);
+  const sourceUrl = (id:string) => {
+    const params=new URLSearchParams(search);params.delete('local');params.set('source',id);
+    return '/watch/'+media.id+'/'+episode+'?'+params.toString();
+  };
+  const sourceUnavailable = () => {
+    if(!sourceId||localId||retrying.current||selection.current.scope!==fallbackScope||selection.current.sourceId!==sourceId)return;
+    const step=fallback.current.unavailable(fallbackScope,sourceId,sources);
+    if(step.kind==='switch'){
+      const next=enabled.find(s=>s.id===step.sourceId)!;
+      toast.push({level:'info',message:(source?.name??'This source')+' could not open this episode. Trying '+next.name+'…'});
+      navigate(sourceUrl(step.sourceId),{replace:true});
+    }else if(step.kind==='exhausted')setUnavailable(fallbackScope);
+  };
   const match = useMatch(sourceId, ref);
   const mode = match.data?.mode ?? null;
   const adapterEpisodes = match.data?.mode === 'episodes' ? match.data.episodes : null;
@@ -113,7 +142,9 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
 
   const [theater, setTheater] = useState(settings.player.theater);
   const [lightsOff, setLightsOff] = useState(false);
-  const [webContentsId, setWebContentsId] = useState<number | null>(null);
+  const [webContents,setWebContents] = useState<{partition:string|null;id:number|null}|null>(null);
+  const webContentsId = webContents?.partition===(source?.partition??null) ? webContents.id : null;
+  const setWebContentsId = (id:number|null) => setWebContents({partition:source?.partition??null,id});
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const player = useRef<PlayerControls | null>(null);
   const screenHost = useRef<HTMLDivElement | null>(null);
@@ -151,7 +182,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   useEffect(() => onEvent('site.status', (e) => e.webContentsId === webContentsId && setSiteStatus(e.message)), [webContentsId]);
 
   useEffect(() => {
-    if (!navKey || !webContentsId || !sourceId) return;
+    if (!navKey || !webContentsId || !sourceId || retrying.current) return;
     let cancelled = false;
     const adopt = adoptRef.current === episode;
     adoptRef.current = null;
@@ -161,7 +192,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         if (cancelled) return;
         setFocused(r.focused);
         setSiteOptions(r.options);
-        if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
+        if (shouldFallback(r)) sourceUnavailable();
+        else if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
         // Some sites only render their audio/server switches seconds after the player loads.
         if (r.ok && !r.options.types.length && !r.options.servers.length) {
           let found = false;
@@ -189,7 +221,21 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
     };
     // The navigation key captures source, title, webview and episode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navKey]);
+  }, [navKey, navAttempt]);
+
+  useEffect(() => {
+    if(localId||!sourceId||match.isFetching||retrying.current)return;
+    if(match.isError || (match.isSuccess && mode==='episodes' && !adapterEpisode))sourceUnavailable();
+    else if(adapterEpisode && !streams.isFetching && (streams.isError || (streams.isSuccess && !stream)))sourceUnavailable();
+    // Guarded by the current selection and a bounded failed-source set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceId,fallbackScope,match.status,match.isFetching,match.dataUpdatedAt,adapterEpisode,streams.status,streams.isFetching,stream,navAttempt]);
+
+  const retrySources = async () => {
+    retrying.current=true;fallback.current.reset(fallbackScope);setUnavailable(null);
+    try { await match.refetch(); if(adapterEpisode)await streams.refetch(); }
+    finally { retrying.current=false;setNavAttempt(n=>n+1); }
+  };
 
   const toggleFocus = async () => {
     if (!webContentsId) return;
@@ -211,7 +257,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
       .then((r) => {
         setFocused(r.focused);
         setSiteOptions(r.options);
-        if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
+        if (shouldFallback(r)) sourceUnavailable();
+        else if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
       })
       .catch((err) => toast.push({ level: 'error', message: errorText(err) }))
       .finally(() => navKey && setNavDone(navKey));
@@ -233,13 +280,14 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   };
 
   const goEpisode = (n: number, replace = false) => { const file=localId ? adjacentLocal(n) : null; navigate(`/watch/${media.id}/${n}${file ? `?local=${file.id}` : sourceId ? `?source=${sourceId}` : ''}`, { replace }); };
-  const selectSource = (id: string) => navigate(`/watch/${media.id}/${episode}?source=${id}`, { replace: true });
+  const selectSource = (id: string) => { fallback.current.reset(fallbackScope);setUnavailable(null);if(id===sourceId)void retrySources();else navigate(sourceUrl(id), { replace: true }); };
   const hasNext = localId ? !!adjacentLocal(episode+1) : episode < total;
   const hasPrev = localId ? !!adjacentLocal(episode-1) : episode > 1;
   const next = () => hasNext && goEpisode(episode + 1);
   const prev = () => hasPrev && goEpisode(episode - 1);
 
   const record = (position: number, duration: number) => {
+    if(privateNow.current)return;
     if (!duration || duration < 30) return;
     progressAt.current = { position, duration };
     saveProgress.mutate(
@@ -342,6 +390,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         Add website or official channel URLs to <span className="code">config/streaming-sites.txt</span>, or enable sources in Settings → Sources.
       </Empty>
     );
+  } else if (unavailable === fallbackScope) {
+    screen = <Empty title="No enabled source could open this episode"><p>Tried the enabled sources once. Choose a source below or retry when it becomes available.</p><button className="btn" onClick={()=>void retrySources()}><RotateCw size={15}/>Retry sources</button></Empty>;
   } else if (match.isLoading) {
     screen = <Loading label={`Looking up ${title} on ${source.name}…`} />;
   } else if (match.error) {
@@ -349,7 +399,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   } else if (mode === 'web' && siteSrc) {
     screen = (
       <>
-        <WebSession source={source} src={siteSrc} toolbar={false} controls={siteControls} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />
+        <WebSession key={source.partition} source={source} src={siteSrc} toolbar={false} controls={siteControls} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />
         {((siteBusy && !needsUser) || choosing) && (
           <CatLoader label={choosing ?? siteStatus ?? `Loading episode ${episode}…`} hint={slowKey === navKey && !choosing ? `${source.name} is taking a while.` : undefined}>
             {slowKey === navKey && !choosing && (
@@ -374,9 +424,9 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   } else if (streams.error || !stream) {
     screen = <ErrorState error={streams.error ?? new Error('No playable stream.')} onRetry={() => void streams.refetch()} />;
   } else if (stream.type === 'youtube') {
-    screen = <WebSession source={source} src={`https://www.youtube.com/embed/${stream.videoId}?autoplay=${settings.player.autoplay ? 1 : 0}&rel=0&playsinline=1`} referrer={APP_REFERRER} toolbar={false} onWebContents={setWebContentsId} />;
+    screen = <WebSession key={source.partition} source={source} src={`https://www.youtube.com/embed/${stream.videoId}?autoplay=${settings.player.autoplay ? 1 : 0}&rel=0&playsinline=1`} referrer={APP_REFERRER} toolbar={false} onWebContents={setWebContentsId} />;
   } else if (stream.type === 'web') {
-    screen = <WebSession source={source} src={stream.url} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />;
+    screen = <WebSession key={source.partition} source={source} src={stream.url} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />;
   } else {
     const resume = settings.player.resume ? state?.progress.find((p) => p.episode === episode && !p.completed) : undefined;
     screen = (
@@ -429,7 +479,9 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
 
   return (
     <div className={cx('page wide', lightsOff && 'lights-off')}>
+      {privatePlayback&&<div className="privacy-banner" role="status">Private playback · no new history, progress, insights or account sync. Website storage is temporary. Existing remote records are not removed.</div>}
       <div className="watch-heading"><div><span className="eyebrow">NOW WATCHING</span><h1 className="ellipsis">{title}<span>Episode {episode}</span></h1></div>
+        <PrivateTitleButton mediaId={media.id}/>
         <EpisodeCast key={media.id + ':' + episode + ':' + (sourceId ?? localId)} native={player} webContentsId={webContentsId} title={`${title} · Episode ${episode}`} />
       </div>
       <div className={cx('watch', theater && 'theater')}>
@@ -457,7 +509,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
               <Lightbulb size={14} /> {lightsOff ? 'Lights on' : 'Lights off'}
             </button>
             <span className="sep" />
-            <button className={cx('btn ghost', watched.has(episode) && 'on')} onClick={toggleWatched}>
+            <button disabled={privatePlayback} className={cx('btn ghost', watched.has(episode) && 'on')} onClick={toggleWatched}>
               <Check size={14} /> {watched.has(episode) ? 'Watched' : 'Mark watched'}
             </button>
             <button className={cx('btn ghost', state?.favourite && 'on')} onClick={() => toggleFav.mutate(snapshot)}>
@@ -490,7 +542,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
           {isSite && webContentsId && <SiteAnime4K key={siteKey + ':anime4k'} webContentsId={webContentsId} surface={screenHost} />}
           {isSite && webContentsId && <PlaybackRescue key={siteKey + ':' + episode} probe={playbackProbe} health={playbackStatus} webContentsId={webContentsId} busy={siteBusy || !!choosing} />}
 
-          {(local.data || webContentsId || (stream && stream.type !== 'web' && stream.type !== 'youtube')) && <EpisodeToolkit key={media.id+':'+episode+':'+(sourceId ?? localId)} media={snapshot} episode={episode} sourceId={sourceId} webContentsId={localId?null:webContentsId} native={player} probe={localId?null:playbackProbe} initialTime={search.has('t') && Number.isFinite(Number(search.get('t'))) && Number(search.get('t'))>=0 ? Number(search.get('t')) : null} />}
+          {!privatePlayback && (local.data || webContentsId || (stream && stream.type !== 'web' && stream.type !== 'youtube')) && <EpisodeToolkit key={media.id+':'+episode+':'+(sourceId ?? localId)} media={snapshot} episode={episode} sourceId={sourceId} webContentsId={localId?null:webContentsId} native={player} probe={localId?null:playbackProbe} initialTime={search.has('t') && Number.isFinite(Number(search.get('t'))) && Number(search.get('t'))>=0 ? Number(search.get('t')) : null} />}
 
           <div className="card source-bar">
             <div className="now">

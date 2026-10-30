@@ -43,11 +43,12 @@ export class YouTubeAdapter implements SourceAdapter {
   }
 
   async match(source: SourceInfo, entry: SiteEntry, media: MediaRef): Promise<SourceMatch> {
+    const cacheContext=this.store.cacheContext();
     const channel = await this.resolveChannel(source.id, entry);
     const cacheKey = `yt:eps:${channel.channelId}:${media.id}:${this.apiKey() ? 'api' : 'rss'}`;
     const cached = this.store.cacheGet<{ episodes: SourceEpisode[]; note: string | null }>(cacheKey);
     const result = cached ?? (this.apiKey() ? await this.episodesViaApi(channel, media) : await this.episodesViaRss(source.id, channel, media));
-    if (!cached) this.store.cacheSet(cacheKey, result, result.episodes.length ? 6 * 3600 : 1800);
+    if (!cached) this.store.cacheSet(cacheKey, result, result.episodes.length ? 6 * 3600 : 1800, cacheContext);
     return {
       sourceId: source.id,
       mode: 'episodes',

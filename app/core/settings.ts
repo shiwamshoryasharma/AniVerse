@@ -1,4 +1,4 @@
-import type { DeepPartial, Settings } from '../shared/types';
+import type { AccentName, DeepPartial, Settings } from '../shared/types';
 import type { Store } from './db/store';
 import { clamp, deepMerge } from './util';
 import { DEFAULT_UPSCALE, upscaleSchema } from '../shared/upscale';
@@ -67,7 +67,31 @@ export class SettingsService {
     return this.cache;
   }
 
+  /** One seasonal rollout; users can opt out immediately. Stored only on this device. */
+  applySeasonalTheme(now=new Date()):void {
+    const key='theme:festival-2026';
+    const expired=now.getTime()>=new Date(2027,0,1).getTime();
+    const state=this.store.getKv<{previous:AccentName;automatic:boolean}|null>(key,null);
+    if(!state){
+      const previous=this.cache.appearance.accent==='festival'?'ember':this.cache.appearance.accent;
+      this.store.setKv(key,{previous,automatic:!expired});
+      if(!expired)this.persist({...this.cache,appearance:{...this.cache.appearance,accent:'festival'}});
+    }else if(state.automatic&&expired){
+      this.store.setKv(key,{...state,automatic:false});
+      if(this.cache.appearance.accent==='festival')this.persist({...this.cache,appearance:{...this.cache.appearance,accent:state.previous}});
+    }
+  }
+  private persist(next:Settings):Settings {
+    this.cache=sanitize(next);this.store.setKv(KEY,this.cache);
+    for(const listener of this.listeners)listener(this.cache);
+    return this.cache;
+  }
   update(patch: DeepPartial<Settings>): Settings {
+    if(patch.appearance?.accent){
+      const previous=this.cache.appearance.accent==='festival'
+        ?this.store.getKv<{previous:AccentName}>('theme:festival-2026',{previous:'ember'}).previous:this.cache.appearance.accent;
+      this.store.setKv('theme:festival-2026',{previous,automatic:patch.appearance.accent==='festival'&&Date.now()<new Date(2027,0,1).getTime()});
+    }
     this.cache = sanitize(deepMerge(this.cache, patch));
     this.store.setKv(KEY, this.cache);
     for (const listener of this.listeners) listener(this.cache);

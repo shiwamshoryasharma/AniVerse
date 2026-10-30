@@ -37,6 +37,7 @@ const ACCENTS: [AccentName, string, string][] = [
   ['violet', '#8b6cff', 'Violet'],
   ['sakura', '#ff6fae', 'Sakura'],
   ['crimson', '#ff4d5e', 'Crimson'],
+  ['festival', '#ff9c42', 'Diwali × Halloween'],
 ];
 
 export function SettingsPage() {
@@ -523,6 +524,8 @@ function PrivacySection() {
   const toast = useToast();
   const blocked = stats ? Object.values(stats.blocked).reduce((a, b) => a + b, 0) : 0;
   const popups = stats ? Object.values(stats.popupsBlocked).reduce((a, b) => a + b, 0) : 0;
+  const [updating,setUpdating]=useState(false);
+  const qc=useQueryClient();
   return (
     <>
       <Group title="Blocking">
@@ -536,7 +539,12 @@ function PrivacySection() {
         >
           <Switch label="Block ads" on={s.adblock} onChange={(v) => save({ privacy: { adblock: v } })} />
         </Setting>
-        <Setting title="Block popups and cross-site redirects" desc={`${popups.toLocaleString()} blocked this session. Same-site links still open inside the site's session.`}>
+        <Setting title="Filter updates" desc={stats?.error ?? 'Checks hourly and refreshes lists after 24 hours. Reload an open source page after updating to apply new cosmetic rules.'}>
+          <button className="btn sm" disabled={updating||stats?.updating} onClick={()=>{setUpdating(true);void call('adblock.update').then(next=>{qc.setQueryData(keys.adblock,next);toast.push({level:'success',message:'Ad-blocking filters updated. Reload the source page to apply cosmetic rules.'});}).catch(err=>toast.push({level:'error',message:errorText(err)})).finally(()=>setUpdating(false));}}>
+            <RefreshCw size={14}/>{updating||stats?.updating?'Updating…':'Update filters'}
+          </button>
+        </Setting>
+        <Setting title="Block popups and cross-site redirects" desc={popups.toLocaleString()+' blocked this session. Blocks all new windows, including same-site popups. Regular same-site navigation and embedded players keep working.'}>
           <Switch label="Block popups" on={s.blockPopups} onChange={(v) => save({ privacy: { blockPopups: v } })} />
         </Setting>
       </Group>

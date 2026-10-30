@@ -127,6 +127,7 @@ try {
   await page.getByRole('button', { name: 'Save note', exact: true }).click();
   await page.waitForFunction(async () => (await window.aniverse.invoke('toolkit.bookmarks', {}))[0].note === 'Updated local note');
   await page.getByLabel('Search scene bookmarks').fill('Updated');
+  await page.locator('.scene-card').waitFor();
   assert.equal(await page.locator('.scene-card').count(), 1);
   await capture('bookmarks');
   check('bookmark editing and search through validated IPC');

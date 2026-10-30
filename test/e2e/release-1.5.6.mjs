@@ -158,7 +158,7 @@ try {
     session.fromPartition('persist:src-mirror-fixture-test').protocol.handle('https',request=>{
       if(new URL(request.url).hostname==='media-fixture.test')return new Response(bytes,{headers:{'Content-Type':'video/mp4'}});
       if(new URL(request.url).hostname!=='player-fixture.test')return new Response('<!doctype html><html><body style="margin:0;background:black"><iframe src="https://player-fixture.test/frame" style="border:0;width:100vw;height:100vh" allow="autoplay"></iframe></body></html>',{headers:{'Content-Type':'text/html'}});
-      return new Response('<!doctype html><html><head><title>Fixture Series Episode 1</title></head><body style="margin:0;background:black"><video style="width:100vw;height:100vh;object-fit:contain" controls loop autoplay src="https://media-fixture.test/video.mp4"></video></body></html>',{headers:{'Content-Type':'text/html'}});
+      return new Response('<!doctype html><html><head><title>Fixture Series Episode 1</title></head><body style="margin:0;background:black"><div style="width:720px;height:405px;position:relative;transform:translate(30px,80px)"><video style="position:absolute;left:20px;top:100px;width:500px;height:281px;object-fit:cover" controls loop autoplay src="https://media-fixture.test/video.mp4"></video></div></body></html>',{headers:{'Content-Type':'text/html'}});
     });
   },readFileSync(clip).toString('base64'));
   await page.evaluate(()=>window.aniverse.invoke('sources.pin',{sourceId:'mirror-fixture-test',mediaId:7,url:'https://mirror-fixture.test/episode-1'}));
@@ -168,6 +168,9 @@ try {
   await page.waitForSelector('.screen .cat-loader',{state:'detached',timeout:45000});
   await until(async()=>app.evaluate(async({webContents},id)=>!!(await webContents.fromId(id).mainFrame.framesInSubtree.find(frame=>frame.url.includes('player-fixture.test'))?.executeJavaScript("document.querySelector('video')?.readyState>=2")),guest));
   await app.evaluate(async({webContents},id)=>webContents.fromId(id).mainFrame.framesInSubtree.find(frame=>frame.url.includes('player-fixture.test')).executeJavaScript("document.querySelector('video').play()",true),guest);
+  const innerBounds=await app.evaluate(async({webContents},id)=>webContents.fromId(id).mainFrame.framesInSubtree.find(frame=>frame.url.includes('player-fixture.test')).executeJavaScript('(()=>{const r=document.querySelector("video").getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,vw:innerWidth,vh:innerHeight,fit:getComputedStyle(document.querySelector("video")).objectFit};})()'),guest);
+  assert.ok(Math.abs(innerBounds.x)<1&&Math.abs(innerBounds.y)<1&&Math.abs(innerBounds.w-innerBounds.vw)<1&&Math.abs(innerBounds.h-innerBounds.vh)<1&&innerBounds.fit==='contain','Cross-origin player iframe must fill its viewport before filtering');
+  check('Normal playback repairs cropped and offset media inside a cross-origin player iframe',innerBounds);
   const websiteMetrics=await page.evaluate(()=>({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,zoom:getComputedStyle(document.body).zoom}));
   const zoomBefore=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.getZoomFactor());
   await page.getByRole('button',{name:'Cast to TV',exact:true}).click();

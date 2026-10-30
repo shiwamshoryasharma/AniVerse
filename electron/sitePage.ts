@@ -20,7 +20,8 @@ export type PageOp =
   | { op: 'releasePlayer' }
   | { op: 'titleCheck'; titles: string[]; season: number }
   | { op: 'siteOptions' }
-  | { op: 'pageInfo' };
+  | { op: 'pageInfo' }
+  | { op: 'availability' };
 
 export interface RawSiteOption {
   pick: string;
@@ -114,6 +115,11 @@ function PAGE_FN(A: PageOp): unknown {
   const SECTION = /^(episodes?|details?|info(rmation)?|overview|synopsis|description|summary|comments?|reviews?|recommend(ed|ations?)|related|characters?|staff|trailers?|more like this|you (may|might) also like|seasons?|servers?|share|genres?)\b/i;
   const NOT_TITLE = /\/(genres?|filter|search|browse|community|users?|profile|tags?|studios?|producers?|types?|status|seasons?|years?|login|register|signup|news|blog|discuss|forum|az-list|schedule|contact|faq|dmca|terms|privacy|random|requests?)(\/|$)/i;
 
+  if (A.op === 'availability') {
+    const headings=[document.title,...document.querySelectorAll('h1,h2,[role="alert"]')].map(value=>typeof value==='string'?value:text(value));
+    const missing=headings.some(value=>/\b(?:page not found|content not found|episode not found|video unavailable|content unavailable|content removed|404.{0,30}not found|410.{0,30}gone)\b/i.test(value));
+    return {missing:missing&&!document.querySelector('video,iframe[src]')};
+  }
   if (A.op === 'pageInfo') {
     return { url: location.href, title: document.title, ready: document.readyState, width: innerWidth, height: innerHeight };
   }
@@ -401,9 +407,11 @@ function PAGE_FN(A: PageOp): unknown {
 
   // Marks the page's player (and its ancestors) for FOCUS_CSS. Returns the element's tag, or null.
   const markPlayer = (selector?: string): string | null => {
-    document.querySelectorAll('[data-aniverse-player],[data-aniverse-chain]').forEach((e) => {
+    document.querySelectorAll('[data-aniverse-player],[data-aniverse-chain],[data-aniverse-media],[data-aniverse-media-chain]').forEach((e) => {
       e.removeAttribute('data-aniverse-player');
       e.removeAttribute('data-aniverse-chain');
+      e.removeAttribute('data-aniverse-media');
+      e.removeAttribute('data-aniverse-media-chain');
     });
     const ratioOk = (el: Element, min = 1.1, max = 2.6) => {
       const r = el.getBoundingClientRect();
@@ -435,6 +443,14 @@ function PAGE_FN(A: PageOp): unknown {
     }
     if (!target) return null;
     target.setAttribute('data-aniverse-player', '');
+    const picture = target.matches('video,iframe') ? target : [...target.querySelectorAll('video,iframe')]
+      .filter(el => el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) && area(el)>0 &&
+        !/recaptcha|hcaptcha|turnstile|challenges\.cloudflare\.com/i.test(el.getAttribute('src') || ''))
+      .sort((a,b)=>area(b)-area(a))[0];
+    if (picture) {
+      picture.setAttribute('data-aniverse-media','');
+      for(let p=picture.parentElement;p&&p!==target;p=p.parentElement)p.setAttribute('data-aniverse-media-chain','');
+    }
     for (let p = target.parentElement; p && p !== document.documentElement; p = p.parentElement) p.setAttribute('data-aniverse-chain', '');
     return target.tagName;
   };
@@ -452,7 +468,7 @@ function PAGE_FN(A: PageOp): unknown {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const check = () => {
           const current = document.querySelector('[data-aniverse-player]');
-          if (!current || !current.isConnected || area(current) < 240 * 135) markPlayer(keeper.__aniverseKeeperSelector);
+          if (!current || !current.isConnected || area(current) < 240 * 135 || !document.querySelector('[data-aniverse-media]')) markPlayer(keeper.__aniverseKeeperSelector);
         };
         keeper.__aniverseKeeper = new MutationObserver(() => {
           clearTimeout(timer);
@@ -467,9 +483,11 @@ function PAGE_FN(A: PageOp): unknown {
   if (A.op === 'releasePlayer') {
     keeper.__aniverseKeeper?.disconnect();
     keeper.__aniverseKeeper = undefined;
-    document.querySelectorAll('[data-aniverse-player],[data-aniverse-chain]').forEach((e) => {
+    document.querySelectorAll('[data-aniverse-player],[data-aniverse-chain],[data-aniverse-media],[data-aniverse-media-chain]').forEach((e) => {
       e.removeAttribute('data-aniverse-player');
       e.removeAttribute('data-aniverse-chain');
+      e.removeAttribute('data-aniverse-media');
+      e.removeAttribute('data-aniverse-media-chain');
     });
     return true;
   }
@@ -490,6 +508,19 @@ html:has([data-aniverse-player]), body:has([data-aniverse-player]) { overflow: h
 [data-aniverse-player] { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important;
   max-height: none !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important;
   z-index: 2147483647 !important; background: #000 !important; transform: none !important; aspect-ratio: auto !important; }
+[data-aniverse-player], [data-aniverse-media-chain] { box-sizing: border-box !important; content-visibility: visible !important; }
+[data-aniverse-media-chain] {
+  position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important;
+  min-width: 0 !important; min-height: 0 !important; max-width: none !important; max-height: none !important;
+  margin: 0 !important; padding: 0 !important; border: 0 !important; transform: none !important;
+  filter: none !important; perspective: none !important; contain: none !important; overflow: visible !important; aspect-ratio: auto !important;
+}
+[data-aniverse-media]:not([data-aniverse-player]) {
+  position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important;
+  min-width: 0 !important; min-height: 0 !important; max-width: none !important; max-height: none !important;
+  margin: 0 !important; padding: 0 !important; border: 0 !important; transform: none !important; aspect-ratio: auto !important;
+}
+video[data-aniverse-media] { object-fit: contain !important; object-position: center !important; }
 `;
 
 /** AniVerse scrollbars inside source pages, so every scroll surface matches the app. */

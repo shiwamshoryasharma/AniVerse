@@ -110,10 +110,13 @@ export class GoogleDriveService {
   async export(): Promise<DriveState> {
     return this.run(async () => {
       if (!this.data?.tokens) throw new Error('Connect Google Drive first.');
-      const backup = this.backups.create(this.version);
       const folder = await this.client.folder(this.data.folderId, true);
       if (folder.capabilities?.canEdit === false) throw new Error('This Drive folder is read-only.');
-      await this.client.upload(folder.id, JSON.stringify(backup), (data) => { this.backups.validate(data); });
+      const privacyContext=this.store.cacheContext();
+      const backup=this.backups.create(this.version);
+      await this.client.upload(folder.id, JSON.stringify(backup), (data) => { this.backups.validate(data); },()=>{
+        if(this.store.cacheContext()!==privacyContext||this.store.isIncognito())throw new Error('Privacy settings changed during export. Export again to build a fresh backup.');
+      });
       this.data.folderId = folder.id; this.store.setKv('drive:lastExport', Date.now()); this.save();
       return this.snapshot();
     });

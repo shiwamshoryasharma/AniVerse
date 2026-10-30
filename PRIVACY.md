@@ -1,6 +1,6 @@
 # Privacy and local data
 
-_Last updated: 29 October 2026 · AniVerse 1.5.2_
+_Last updated: 30 October 2026 · AniVerse 1.5.8_
 
 AniVerse has no account system or developer-operated usage-analytics endpoint of its own. Most personal records stay on the device. Websites and external services receive requests when their features are used.
 
@@ -69,3 +69,19 @@ When you select a TV for a website episode, AniVerse can capture the selected so
 Windows wireless display is a separate, optional system projection route. Its menu explains that Windows can share your screen and audio, including other visible apps. Windows controls discovery, pairing, display/audio modes and disconnection. AniVerse opens fixed Windows system destinations; it does not read or export the Windows device list.
 
 Compatibility upscaling requests video-only capture of the selected owned source view, including rendered player frames. It captures no desktop or audio and records no file. Original source audio continues independently. Capture is stopped on disable, explicit Stop, navigation or episode exit. This recovery path does not extract stream URLs or remove protected-media restrictions.
+
+## Incognito and private titles
+
+The header's **Incognito** control starts a temporary app session. **Keep private** on a title stores a persistent, device-local rule. Both prevent new playback progress, history, watched updates, watch-insight samples, learned watch links and AniList/MyAnimeList sync jobs. Existing queued jobs for a newly private title are removed; provider imports skip it. A request already sent before privacy was enabled cannot be undone.
+
+Private website players use fresh memory-only sessions, without normal cookies or logins. Ending incognito clears those sessions. Leaving a permanently private title clears its leased session; revisiting starts another. Incognito is off after restarting; private-title rules persist locally and are not exported. During global incognito, metadata response caches and snapshots stay in memory, manual library/favourite saves and app-data import/export are disabled, and account sync is suspended.
+
+Permanent private titles can retain manually saved local library entries, but future provider sync and newly created app-data backups exclude their title records. Imports respect this device's private-title rules. Existing local progress is preserved without new updates and hidden from history/continue lists while private. Existing external records, previously exported files and remote backups are not deleted automatically.
+
+This is app privacy, not anonymous networking. Websites, metadata providers, the network and a selected cast receiver can still receive requests or playback information. Chrome casting uses its own app-owned profile; its browser/receiver records are outside AniVerse's watch-history database. Use of casting and external-browser actions remains explicit.
+
+## Seasonal appearance
+
+The 2026 festive palette is an automatic local rollout through December 31, 2026. Its device-local marker remembers the prior accent for restoration on January 1, 2027 and records an early opt-out. The palette remains selectable after the automatic period. It changes appearance rather than sending activity to any service.
+
+Portable v1 app-data backups use the prior standard accent (or Ember) while the festive palette is active. Saved festive presets use Ember in the backup. This keeps established portable colour values compatible; the automatic seasonal rollout marker is not exported. Standalone theme JSON can retain the festive palette for current AniVerse versions.

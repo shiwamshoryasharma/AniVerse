@@ -61,3 +61,19 @@ Version 1 adds local Workspace and Episode Toolkit seams. Read [workspace.md](wo
 electron/cast/chromeCast.ts owns the optional installed Chrome process, isolated cast-chrome profile, private inherited CDP pipe and secret loopback companion. cdpPipe.ts frames and bounds messages; chromePlayer.ts bundles hls.js through scripts/build.mjs. No debugging TCP port or normal Chrome profile is used. CastService accepts a device-aware CastTransport factory; Chrome devices are remembered only after trusted cast.chromeDevices. Chrome media URLs use 127.0.0.1; TVs receive Chrome's tab stream rather than fetching AniVerse HLS from the LAN. ChromeCastPicker is shared by website/native menus.
 
 Retain explicit lifetime/ownership: user-triggered launch, companion-only target, teardown on navigation/closure/route loss, pending-client revocation and idle discovery timeout. Chrome's input decode resolution and actual TV output are different observations. test/e2e/chrome-cast.mjs tests the former; a physical receiver is needed to test the latter.
+
+### Windows interface composition (1.5.8)
+
+electron/uiRendering.ts owns a small device-local graphics.json startup preference. Main reads it before ready after applying ANIVERSE_DATA_DIR, defaults Windows to Stable UI, and uses disable-gpu-compositing. app.setUiRendering only writes the next-start choice; app.restart is an explicit trusted-host action. AppInfo.graphics.uiRendering reports active/preferred/restart state. Do not move this hardware-specific startup choice into portable/synced Settings without resolving early-startup availability.
+
+Stable UI changes window composition, not all GPU work. Live WebGL/video-codec and native/captured Anime4K checks must accompany compositor changes. GraphicsPanel exposes the tradeoff. UI backdrop filters are removed; source/video filtering remains separate.
+
+### 1.5.8 search/privacy/player extensions
+
+Metadata discovery broadens sparse multiword results through a bounded first-word query and ranks English/romaji/native/synonym matches with small typo tolerance. It remains source-independent AniList discovery, not a live scraped source catalogue. Navigation tries up to six aliases and retains playback title/season/episode verification.
+
+Private rules live in private_titles; incognito and metadata cache epochs are memory state. SessionManager issues UUID-based nonpersist partitions and validates their ownership. useWatchSources has no long-lived cached leases. Private storage is released on leaving; normal cookies are retained. Sync/backup/workspace safeguards run in the main process. Drive upload checks privacy again after token acquisition, immediately before transmission.
+
+FOCUS_CSS normalizes media/ratio paths and the original video stays in place. Subframe focus is reversible and reapplied on frame load. upscaleGuest calculates overlay coordinates in the containing block, including scaling transforms. Adblocker owns session hooks, single-flight refresh, offline cache fallback and per-frame cosmetic dispatch.
+
+The festival rollout marker is device-local KV state; the selectable festival accent is part of visual settings/presets. Its automatic lifetime ends at local January 1, 2027 without changing the chosen structural layout.

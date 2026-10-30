@@ -1,8 +1,8 @@
 # AniVerse memory index
 
-Last inspected: 2026-10-29, Asia/Calcutta. Repository: `E:\14-OCT-2026\aniverse`.
+Last inspected: 2026-10-30, Asia/Calcutta. Repository: `E:\14-OCT-2026\aniverse`.
 
-AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 1.5.7; read the current package file before relying on versions.
+AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 1.5.8; read the current package file before relying on versions.
 
 Read the relevant reference only:
 
@@ -20,3 +20,5 @@ At inspection, `test/images/` contained only `.gitkeep`. Do not claim an image-b
 Memory records observations, not proof of current runtime health. Prefer current source and a fresh targeted check over historical pass claims. When updating this memory, record the date, source or command, outcome, and any unverified part. Keep credentials, configured site identities, browser profile contents, and copied private notes out of these files.
 
 Skills: [development](../skills/aniverse-development/SKILL.md), [source navigation](../skills/aniverse-source-navigation/SKILL.md), [Workspace](../skills/aniverse-workspace/SKILL.md), [validation](../skills/aniverse-validation/SKILL.md).
+
+Current 1.5.8 scope includes stable rendering, reversible normal/4K player layout, broad alias search, bounded enabled-source recovery, main-process private playback and memory-session leases, blocker updates, episode cards, and the temporary 2026 festive palette. Its automatic rollout expires January 1, 2027; portable v1 backups keep standard colour values. See status/architecture for verified paths and limits.

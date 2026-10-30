@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import type { ListStatus, MediaDetails } from '../../../app/shared/types';
 import { hideEpisode } from '../../../app/shared/workspace';
+import { PrivateTitleButton } from '../components/Privacy';
 import { SpoilerGuard } from '../components/SpoilerGuard';
 import { ErrorState, Loading, SourceIcon } from '../components/common';
 import { Select } from '../components/controls';
@@ -90,7 +91,7 @@ function Details({ media }: { media: MediaDetails }) {
                 </button>
               ))}
             </div>
-            <div className="row wrap" style={{ gap: 14 }}>
+            <div className="row wrap" style={{ gap: 14 }}><PrivateTitleButton mediaId={media.id}/>
               {release ? (
                 <button className="cta" onClick={() => navigate(`/watch/${media.id}/1`)} title={release.label}>
                   <span className="row">

@@ -77,3 +77,21 @@ A unique receiver name starts tab mirroring through Chrome’s Cast API. Duplica
 Opening a picker does not launch Windows projection or change AniVerse zoom/DPI. The website dialog dims its backdrop without blur. Windows Miracast is a separate optional section with explicit screen-sharing and display-mode guidance.
 
 The 4K option controls sender filtering/encoding, not Chrome’s final mirroring resolution. Chrome/receiver/network capabilities determine TV quality. Physical TV casting and lip sync require hardware validation.
+
+## Stable UI composition (1.5.8)
+
+On Windows, AniVerse defaults to software window composition using disable-gpu-compositing. It does not call disableHardwareAcceleration or disable GPU video codecs/WebGL globally. The validation host retained the NVIDIA WebGL renderer and hardware video decode/encode flags; native and captured-video Anime4K continued to work.
+
+Settings → Graphics & GPU offers Stable / Accelerated UI with active/preferred/restart status. electron/uiRendering.ts reads the small device-local graphics.json before ready/GPU initialization, after the test data-directory override. The preference is separate from portable/synced Settings because it depends on the local driver and must be available before the database bootstrap. Changing it only writes the next-start choice; restart remains an explicit user action.
+
+Interface backdrops no longer apply blur. Existing dimming/colours remain, and decorative image effects are separate. Stable composition can increase CPU/readback cost; acceleration remains available for unaffected systems. Renderer-mode and scaling checks do not certify every driver or display setup.
+
+## Source recovery, search and privacy (1.5.8)
+
+Catalogue search uses English, romaji and Japanese aliases with nearby word matches. Website navigation tries supplied title variants, verifies candidates, and switches to the next enabled source when a title, episode or rendered page is missing. Each source is tried once per selection; Retry sources starts a new pass. Challenges and cancelled navigation do not trigger a loop. Availability is determined from the rendered source, not a global scraped catalogue.
+
+Focused players now normalize the selected video and its internal ratio wrappers, including loaded player frames. Leaving focus removes these markers and styles. Direct Anime4K overlays calculate coordinates inside their real containing block; they do not replace the source media element or its audio timeline.
+
+Popup protection blocks all new windows, including same-site popups, while ordinary same-site navigation and player iframes remain available. Filters check hourly and refresh after 24 hours. Privacy settings has Update filters; reload an open page to apply new cosmetic rules. Offline failures retain working cached rules.
+
+Private viewing controls and their limits are documented in [PRIVACY.md](../PRIVACY.md).

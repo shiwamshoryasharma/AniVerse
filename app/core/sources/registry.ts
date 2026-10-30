@@ -130,7 +130,7 @@ export class SourceRegistry {
     if (!source.enabled) throw new AppError('invalid-input', `${source.name} is disabled in Settings → Sources.`);
     const adapter = this.adapter(source.kind);
     let current = source;
-    if (source.kind === 'web' && !source.searchTemplate) {
+    if (source.kind === 'web' && !source.searchTemplate && !this.store.isPrivate(media.id)) {
       current = await this.discover(id).catch(() => source);
     }
     const result = await adapter.match(current, this.entry(id), media, this.store.getPin(id, media.id));

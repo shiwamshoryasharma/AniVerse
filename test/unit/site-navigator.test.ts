@@ -21,7 +21,7 @@ describe('site navigator helpers', () => {
   });
 
   it('builds search-friendly queries', () => {
-    expect(searchQueries(['Frieren: Beyond Journey’s End', 'Sousou no Frieren'])).toEqual(['Frieren Beyond Journeys End', 'Frieren', 'Sousou no Frieren']);
+    expect(searchQueries(['Frieren: Beyond Journey’s End', 'Sousou no Frieren'])).toEqual(['Frieren Beyond Journeys End', 'Sousou no Frieren', 'Frieren']);
     expect(searchQueries(['Re:ZERO -Starting Life in Another World-'])).toEqual(['Re ZERO Starting Life in Another World']);
     expect(searchQueries(['One Piece', 'ONE PIECE'])).toEqual(['One Piece']);
   });

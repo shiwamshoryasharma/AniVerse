@@ -5,7 +5,7 @@
 .release-dialog[open] { display:flex; flex-direction:column; }
 .release-dialog-heading,.release-dialog-footer { flex:none; }
 .release-dialog-body { min-height:0; overflow:auto; }
-.release-dialog::backdrop { background:#02040bbd; backdrop-filter:blur(6px); }
+.release-dialog::backdrop { background:#02040bbd; backdrop-filter:none; }
 .release-dialog-heading { display:flex; justify-content:space-between; align-items:center; padding:24px 28px; border-bottom:1px solid var(--line); }
 .release-dialog-heading strong { display:block; font-size:16px; }
 .release-eyebrow { display:block; font-size:10px; color:var(--accent); font-weight:750; letter-spacing:.14em; margin-bottom:4px; }

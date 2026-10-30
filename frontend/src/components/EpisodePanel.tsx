@@ -1,4 +1,4 @@
-import { Check, LayoutGrid, List, Search } from 'lucide-react';
+import { Check, LayoutGrid, List, Search, Play, EyeOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { hideEpisode } from '../../../app/shared/workspace';
 import { cx } from '../lib/format';
@@ -47,7 +47,7 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
     <div className="card ep-panel">
       <div className="ep-panel-head">
         <div className="row between">
-          <strong>Episodes</strong>
+          <strong>Episodes <span className="chip">{total}</span></strong>
           <span className="faint" style={{ fontSize: 'var(--fs-xs)' }}>
             {watched.size}/{total} watched{sourceLabel ? ` · ${sourceLabel}` : ''}
           </span>
@@ -92,10 +92,16 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
               {watched.has(n) && n !== current ? <Check size={13} /> : n}
             </button>
           ) : (
-            <button key={n} ref={n === current ? activeRef : undefined} className={cx('ep-row', cls)} title={tip} onClick={() => onSelect(n)}>
-              <span className="num">{n}</span>
-              <span className="ellipsis">{label ?? `Episode ${n}`}</span>
-              {!hidden && thumbs.get(n) ? <img src={thumbs.get(n)} alt="" loading="lazy" /> : watched.has(n) ? <Check size={14} color="var(--ok)" /> : <span />}
+            <button key={n} ref={n === current ? activeRef : undefined} className={cx('ep-row', cls)} aria-current={n===current?'true':undefined} aria-label={tip} title={tip} onClick={() => onSelect(n)}>
+              <span className="ep-thumb">
+                {!hidden&&thumbs.get(n)?<img src={thumbs.get(n)} alt="" loading="lazy" onError={event=>{event.currentTarget.style.display='none';}}/>:null}
+                <span className="ep-thumb-symbol">{hidden?<EyeOff size={20}/>:<Play size={20} fill="currentColor"/>}</span>
+              </span>
+              <span className="ep-description">
+                <span className="ep-number">EP {String(n).padStart(2,'0')}</span>
+                <strong className="ellipsis">{label ?? `Episode ${n}`}</strong>
+                <span className="ep-state">{watched.has(n)?<><Check size={12}/> Watched</>:n===current?<><Play size={11}/> Now watching</>:unavailable?'Try another source':hidden?'Spoiler hidden':'Episode '+n}</span>
+              </span>
             </button>
           );
         })}

@@ -2,6 +2,18 @@
 
 Snapshot: 2026-10-29, Asia/Calcutta. Scoped source/runtime validation is recorded below; it is not certification of every external service or device.
 
+## Version 1.5.8 (2026-10-30)
+
+The user reported intermittent blur across the whole interface, including text/buttons, and confirmed that hovering or resizing clears it. This is consistent with a compositor redraw problem; it is not limited to video scaling. A fresh Electron probe reproduced remaining whole-window CSS backdrop blur but did not reproduce/certify the user's intermittent desktop driver symptom.
+
+Windows now defaults to Stable UI through disable-gpu-compositing, applied before ready/GPU initialization after the test data-directory override. UiRenderingPreferences reads/writes only a strict stable/accelerated choice in device-local graphics.json. It is separate from synced Settings because it must be read before database bootstrap and is hardware-specific. GraphicsPanel exposes current/preferred/restart state with an explicit restart action. Renderer sandboxing, WebGL, video codecs and embedded encoders remain enabled; this is not disableHardwareAcceleration.
+
+Removed backdrop filters from release highlights, shared dialogs, context/menu surfaces and navigation overlays. Opaque context menus replace translucent blurred menus; decorative image filters and Anime4K remain independent.
+
+Source validation: typecheck, lint, 192 unit tests/33 files; 22 runtime checks at each of 125% and 150% scale, including three actual launches per scale, repeated resizes, no active UI backdrop blur, live NVIDIA WebGL pixels and hardware codec flags; native/captured-video Anime4K all-six-mode/timing regressions; actual stable-compositor H.264/HEVC/AAC sender capture with aligned sustained timestamps. Dedicated/system GPU diagnostics also passed.
+
+Compatibility/performance limit: software window composition can increase CPU and GPU readback work. Accelerated UI remains available for unaffected systems. The tests do not prove every driver/monitor combination is repaired. Keep that distinction in future fixes/releases.
+
 ## Version 1.5.7 (2026-10-29)
 
 New user evidence shows Chrome actively tab-casting to a TV that AniVerse could not discover. Windows + K visibility alone did not establish the TV's complete protocol support; the earlier Miracast-only diagnosis was insufficient. AniVerse's direct CASTV2/Default Media Receiver HLS path is not Chrome tab mirroring.
@@ -101,3 +113,19 @@ Preserve and extend these layers. Their presence does not establish that every p
 The requested work adds Codex guidance and memory, plus validation evidence under `test/`. The skill validator, local-link checks and existing-file hash comparison are recorded by `test/cache/validate-codex-context.py` in `test/artifacts/codex-context-validation.json`.
 
 Application typechecks, lint, unit/E2E tests, builds, account actions, live websites, image/model generation and Windows installers/updaters were not run for this documentation-only task. Existing artifacts and Claude's past pass claims are not current results.
+
+## Final 1.5.8 scope (2026-10-30)
+
+The user extended the same pending release with generic TXT-source playback support, cross-source fallback, broader search (including English/romaji/native aliases), both private-session modes, responsibility documentation, popup/filter updates, corrected normal/4K player geometry, thumbnail episode cards and an automatic temporary Diwali × Halloween dark palette. No user-mentioned live source identities were added to tracked files.
+
+SourceFallback bounds each title/episode selection to one enabled-source pass. SiteNavigator classifies missing title/episode/rendered error pages separately from security challenges and cancellation. Private source partitions are issued in-memory leases; release on leaving and rebuild on revisit. Main-process Store, sync, workspace and backup guards suppress private writes; metadata cache epochs and the last-moment Drive upload guard reject late responses/privacy changes. Existing remote data is not removed, and external networking is not anonymous.
+
+Focus CSS now marks the actual media and intermediate ratio wrappers. Nested player documents receive reversible per-frame styles, and delayed iframe loads are restyled. Direct Anime4K overlays use the actual containing block rather than viewport coordinates under transforms. Existing video/audio/control identity is retained.
+
+Popup protection denies every new window while enabled, including same-site windows that previously replaced the player. Main-frame redirect events are guarded; embedded navigation remains available. Adblock refresh checks hourly, updates stale rules after 24 hours, preserves last-known-good rules offline and exposes a manual update RPC. Cosmetic IPC is owned-session/frame-URL validated and targets the requesting frame.
+
+The festive accent is separate from the three structural layouts. SettingsService applies its local rollout once, remembers the previous accent, honours opt-out and restores it on January 1, 2027 (including while open). Manual selection remains available after the promotion. Episode cards preserve spoiler protection and use placeholders when metadata has no thumbnail; no SUB/DUB/date information is invented.
+
+Final checks: typecheck/lint, 216 unit tests in 40 files, 31 focused-player checks including real transformed-wrapper 4K alignment, eight packaged source/privacy/seasonal checks, ten packaged casting/Anime4K checks including cropped cross-origin iframe geometry, ten packaged Workspace regressions, 22 packaged rendering checks at each of 125% and 150%, and six embedded sender/capture checks. Sustained complete-segment AV timestamp gaps stayed below 22 ms; this is not physical TV lip-sync measurement. Final installer SHA-256: d05baaa27fe64a90eb87f066d42de3272a312b6861395c725080e8e891ed5814. App/installer match the pinned signer (self-signed untrusted-root status 1), exact packaged main bundle, update feed and vendor/shader hashes. Only filters.txt ships as configuration. Four skills and 108 local references validated. Evidence: test/artifacts/release-1.5.8-validation.json. Publication is recorded separately after GitHub asset/revision verification.
+
+Backup compatibility regression: the festive accent must not be written to the established v1 appearance enum. Export the previous standard accent (or Ember), and normalize festive preset colours in app-data backups. Standalone theme exports support the current festive value. The fixed Drive folder/file/schema version remain unchanged.

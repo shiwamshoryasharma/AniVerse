@@ -16,20 +16,26 @@ Windows 10 / 11 · Electron · React · TypeScript · GPL-3.0-or-later
 
 ![AniVerse home](docs/screenshots/home.webp)
 
+## User-selected sources and content
+
+AniVerse does not provide, endorse or control the sources users configure. Users are responsible for the sources they choose, the content they watch and ensuring they have permission to access it. The project does not grant content rights or permission to bypass a source’s restrictions. See [DISCLAIMER.md](DISCLAIMER.md).
+
 ## What AniVerse does
 
 AniVerse brings the websites **you choose** and the media **you provide** into one desktop interface. Find a title through AniList, open a configured website in its own browser session, focus the site's existing player, and keep your progress alongside local scene notes and a watch plan.
 
 The project does not operate a public episode-hosting service or internet stream relay. Official signed installers contain no streaming-site list. Adding a website does not establish that its content is licensed, and AniVerse does not grant permission to access or redistribute anyone else's work. Read the [disclaimer](DISCLAIMER.md) and [privacy notice](PRIVACY.md).
 
-## Version 1.5.6 features
+## Version 1.5.8 features
 
 | Menu | What you can do |
 | --- | --- |
 | 🧭 **Home & Browse** | Discover titles, filter AniList metadata, search, view detailed pages and airing information. |
 | 📅 **Schedule** | View episode air dates in your timezone and countdowns for unavailable releases. |
 | 🌐 **Sources** | Configure websites or supported official YouTube channels. Each website has its own cookie/login session. |
-| ▶️ **Watch** | Navigate episodes, focus the original website player, choose available SUB/DUB/server controls, resume progress and use Playback Rescue. |
+| ▶️ **Watch** | Thumbnail episode cards, automatic fallback across enabled sources, corrected player sizing, original website controls and Playback Rescue. |
+| 🔒 **Private playback** | Temporary incognito sessions or persistent private-title rules. Suppress new watch records and future sync, with temporary website storage. See [privacy scope](PRIVACY.md). |
+| 🪔 **Seasonal palette** | Diwali × Halloween dark colours through December 31, 2026; previous colours return automatically in January. Optional selection remains in Settings. |
 | 🎬 **Player** | Open local videos or direct HLS/DASH/MP4/WebM URLs; use speed controls, fullscreen, picture in picture and supported casting. |
 | 🔖 **Workspace → Scene bookmarks** | Save timestamps with private notes and tags; search, edit, delete or revisit a scene. |
 | ✂️ **Episode Toolkit** | See bookmarks and intro/outro ranges on one episode timeline. Save a scene with **B** and build reusable skip maps. |

@@ -20,13 +20,14 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import { call, platform } from '../lib/bridge';
+import { call, platform, onEvent } from '../lib/bridge';
 import { cx, formatLabel, titleOf } from '../lib/format';
 import { useAccounts, useAdblockStats, useBridgeEvents, useSearch, useSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { Logo, Spinner } from './common';
 import { ContextMenuProvider } from './ContextMenu';
 import { interfaceStyle } from '../../../app/shared/interface';
+import { IncognitoButton } from './Privacy';
 import { ReleaseAnnouncements } from './Changelog';
 import { UpdateBadge } from './Updates';
 
@@ -110,6 +111,7 @@ export function Shell() {
         </div>
         <SearchBox />
         <div className="spacer" />
+        <IncognitoButton />
         <ReleaseAnnouncements />
         <UpdateBadge />
         <RefreshButton />
@@ -155,6 +157,7 @@ function SearchBox() {
   const navigate = useNavigate();
   const lang = useSettings().appearance.titleLanguage;
   const { data, isFetching } = useSearch(debounced);
+  useEffect(()=>onEvent('privacy.changed',()=>{setQ('');setDebounced('');setFocus(false);}),[]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q), 320);
@@ -173,7 +176,7 @@ function SearchBox() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const results = q.trim().length >= 2 ? (data ?? []) : [];
+  const results = q.trim().length >= 2 && q.trim()===debounced.trim() ? (data ?? []) : [];
   const go = (path: string) => {
     setFocus(false);
     input.current?.blur();
@@ -190,7 +193,7 @@ function SearchBox() {
       <input
         ref={input}
         className="input"
-        placeholder="Search anime…"
+        placeholder="Search titles · English / 日本語…"
         value={q}
         onChange={(e) => {
           setQ(e.target.value);
@@ -209,6 +212,7 @@ function SearchBox() {
       <kbd>{isFetching ? <Spinner size="sm" /> : 'Ctrl K'}</kbd>
       {focus && q.trim().length >= 2 && (
         <div className="suggest">
+          <div className="suggest-hint">English, romaji and Japanese titles · closest matches · playback tries your enabled sources</div>
           {results.length === 0 && !isFetching && <div className="faint" style={{ padding: 10 }}>No matches for “{q}”.</div>}
           {results.map((m, i) => (
             <div key={m.id} className={cx('suggest-item', i === active && 'active')} onMouseDown={() => go(`/anime/${m.id}`)} onMouseEnter={() => setActive(i)}>
@@ -218,7 +222,7 @@ function SearchBox() {
                   {titleOf(m, lang)}
                 </div>
                 <div className="faint" style={{ fontSize: 'var(--fs-xs)' }}>
-                  {[formatLabel(m.format), m.seasonYear, m.episodes ? `${m.episodes} eps` : null].filter(Boolean).join(' · ')}
+                  {[m.title.romaji!==titleOf(m,lang)?m.title.romaji:m.title.english!==titleOf(m,lang)?m.title.english:m.title.native,formatLabel(m.format), m.seasonYear, m.episodes ? `${m.episodes} eps` : null].filter(Boolean).join(' · ')}
                 </div>
               </div>
               {m.score && <span className="chip">{(m.score / 10).toFixed(1)}</span>}

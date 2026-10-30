@@ -1,5 +1,15 @@
 # Casting and upscaling: recovery steps
 
+## The whole interface intermittently becomes blurry
+
+Version 1.5.8 removes the remaining interface backdrop blur and defaults Windows to **Stable UI** composition. Update and restart AniVerse once.
+
+**Settings → Graphics & GPU → Interface rendering** shows the active mode and any pending restart. Stable UI bypasses GPU window composition for text, controls and menus; it does not turn off all hardware acceleration. The selected mode is device-local, applied before graphics startup and saved separately from synced settings.
+
+On the validation machine, hardware video decoding/encoding and real NVIDIA WebGL remained available in Stable UI. Native/captured-video Anime4K also passed. Software composition can use more CPU; Accelerated UI remains available if it works better on your system.
+
+Repeated resize and 125%/150% scale checks verified stable zoom/pixel ratio, crisp non-blurred overlays and mode persistence. The intermittent driver-level symptom outside overlays was not reproduced, so this is a compatibility workaround rather than a claim that every driver/monitor issue is repaired. No global Windows or GPU-driver settings are changed.
+
 ## Chrome can cast to the TV but AniVerse cannot
 
 Install 1.5.7 or newer and choose **Cast to TV → Find TVs with Chrome → your TV**. This uses installed Google Chrome’s Media Router rather than AniVerse’s direct CASTV2/Default Media Receiver path. A separate, app-owned Chrome window receives the selected video. It does not use the normal Chrome profile or change Windows display resolution.

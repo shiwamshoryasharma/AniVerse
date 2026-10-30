@@ -70,3 +70,14 @@ describe('app-data backup merge', () => {
     store.close();
   });
 });
+
+it('exports the temporary festive palette using compatible v1 colours without changing the backup protocol',()=>{
+ const store=new Store(':memory:');
+ try{
+  store.setKv('settings',{appearance:{accent:'festival'}});
+  store.setKv('theme:festival-2026',{previous:'violet',automatic:true});
+  const backup=new BackupService(store).create('1.5.8');
+  expect(backup.settings.appearance.accent).toBe('violet');
+  expect(backup.format).toBe('aniverse.backup');expect(backup.version).toBe(1);
+ }finally{store.close();}
+});

@@ -43,7 +43,7 @@ app.whenReady().then(async()=>{
  } as any,event=>event.senderFrame===host.webContents.mainFrame);
  ipcMain.handle('fixture',async(event,method)=>{
   if(event.senderFrame!==host.webContents.mainFrame)throw new Error('Untrusted frame');
-  if(method==='fixture.state')return {state:cast.snapshot(),loaded,chunks,errors,folder:(sender as any).folder};
+  if(method==='fixture.state')return {state:cast.snapshot(),loaded,chunks,errors,folder:(sender as any).folder,compositing:app.getGPUFeatureStatus().gpu_compositing};
   if(method==='fixture.stop')return mirror.stop();
   throw new Error('Unknown fixture call');
  });

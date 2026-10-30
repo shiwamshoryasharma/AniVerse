@@ -180,6 +180,11 @@ export function useSaveProgress() {
 export function useBridgeEvents(qc: QueryClient) {
   useEffect(() => {
     const offs = [
+      onEvent('privacy.changed',(state)=>{
+        qc.setQueryData(['privacy'],state);
+        for(const prefix of ['library','watch-sources','match','streams','toolkit','home'])void qc.invalidateQueries({queryKey:[prefix]});
+        qc.removeQueries({predicate:query=>query.getObserversCount()===0&&['details','search','browse','comments'].includes(String(query.queryKey[0]))});
+      }),
       onEvent('sources.changed', (list) => {
         qc.setQueryData(keys.sources, list);
         void qc.invalidateQueries({ queryKey: ['match'] });

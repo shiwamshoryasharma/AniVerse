@@ -1,3 +1,6 @@
+export type UiRenderingMode = 'stable' | 'accelerated';
+export interface UiRenderingState { active: UiRenderingMode; preferred: UiRenderingMode; restartRequired: boolean }
+
 export type GpuPreference = 'high-performance' | 'system';
 export interface GraphicsAdapter {
   name: string;

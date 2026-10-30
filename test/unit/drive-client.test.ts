@@ -32,3 +32,13 @@ describe('fixed Drive folder and file operations', () => {
     expect(writes).toBe(0);
   });
 });
+
+it('rechecks privacy immediately after token acquisition before transmitting a prepared backup',async()=>{
+ let writes=0,tokenCalls=0;
+ const client=new DriveClient(async(_url,init)=>{
+  if(init?.method)writes++;
+  return json({files:[]});
+ },async()=>{tokenCalls++;return 'fixture-token';});
+ await expect(client.upload('folder','{}',()=>undefined,()=>{throw Error('Privacy changed');})).rejects.toThrow('Privacy changed');
+ expect(tokenCalls).toBe(2);expect(writes).toBe(0);
+});

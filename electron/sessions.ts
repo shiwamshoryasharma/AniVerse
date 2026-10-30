@@ -1,4 +1,5 @@
-import { app, session, shell, type Session, type WebContents } from 'electron';
+import { randomUUID } from 'node:crypto';
+import { app, session, shell, webContents, type Session, type WebContents } from 'electron';
 import { isChallengeTitle, isCloudflareChallenge } from '../app/core/net/cloudflare';
 import type { SourceRegistry } from '../app/core/sources/registry';
 import type { SiteFetcher, SiteResponse } from '../app/core/sources/types';
@@ -35,6 +36,34 @@ export class SessionManager implements SiteFetcher {
   private configured = new Set<string>();
   private guests = new Map<number, string>();
   private challengeTimers = new Map<number, NodeJS.Timeout>();
+  private privateLeases=new Map<string,SourceInfo[]>();
+  private incognitoLease:string|null=null;
+  private issuedSources(){return [...this.privateLeases.values()].flat();}
+  private currentIssued(source:SourceInfo):SourceInfo|null {
+    try{return {...this.registry.get(source.id),partition:source.partition};}catch{return null;}
+  }
+  privateLease(){
+    const leaseId=randomUUID();
+    const sources=this.registry.list().map(source=>({...source,partition:'private-'+leaseId+'-'+source.id}));
+    this.privateLeases.set(leaseId,sources);return {leaseId,sources};
+  }
+  sourceList():SourceInfo[]{
+    if(!this.privateSessionActive())return this.registry.list();
+    if(!this.incognitoLease||!this.privateLeases.has(this.incognitoLease))this.incognitoLease=this.privateLease().leaseId;
+    return this.privateLeases.get(this.incognitoLease)!.map(source=>this.currentIssued(source)).filter((source):source is SourceInfo=>!!source);
+  }
+  closeGuests(){for(const id of this.guests.keys()){const guest=webContents.fromId(id);if(guest&&!guest.isDestroyed())guest.close({waitForBeforeUnload:false});}}
+  async releasePrivate(leaseId:string){
+    const sources=this.privateLeases.get(leaseId);if(!sources)return;
+    for(const id of this.guests.keys()){const guest=webContents.fromId(id);if(guest&&sources.some(s=>session.fromPartition(s.partition)===guest.session))guest.close({waitForBeforeUnload:false});}
+    this.privateLeases.delete(leaseId);if(this.incognitoLease===leaseId)this.incognitoLease=null;
+    await Promise.all(sources.map(async source=>{
+      if(!this.configured.has(source.partition))return;
+      const ses=session.fromPartition(source.partition);this.adblock.detach(ses);this.configured.delete(source.partition);
+      await Promise.all([ses.clearStorageData(),ses.clearCache()]);
+    }));
+  }
+  async clearPrivate(){await Promise.all([...this.privateLeases.keys()].map(id=>this.releasePrivate(id)));}
 
   constructor(
     private registry: SourceRegistry,
@@ -43,11 +72,13 @@ export class SessionManager implements SiteFetcher {
     private settings: () => Settings,
     private notify: (n: AppNotice) => void,
     private emitCloudflare: (e: CloudflareEvent) => void,
+    private privateSessionActive:()=>boolean=()=>false,
   ) {}
 
   /** Creates/configures the isolated session for a source (idempotent). */
   ensure(source: SourceInfo): Session {
-    const ses = session.fromPartition(source.partition);
+    if(this.privateSessionActive()&&source.partition.startsWith('persist:'))source=this.sourceList().find(s=>s.id===source.id)??source;
+    const ses = session.fromPartition(source.partition,{cache:source.partition.startsWith('persist:')});
     if (!this.configured.has(source.partition)) {
       this.configured.add(source.partition);
       ses.setUserAgent(browserUserAgent());
@@ -72,24 +103,26 @@ export class SessionManager implements SiteFetcher {
 
   /** Re-applies per-source settings after config or settings changes. */
   refresh() {
-    for (const source of this.registry.list()) {
+    for (const source of [...this.registry.list(),...this.issuedSources()]) {
       if (this.configured.has(source.partition)) this.applyAdblock(source, session.fromPartition(source.partition));
     }
     this.adblock.setEnabled(this.settings().privacy.adblock);
   }
 
   sourceForPartition(partition: string): SourceInfo | null {
-    return this.registry.byPartition(partition);
+    const issued=this.issuedSources().find(s=>s.partition===partition);
+    return issued?this.currentIssued(issued):this.registry.byPartition(partition);
   }
 
   sourceForSession(ses: Session): SourceInfo | null {
-    return this.registry.list().find((s) => this.configured.has(s.partition) && session.fromPartition(s.partition) === ses) ?? null;
+    return [...this.registry.list(),...this.issuedSources()].find((s) => this.configured.has(s.partition) && session.fromPartition(s.partition) === ses) ?? null;
   }
 
   // ---------------------------------------------------------------- webviews
 
   /** Validates a webview before it attaches (called from will-attach-webview). */
   allowAttach(partition: string, src: string): SourceInfo | null {
+    if(this.privateSessionActive()&&partition.startsWith('persist:'))return null;
     const source = this.sourceForPartition(partition);
     if (!source || !source.enabled) return null;
     if (!this.isAllowedUrl(source, src)) return null;
@@ -108,6 +141,10 @@ export class SessionManager implements SiteFetcher {
 
     guest.setWindowOpenHandler(({ url, disposition }) => {
       const current = this.registry.list().find((s) => s.id === source.id) ?? source;
+      if (this.settings().privacy.blockPopups) {
+        this.adblock.countPopup(source.id);
+        return { action: 'deny' };
+      }
       if (this.isAllowedUrl(current, url) && disposition !== 'background-tab' && !this.isSignInUrl(url)) {
         // Same-site "open in new tab" links stay inside the source session.
         setImmediate(() => !guest.isDestroyed() && guest.loadURL(url));
@@ -119,7 +156,7 @@ export class SessionManager implements SiteFetcher {
       return { action: 'deny' };
     });
 
-    guest.on('will-navigate', (event, url) => {
+    const guardNavigation = (event: Electron.Event, url: string) => {
       const current = this.registry.list().find((s) => s.id === source.id) ?? source;
       if (this.isAllowedUrl(current, url) || this.isSignInUrl(url)) return;
       event.preventDefault();
@@ -127,7 +164,9 @@ export class SessionManager implements SiteFetcher {
         this.adblock.countPopup(source.id);
         this.notify({ level: 'info', message: `Blocked a redirect from ${source.name} to ${safeHost(url)}.`, sourceId: source.id, url });
       }
-    });
+    };
+    guest.on('will-navigate', guardNavigation);
+    guest.on('will-redirect', (event, url, _inPlace, isMainFrame) => { if(isMainFrame)guardNavigation(event,url); });
 
     guest.on('page-title-updated', (_e, title) => this.onTitle(guest, source, title));
   }

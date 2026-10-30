@@ -1,6 +1,6 @@
 // Neutral rendered-page fixtures; no configured website identities or stream extraction.
 const { app, BrowserWindow } = require('electron');
-const { mkdirSync, writeFileSync } = require('node:fs');
+const { mkdirSync, writeFileSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 
 const root = process.env.ANIVERSE_FOCUS_ROOT;
@@ -192,6 +192,42 @@ app.whenReady().then(async () => {
     await runFixture(win, 'captcha', '<iframe id="visible-captcha" src="about:blank#turnstile" style="position:absolute;inset:0;width:900px;height:506px"></iframe>', [
       ['does not select a visible larger challenge iframe', (s)=>s.targetContainsVideo],
     ]);
+
+    // A fixed player wrapper alone does not reset absolute offsets and fixed
+    // dimensions on the site's actual video or intermediate ratio wrapper.
+    for (const nested of [false,true]) {
+      await win.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(fixture()));
+      await win.webContents.executeJavaScript('(() => {'+
+        'const video=document.querySelector("video");'+
+        (nested?'const wrapper=document.createElement("div");wrapper.className="ratio";wrapper.style.cssText="position:absolute;top:140px;left:70px;width:420px;height:236px;padding-top:80px;transform:translateY(30px);overflow:hidden";video.before(wrapper);wrapper.append(video);':'')+
+        'video.style.cssText="position:absolute;top:160px;left:50px;width:420px;height:236px;min-width:700px;transform:translateY(30px);object-fit:cover";})()');
+      await win.webContents.executeJavaScriptInIsolatedWorld(ISOLATED_WORLD,[{code:pageScript({op:'markPlayer',selector:'#player-shell',keep:true})}]);
+      const css=await win.webContents.insertCSS(FOCUS_CSS);
+      const bounds=await win.webContents.executeJavaScript('(() => { const v=document.querySelector("video"),r=v.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,vw:innerWidth,vh:innerHeight,fit:getComputedStyle(v).objectFit,identity:v===window.originalVideo,controls:document.querySelector("#controls").checkVisibility()};})()');
+      check('offset-'+nested+': original video fills the focused viewport without cropping',Math.abs(bounds.x)<1&&Math.abs(bounds.y)<1&&Math.abs(bounds.w-bounds.vw)<1&&Math.abs(bounds.h-bounds.vh)<1&&bounds.fit==='contain'&&bounds.identity&&bounds.controls,bounds);
+      writeFileSync(path.join(artifacts,'player-focus-offset-'+nested+'.png'),(await win.webContents.capturePage()).toPNG());
+      await win.webContents.executeJavaScriptInIsolatedWorld(ISOLATED_WORLD,[{code:pageScript({op:'releasePlayer'})}]);
+      await win.webContents.removeInsertedCSS(css);
+      const restored=await win.webContents.executeJavaScript('document.querySelector("video").getBoundingClientRect().width');
+      check('offset-'+nested+': original site dimensions restored when focus exits',restored===700,restored);
+    }
+
+    // Real same-origin decoded frames exercise the Anime4K overlay in a transformed containing block.
+    const bytes=readFileSync(path.join(root,'test/cache/release-1.5.2-ui/sintel-trailer.mp4')).toString('base64');
+    const upscaleScript=readFileSync(path.join(root,'test/cache/player-focus/upscale.js'),'utf8');
+    await win.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(fixture()));
+    await win.webContents.executeJavaScript('(()=>{const wrapper=document.querySelector("#player-shell");wrapper.style.cssText="position:relative;width:640px;height:360px;transform:translate(30px,40px) scale(.8)";const v=document.querySelector("video");v.src="data:video/mp4;base64,'+bytes+'";v.muted=true;v.loop=true;return v.play();})()');
+    await win.webContents.executeJavaScript(upscaleScript+';globalThis.testUpscale=AniVerseUpscale;testUpscale.apply({enabled:true,mode:"A",darken:false,thin:false});');
+    let drawing;
+    const deadline=Date.now()+30000;
+    do{
+      await new Promise(r=>setTimeout(r,100));
+      drawing=await win.webContents.executeJavaScript('(()=>{const v=document.querySelector("video"),c=document.querySelector("[data-aniverse-upscale]"),a=v.getBoundingClientRect(),b=c?.getBoundingClientRect();return {visible:c&&getComputedStyle(c).visibility==="visible",width:c?.width,video:[a.x,a.y,a.width,a.height],canvas:b?[b.x,b.y,b.width,b.height]:[],time:v.currentTime,identity:v===window.originalVideo};})()');
+    }while(!drawing.visible&&Date.now()<deadline);
+    check('upscale: real 4K filter remains aligned inside transformed wrappers',drawing.visible&&drawing.width===3840&&drawing.identity&&drawing.time>0&&drawing.video.every((value,index)=>Math.abs(value-drawing.canvas[index])<1),drawing);
+    writeFileSync(path.join(artifacts,'player-focus-upscale-transformed.png'),(await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript('testUpscale.stop()');
+    check('upscale: stop removes the overlay and preserves the original video',await win.webContents.executeJavaScript('!document.querySelector("[data-aniverse-upscale]")&&document.querySelector("video")===window.originalVideo'));
     await runMediaFixture(win);
   } finally {
     const failed = results.filter((result)=>!result.passed);

@@ -60,7 +60,7 @@ const settingsPatch = z
     appearance: z
       .object({
         style: z.enum(['classic', 'aurora', 'paper']),
-        accent: z.enum(['ember', 'aqua', 'violet', 'sakura', 'crimson']),
+        accent: z.enum(['ember', 'aqua', 'violet', 'sakura', 'crimson', 'festival']),
         density: z.enum(['compact', 'comfortable']),
         fontFamily: z.enum(['inter', 'system', 'arial', 'serif', 'mono']),
         reduceMotion: z.boolean(),
@@ -260,8 +260,16 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'player.control': z.object({ webContentsId: id, action: z.enum(['play', 'pause', 'seek', 'resync']), value: z.number().finite().min(0).max(604800).optional() }),
 
   'adblock.stats': none,
+  'adblock.update': none,
+  'privacy.state': none,
+  'privacy.incognito': z.object({on:z.boolean()}).strict(),
+  'privacy.title': z.object({mediaId:id,on:z.boolean()}).strict(),
+  'privacy.watchSources': z.object({mediaId:id}).strict(),
+  'privacy.releaseSources': z.object({leaseId:z.uuid()}).strict(),
   'app.info': none,
   'app.openGraphicsSettings': none,
+  'app.setUiRendering': z.object({ mode: z.enum(['stable', 'accelerated']) }).strict(),
+  'app.restart': none,
   'app.openExternal': z.object({ url }),
   'app.cacheClear': none,
 

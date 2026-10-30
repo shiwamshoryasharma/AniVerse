@@ -407,7 +407,7 @@ img {
   background: rgba(10, 11, 15, 0.55);
   color: var(--text);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(6px);
+  backdrop-filter: none;
 }
 .cta.outline:hover {
   background: rgba(255, 255, 255, 0.1);
@@ -520,7 +520,7 @@ img {
 .chip.glass {
   background: rgba(8, 9, 12, 0.72);
   color: var(--text);
-  backdrop-filter: blur(6px);
+  backdrop-filter: none;
 }
 button.chip {
   border: 1px solid transparent;
@@ -2475,7 +2475,7 @@ button.chip.off {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   display: grid;
   place-items: center;
   z-index: 80;
@@ -2570,3 +2570,31 @@ button.chip.off {
 .spin {
   animation: spin 0.8s linear infinite;
 }
+
+.gpu-rendering { border:1px solid var(--line-2); background:var(--bg-2); border-radius:12px; padding:18px; margin:22px 0; }
+.gpu-rendering h3 { margin:0 0 10px; font-size:15px; }
+.gpu-rendering p { color:var(--text-2); font-size:12px; line-height:1.6; }
+.gpu-rendering .row { gap:12px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--warn); }
+
+.incognito-button.on,.private-title-button.on { color:var(--accent); border-color:var(--accent); background:var(--accent-soft); }
+.privacy-banner { padding:12px 16px; margin-bottom:14px; border:1px solid var(--accent-soft); border-radius:10px; background:var(--surface-2); color:var(--text-2); font-size:12px; line-height:1.6; }
+.suggest { max-height:min(640px,80vh); overflow:auto; }
+.suggest-hint {padding:10px 12px;font-size:var(--fs-xs);color:var(--text-3);border-bottom:1px solid var(--line);}
+
+/* Episode cards keep the same list/grid controls and spoiler rules. */
+.ep-list:not(.grid-mode) { gap:9px; padding:10px; }
+.ep-row { grid-template-columns:minmax(72px,32%) minmax(0,1fr); min-height:94px; padding:10px; gap:12px; border:1px solid var(--line-2); border-radius:12px; background:var(--bg-2); position:relative; overflow:hidden; }
+.ep-row.active { box-shadow:inset 4px 0 var(--accent); }
+.ep-row.unavailable { opacity:.65; }
+.ep-thumb { position:relative; display:grid; place-items:center; aspect-ratio:16/9; border-radius:8px; overflow:hidden; background:linear-gradient(145deg,var(--surface-3),var(--bg)); color:var(--text-3); }
+.ep-row .ep-thumb img { position:absolute; inset:0; width:100%;height:100%;border-radius:0; }
+.ep-thumb-symbol { display:grid;place-items:center;z-index:1;border-radius:50%;padding:8px;background:#0009; }
+.ep-row.active .ep-thumb-symbol { color:var(--accent); }
+.ep-description { display:flex;flex-direction:column;gap:6px;min-width:0; }
+.ep-number { font-size:10px;letter-spacing:.15em;color:var(--text-3); }
+.ep-description strong {font-size:var(--fs-md);color:var(--text);}
+.ep-row.active .ep-description strong,.ep-row.active .ep-number {color:var(--accent);}
+.ep-state {display:flex;align-items:center;gap:4px;font-size:var(--fs-xs);color:var(--text-3);}
+.ep-row.watched .ep-state {color:var(--ok);}
+.watch-heading {gap:12px;}
+.watch-heading>div:first-child {flex:1;min-width:0;}

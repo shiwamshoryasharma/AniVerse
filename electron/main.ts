@@ -42,6 +42,7 @@ import { subtitleTextToVtt } from '../app/shared/subtitles';
 import { LocalCollection } from './collection';
 import { GoogleDriveService } from './googleDrive';
 import { ChangelogService } from '../app/core/changelog';
+import { UiRenderingPreferences } from './uiRendering';
 import { summarizeGraphics, type GpuPreference } from '../app/shared/graphics';
 
 // Ask Chromium for the discrete adapter on hybrid laptops before GPU initialization.
@@ -54,6 +55,10 @@ app.setName('AniVerse');
 // Must precede the single-instance lock, which lives in the userData folder:
 // a test profile then never collides with (or focuses) the user's running app.
 if (process.env.ANIVERSE_DATA_DIR) app.setPath('userData', path.resolve(process.env.ANIVERSE_DATA_DIR));
+// Keep Windows UI composition off the driver's presentation path. GPU video decoding,
+// WebGL Anime4K and embedded encoders remain available; this is not disableHardwareAcceleration().
+const uiRendering = new UiRenderingPreferences(path.join(app.getPath('userData'), 'graphics.json'), process.platform, app.commandLine.hasSwitch('disable-gpu-compositing'));
+if (uiRendering.snapshot().active === 'stable') app.commandLine.appendSwitch('disable-gpu-compositing');
 
 // Background work (sync, discovery, filter downloads) must never surface as a
 // main-process error dialog; log it instead.
@@ -222,6 +227,8 @@ async function bootstrap() {
   const store = new Store(paths.db, credentials.codec);
   store.cachePurge();
   const settings = new SettingsService(store);
+  settings.applySeasonalTheme();
+  setInterval(()=>settings.applySeasonalTheme(),60_000).unref();
   const changelog = new ChangelogService(store, app.getVersion());
   const workspace = new WorkspaceService(store);
   const apiFetch: FetchFn = (url, init) => session.defaultSession.fetch(url, init);
@@ -260,6 +267,7 @@ async function bootstrap() {
     () => settings.get(),
     (n) => emit('app.notice', n),
     (e) => emit('cloudflare.status', e),
+    () => store.isIncognito(),
   );
   const comments = new CommentsService(anilist, apiFetch, store, () => settings.get(), youtube, () => oauthClientIds().mal);
   const providers = { anilist: new AniListSync(anilist), mal: new MalSync(apiFetch, anilist) };
@@ -281,7 +289,7 @@ async function bootstrap() {
   const config = new SitesConfigWatcher(paths.sitesFile, (parsed) => {
     registry.setEntries(parsed.entries);
     sessions.refresh();
-    emit('sources.changed', registry.list());
+    emit('sources.changed', sessions.sourceList());
     if (parsed.warnings.length) emit('app.notice', { level: 'warn', message: `streaming-sites.txt: ${parsed.warnings[0]}` });
   });
   registry.setEntries(config.load().entries);
@@ -365,15 +373,15 @@ async function bootstrap() {
     'meta.latest': ({ page }) => anilist.latest(page),
     'meta.hover': ({ id }) => anilist.hoverInfo(id),
 
-    'sources.list': () => registry.list(),
+    'sources.list': () => sessions.sourceList(),
     'sources.reload': () => {
       config.reload(true);
-      return registry.list();
+      return sessions.sourceList();
     },
     'sources.update': ({ id, patch }) => {
       const source = registry.update(id, patch);
       sessions.refresh();
-      emit('sources.changed', registry.list());
+      emit('sources.changed', sessions.sourceList());
       return source;
     },
     'sources.openConfig': async () => {
@@ -385,7 +393,7 @@ async function bootstrap() {
     'sources.streams': ({ sourceId, ref }) => registry.streams(sourceId, ref),
     'sources.discover': async ({ id }) => {
       const source = await registry.discover(id, true);
-      emit('sources.changed', registry.list());
+      emit('sources.changed', sessions.sourceList());
       return source;
     },
     'sources.session': ({ id }) => sessions.sessionInfo(id),
@@ -395,7 +403,7 @@ async function bootstrap() {
       store.setPin(sourceId, mediaId, url);
     },
 
-    'site.openEpisode': (req) => navigator.openEpisode(guestFor(req.webContentsId, req.sourceId), registry.get(req.sourceId), req),
+    'site.openEpisode': (req) => {const guest=guestFor(req.webContentsId,req.sourceId);return navigator.openEpisode(guest,sessions.sourceForSession(guest.session)??registry.get(req.sourceId),req);},
     'site.focus': async ({ webContentsId, on }) => ({ focused: await navigator.focus(guestFor(webContentsId), on, null) }),
     'site.options': ({ webContentsId }) => navigator.options(guestFor(webContentsId)),
     'site.choose': ({ webContentsId, sourceId, kind, value }) => navigator.choose(guestFor(webContentsId, sourceId), registry.get(sourceId), kind, value),
@@ -407,10 +415,10 @@ async function bootstrap() {
 
 
     'toolkit.bookmarks': (input) => workspace.bookmarks(input),
-    'toolkit.saveBookmark': (input) => workspace.saveBookmark(input),
+    'toolkit.saveBookmark': (input) => {if(store.isPrivate(input.media.id))throw new AppError('invalid-input','Scene saving is disabled during private playback.');return workspace.saveBookmark(input);},
     'toolkit.deleteBookmark': ({id}) => workspace.deleteBookmark(id),
     'toolkit.skips': ({mediaId}) => workspace.skips(mediaId),
-    'toolkit.saveSkip': (range) => workspace.saveSkip(range),
+    'toolkit.saveSkip': (range) => {if(store.isPrivate(range.mediaId))throw new AppError('invalid-input','Skip-map saving is disabled during private playback.');return workspace.saveSkip(range);},
     'toolkit.deleteSkip': ({mediaId,kind}) => workspace.deleteSkip(mediaId,kind),
     'toolkit.record': (point) => { if(settings.get().privacy.watchInsights) workspace.record(point); },
     'toolkit.insights': () => workspace.insights(),
@@ -525,7 +533,7 @@ async function bootstrap() {
     'settings.get': () => settings.get(),
     'settings.set': (patch) => {
       const next = settings.update(patch);
-      emit('sources.changed', registry.list());
+      emit('sources.changed', sessions.sourceList());
       return next;
     },
 
@@ -550,6 +558,7 @@ async function bootstrap() {
     'player.control': ({ webContentsId, action, value }) => probe.control(webContentsId, action, value),
 
     'adblock.stats': () => adblock.snapshot(),
+    'adblock.update': () => adblock.update(),
     'app.info': async () => {
       const info = await app.getGPUInfo('complete').catch(() => null);
       const aux = (info as { auxAttributes?: { glRenderer?: string } } | null)?.auxAttributes;
@@ -560,9 +569,26 @@ async function bootstrap() {
         platform: `${process.platform} ${process.arch}`,
         configPath: paths.sitesFile,
         dataPath: paths.dataDir,
-        graphics: { ...summarizeGraphics(info, app.getGPUFeatureStatus(), gpuPreference), renderer: aux?.glRenderer ?? null },
+        graphics: { ...summarizeGraphics(info, app.getGPUFeatureStatus(), gpuPreference), renderer: aux?.glRenderer ?? null, uiRendering: uiRendering.snapshot() },
       };
     },
+    'privacy.state': () => store.privacyState(),
+    'privacy.incognito': async ({on}) => {
+      if(on)store.setIncognito(true);
+      sessions.closeGuests();await sessions.clearPrivate();workspace.resetObservation();
+      if(!on)store.setIncognito(false);
+      const state=store.privacyState();emit('privacy.changed',state);emit('sources.changed',sessions.sourceList());return state;
+    },
+    'privacy.title': async ({mediaId,on}) => {
+      if(on)store.setTitlePrivate(mediaId,true);
+      sessions.closeGuests();await sessions.clearPrivate();workspace.resetObservation();
+      if(!on)store.setTitlePrivate(mediaId,false);
+      const state=store.privacyState();emit('privacy.changed',state);emit('sources.changed',sessions.sourceList());return state;
+    },
+    'privacy.watchSources': ({mediaId}) => store.isIncognito()?{leaseId:null,sources:sessions.sourceList()}:store.isPrivate(mediaId)?sessions.privateLease():{leaseId:null,sources:registry.list()},
+    'privacy.releaseSources': ({leaseId}) => sessions.releasePrivate(leaseId),
+    'app.setUiRendering': ({ mode }) => uiRendering.set(mode),
+    'app.restart': () => { app.relaunch(); app.quit(); },
     'app.openGraphicsSettings': async () => {
       if (process.platform === 'win32') await shell.openExternal('ms-settings:display-advancedgraphics');
     },
@@ -612,7 +638,7 @@ async function bootstrap() {
     drive.cancel();
     config.stop();
     updates.stop();
-    void cast.stop(); chromeCast.close();
+    void cast.stop(); chromeCast.close();void sessions.clearPrivate();
   });
   app.on('will-quit', () => {
     try {

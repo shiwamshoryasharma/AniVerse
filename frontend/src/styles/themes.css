@@ -47,3 +47,20 @@
 .drive-contract code { display:block; margin:10px 0; color:var(--accent); overflow-wrap:anywhere; }
 .drive-contract p,.drive-panel p { margin:0; line-height:1.6; }
 @media(max-width:1150px) { .theme-styles { grid-template-columns:1fr; } .theme-style-preview { height:100px; } }
+
+/* Seasonal colour scheme; navigation/layout selection remains independent. */
+:root[data-accent='festival'][data-style] {
+  --bg:#0c090f; --bg-2:#120d19; --surface:#191222; --surface-2:#231a30; --surface-3:#30203e; --surface-hover:#3b2748;
+  --text:#fff2df; --text-2:#c8bad2; --text-3:#a797b6; --line:#f9b65f18; --line-2:#d9a6ff30;
+  --accent:#ff9c42; --accent-2:#ffd477; --accent-ink:#251000; --accent-soft:#ff9c4222; --accent-glow:#ffb34c38; --ok:#a4dc82;
+  color-scheme:dark;
+}
+[data-accent='festival'] .main {background:radial-gradient(ellipse at top right,#5b237321,transparent 45%),var(--bg);}
+[data-accent='festival'] .ep-row {background:repeating-linear-gradient(115deg,transparent 0 24px,#ffc36b05 24px 25px),var(--bg-2);}
+[data-accent='festival'] .ep-row.active {background:linear-gradient(110deg,#ff9c4226,#8d4cba13);}
+.festival-preview {padding:20px;display:flex;align-items:center;gap:20px;margin-bottom:20px;border-color:#ffb34c55;background:radial-gradient(ellipse at right,#702d8940,transparent 65%),#17101f;color:#fff2df;}
+.festival-preview h3 {color:#ffc46d;margin:6px 0;}
+.festival-preview p {color:#c8bad2;max-width:700px;line-height:1.6;}
+.festival-preview .eyebrow {color:#ffa852;}
+.festival-preview .btn {flex-shrink:0;background:#ff9c42;color:#251000;}
+@media(max-width:900px){.festival-preview{flex-direction:column;align-items:flex-start;}}

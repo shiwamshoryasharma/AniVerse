@@ -5,6 +5,19 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  { version: '1.5.8', date: '2026-10-30', title: 'A calmer watch space. More ways to find your anime.',
+    summary: 'Episode cards, broader search, automatic source recovery, private playback and a temporary Diwali × Halloween palette.',
+    items: [
+      { kind:'added',icon:'sparkles',title:'Diwali × Halloween, through December',description:'A dark midnight-violet palette with warm ivory text and amber highlights. Applied with this update until December 31, 2026, then your previous palette returns. Switch away earlier or select it manually later.',action:{label:'Theme settings',path:'/settings/themes'} },
+      { kind:'improved',icon:'layout',title:'A clearer episode index',description:'Thumbnail cards, episode numbers, watched states and a distinct active episode. Search and list/grid choices remain; Spoiler Shield still hides future episode artwork and titles.' },
+      { kind:'improved',icon:'fix',title:'Broader search and source recovery',description:'Discover nearby English, romaji and Japanese title matches. Missing episodes automatically try the other enabled TXT sources once, with a retry action when all are exhausted.' },
+      { kind:'added',icon:'shield',title:'Incognito and private titles',description:'Use the header for a temporary session or Keep private for a title. New history, progress, insights, learned links and account sync are skipped. Private titles are excluded from new app-data backups. Existing remote records are not deleted.' },
+      { kind:'fixed',icon:'sparkles',title:'Uncropped normal and 4K playback',description:'Repair inner video dimensions and offsets in focused players and embedded documents. Anime4K overlays follow transformed player containers while the source video and audio continue.' },
+      { kind:'improved',icon:'shield',title:'Stronger popup protection and fresh filters',description:'Block same-site popups and off-site top-frame redirects. Cosmetic filters apply to the correct iframe. Lists refresh after 24 hours; Update filters is available in Privacy settings.',action:{label:'Privacy settings',path:'/settings/privacy'} },
+      { kind: 'fixed', icon: 'layout', title: 'No whole-interface blur', description: 'Release highlights, dialogs, navigation overlays and menus now dim or cover their background without applying blur to the app.' },
+      { kind: 'fixed', icon: 'shield', title: 'Stable Windows composition', description: 'The Windows interface now uses a software compositor to avoid driver presentation issues affecting text and buttons. This does not disable all hardware acceleration.' },
+      { kind: 'improved', icon: 'sparkles', title: 'Keep GPU video processing', description: 'GPU video decoding, Anime4K WebGL and sender encoding remain available where supported. Graphics settings offers Stable or Accelerated UI; changes apply after restarting and stay on this device.', action: { label: 'Graphics settings', path: '/settings/graphics' } },
+    ] },
   { version: '1.5.7', date: '2026-10-29', title: 'Cast with Chrome. Keep AniVerse sharp.',
     summary: 'Use Google Chrome’s TV discovery and tab casting when AniVerse’s direct receiver connection fails.',
     items: [

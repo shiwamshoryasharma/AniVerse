@@ -1,135 +1,117 @@
 import { ElectronBlocker } from '@ghostery/adblocker-electron';
-import { ipcMain, net, type Session } from 'electron';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { ipcMain, net, type Session, type IpcMainInvokeEvent } from 'electron';
+import { readFile, stat, writeFile, rename } from 'node:fs/promises';
 import type { AdblockStats } from '../app/shared/types';
 import { errorMessage } from '../app/core/util';
 
-const LIST_MAX_AGE_MS = 3 * 86400 * 1000;
-// Cosmetic-filter preload shipped by Ghostery (resolved at runtime from node_modules).
+const LIST_MAX_AGE_MS = 24 * 3600 * 1000;
 const PRELOAD_PATH = require.resolve('@ghostery/adblocker-electron-preload');
 
-/**
- * Ad, tracker, annoyance and self-promotion blocking for source sessions.
- * Ghostery's engine does the matching; this class wires it into each
- * partition itself (its built-in helper only supports one session).
- */
+/** One filter engine, independently attached to owned source partitions. */
 export class Adblocker {
   private blocker: ElectronBlocker | null = null;
   private loading: Promise<void> | null = null;
   private attached = new Map<Session, { sourceId: string; preloadId: string | null }>();
-  private stats: AdblockStats = { enabled: true, ready: false, listsUpdatedAt: null, blocked: {}, popupsBlocked: {} };
+  private stats: AdblockStats = { enabled: true, ready: false, updating: false, error: null, listsUpdatedAt: null, blocked: {}, popupsBlocked: {} };
   private dirty = false;
 
-  constructor(
-    private cachePath: string,
-    private filtersPath: string,
-    private emit: (stats: AdblockStats) => void,
-  ) {
+  constructor(private cachePath: string, private filtersPath: string, private emit: (stats: AdblockStats) => void) {
     setInterval(() => {
       if (!this.dirty) return;
-      this.dirty = false;
-      this.emit(this.snapshot());
+      this.dirty = false; this.emit(this.snapshot());
     }, 2000).unref();
-  }
+    setInterval(() => { if (this.stats.enabled) void this.load(); }, 3600_000).unref();
 
+    ipcMain.removeHandler('@ghostery/adblocker/inject-cosmetic-filters');
+    ipcMain.removeHandler('@ghostery/adblocker/is-mutation-observer-enabled');
+    ipcMain.handle('@ghostery/adblocker/inject-cosmetic-filters', (event, url: unknown, msg: unknown) => this.cosmetics(event,url,msg));
+    ipcMain.handle('@ghostery/adblocker/is-mutation-observer-enabled', event =>
+      this.stats.enabled && this.attached.has(event.sender.session) ? this.blocker?.onIsMutationObserverEnabled(event) ?? false : false);
+  }
   snapshot(): AdblockStats {
     return { ...this.stats, blocked: { ...this.stats.blocked }, popupsBlocked: { ...this.stats.popupsBlocked } };
   }
-
-  setEnabled(enabled: boolean) {
-    this.stats.enabled = enabled;
-    this.dirty = true;
-  }
-
+  setEnabled(enabled: boolean) { this.stats.enabled=enabled;this.dirty=true; }
   countPopup(sourceId: string) {
-    this.stats.popupsBlocked[sourceId] = (this.stats.popupsBlocked[sourceId] ?? 0) + 1;
-    this.dirty = true;
+    this.stats.popupsBlocked[sourceId]=(this.stats.popupsBlocked[sourceId]??0)+1;this.dirty=true;
   }
-
-  /** Loads cached filter lists (refreshing them when older than 3 days). */
-  load(): Promise<void> {
-    this.loading ??= this.init().catch((err) => {
-      console.error('[adblock] failed to initialise:', errorMessage(err));
-      this.loading = null;
-    });
+  private async cosmetics(event:IpcMainInvokeEvent,url:unknown,msg:unknown) {
+    if(!this.stats.enabled||!this.blocker||!this.attached.has(event.sender.session)||typeof url!=='string')return;
+    const frame=event.senderFrame;
+    if(!frame||frame.detached||url!==frame.url||!/^https?:\/\//i.test(url))return;
+    // Ghostery's Electron helper injects into WebContents (the top document).
+    // Route its trusted styles/scriptlets to the requesting player iframe instead.
+    const sender={
+      insertCSS:(css:string)=>frame.executeJavaScript('(()=>{const s=document.createElement("style");s.textContent='+JSON.stringify(css)+';(document.head||document.documentElement).append(s);})()').catch(()=>undefined),
+      executeJavaScript:(code:string)=>frame.executeJavaScript(code).catch(()=>undefined),
+    };
+    const input=msg===undefined?undefined:msg&&typeof msg==='object'?msg:undefined;
+    return this.blocker.onInjectCosmeticFilters({...event,sender,frameId:event.frameId,processId:event.processId} as unknown as IpcMainInvokeEvent,url,input as Parameters<ElectronBlocker['onInjectCosmeticFilters']>[2]);
+  }
+  /** Automatic checks keep last-known-good rules when the network is unavailable. */
+  load(): Promise<void> { return this.refresh(false).catch(err=>{console.warn('[adblock]',errorMessage(err));}); }
+  async update():Promise<AdblockStats> { if(this.loading)await this.loading;await this.refresh(true);return this.snapshot(); }
+  private refresh(force:boolean):Promise<void> {
+    if(this.loading)return this.loading;
+    this.loading=this.init(force).finally(()=>{this.loading=null;});
     return this.loading;
   }
-
-  private async init() {
-    const fresh = await stat(this.cachePath)
-      .then((s) => Date.now() - s.mtimeMs < LIST_MAX_AGE_MS)
-      .catch(() => false);
-    const fetchImpl = (url: string) => net.fetch(url);
-    const base = fresh
-      ? await ElectronBlocker.fromPrebuiltFull(fetchImpl, { path: this.cachePath, read: readFile, write: writeFile })
-      : await ElectronBlocker.fromPrebuiltFull(fetchImpl).then(async (engine) => {
-          await writeFile(this.cachePath, engine.serialize()).catch(() => undefined);
-          return engine;
-        });
-    // config/filters.txt is applied as a diff: merging a separately parsed engine
-    // fails because it lacks the prebuilt engine's redirect resources.
-    const custom = await readFile(this.filtersPath, 'utf8').catch(() => '');
-    const added = custom
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('!') && !line.startsWith('['));
-    if (added.length) base.updateFromDiff({ added });
-    this.blocker = base;
-    this.stats.ready = true;
-    this.stats.listsUpdatedAt = await stat(this.cachePath)
-      .then((s) => s.mtimeMs)
-      .catch(() => Date.now());
-
-    // Cosmetic filtering IPC is registered once for all sessions.
-    ipcMain.removeHandler('@ghostery/adblocker/inject-cosmetic-filters');
-    ipcMain.removeHandler('@ghostery/adblocker/is-mutation-observer-enabled');
-    ipcMain.handle('@ghostery/adblocker/inject-cosmetic-filters', (event, url: string, msg) => {
-      if (!this.stats.enabled || !this.isAttachedSender(event.sender.session)) return;
-      return this.blocker?.onInjectCosmeticFilters(event, url, msg);
-    });
-    ipcMain.handle('@ghostery/adblocker/is-mutation-observer-enabled', (event) => this.blocker?.onIsMutationObserverEnabled(event) ?? false);
-
-    // Sessions that asked for blocking before the lists were ready.
-    for (const [ses, info] of this.attached) this.hook(ses, info.sourceId);
-    this.dirty = true;
+  private async init(force:boolean) {
+    const stamp=await stat(this.cachePath).then(s=>s.mtimeMs).catch(()=>null);
+    if(!force&&this.blocker&&stamp&&Date.now()-stamp<LIST_MAX_AGE_MS)return;
+    this.stats.updating=true;this.stats.error=null;this.dirty=true;
+    let cached:ElectronBlocker|null=null;
+    try {
+      if(!this.blocker)cached=await readFile(this.cachePath).then(bytes=>ElectronBlocker.deserialize(bytes)).catch(()=>null);
+      let base:ElectronBlocker;
+      if(!force&&cached&&stamp&&Date.now()-stamp<LIST_MAX_AGE_MS)base=cached;
+      else {
+        try {
+          base=await ElectronBlocker.fromPrebuiltFull(url=>net.fetch(url,{signal:AbortSignal.timeout(20000)}));
+          // Cache the base engine before local overrides, so removed overrides stay removed.
+          await writeFile(this.cachePath+'.tmp',base.serialize());
+          await rename(this.cachePath+'.tmp',this.cachePath);
+        } catch(err) {
+          this.stats.error='Filter update failed. Existing rules are still active.';
+          if(force||(!this.blocker&&!cached))throw err;
+          if(this.blocker)return;
+          base=cached!;
+        }
+      }
+      const custom=await readFile(this.filtersPath,'utf8').catch(()=>'');
+      const added=custom.split(/\r?\n/).map(line=>line.trim()).filter(line=>line&&!line.startsWith('!')&&!line.startsWith('['));
+      if(added.length)base.updateFromDiff({added});
+      this.blocker=base;this.stats.ready=true;
+      this.stats.listsUpdatedAt=await stat(this.cachePath).then(s=>s.mtimeMs).catch(()=>stamp);
+      for(const [ses,info] of this.attached)this.hook(ses,info.sourceId);
+    } catch(err) {
+      this.stats.error='Filter update failed. '+(this.blocker?'Existing rules are still active.':'Try updating again when connected.');
+      throw err;
+    } finally { this.stats.updating=false;this.dirty=true;this.emit(this.snapshot()); }
   }
-
-  private isAttachedSender(ses: Session) {
-    return this.attached.has(ses);
+  attach(ses:Session,sourceId:string) {
+    if(!this.attached.has(ses))this.attached.set(ses,{sourceId,preloadId:null});
+    if(this.blocker)this.hook(ses,sourceId);else void this.load();
   }
-
-  attach(ses: Session, sourceId: string) {
-    if (!this.attached.has(ses)) this.attached.set(ses, { sourceId, preloadId: null });
-    if (this.blocker) this.hook(ses, sourceId);
-    else void this.load();
-  }
-
-  detach(ses: Session) {
-    const info = this.attached.get(ses);
-    if (!info) return;
-    ses.webRequest.onBeforeRequest(null);
-    ses.webRequest.onHeadersReceived(null);
-    if (info.preloadId) ses.unregisterPreloadScript(info.preloadId);
+  detach(ses:Session) {
+    const info=this.attached.get(ses);if(!info)return;
+    ses.webRequest.onBeforeRequest(null);ses.webRequest.onHeadersReceived(null);
+    if(info.preloadId)ses.unregisterPreloadScript(info.preloadId);
     this.attached.delete(ses);
   }
-
-  private hook(ses: Session, sourceId: string) {
-    const blocker = this.blocker!;
-    const info = this.attached.get(ses)!;
-    if (!info.preloadId) info.preloadId = ses.registerPreloadScript({ type: 'frame', filePath: PRELOAD_PATH });
-    ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
-      if (!this.stats.enabled) return callback({});
-      blocker.onBeforeRequest(details, (response) => {
-        if (response.cancel || response.redirectURL) {
-          this.stats.blocked[sourceId] = (this.stats.blocked[sourceId] ?? 0) + 1;
-          this.dirty = true;
-        }
+  private hook(ses:Session,sourceId:string) {
+    const info=this.attached.get(ses)!;
+    if(!info.preloadId)info.preloadId=ses.registerPreloadScript({type:'frame',filePath:PRELOAD_PATH});
+    ses.webRequest.onBeforeRequest({urls:['<all_urls>']},(details,callback)=>{
+      if(!this.stats.enabled||!this.blocker)return callback({});
+      this.blocker.onBeforeRequest(details,response=>{
+        if(response.cancel||response.redirectURL){this.stats.blocked[sourceId]=(this.stats.blocked[sourceId]??0)+1;this.dirty=true;}
         callback(response);
       });
     });
-    ses.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (details, callback) => {
-      if (!this.stats.enabled) return callback({});
-      blocker.onHeadersReceived(details, callback);
+    ses.webRequest.onHeadersReceived({urls:['<all_urls>']},(details,callback)=>{
+      if(!this.stats.enabled||!this.blocker)return callback({});
+      this.blocker.onHeadersReceived(details,callback);
     });
   }
 }

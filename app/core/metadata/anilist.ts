@@ -8,6 +8,7 @@ import type {
   MediaSeason,
   Page,
 } from '../../shared/types';
+import { broaderSearch, discoveryScore } from './search';
 import { pendingRelease } from '../../shared/release';
 import type { Store } from '../db/store';
 import { type FetchFn, RateGate, requestJson } from '../net/http';
@@ -18,7 +19,7 @@ export const ANILIST_GRAPHQL = 'https://graphql.anilist.co';
 const CARD = `
 fragment card on Media {
   id idMal type
-  title { romaji english native userPreferred }
+  title { romaji english native userPreferred } synonyms
   coverImage { extraLarge large color }
   bannerImage format status episodes duration averageScore season seasonYear genres isAdult
   nextAiringEpisode { episode airingAt }
@@ -92,7 +93,7 @@ query ($id: Int) {
 
 const searchQuery = (showAdult: boolean) => `${CARD}
 query ($search: String) {
-  Page(perPage: 8) { media(search: $search, type: ANIME, sort: SEARCH_MATCH${adultArg(showAdult)}) { ...card } }
+  Page(perPage: 24) { media(search: $search, type: ANIME, sort: SEARCH_MATCH${adultArg(showAdult)}) { ...card } }
 }`;
 
 const SCHEDULE_QUERY = `${CARD}
@@ -123,6 +124,7 @@ interface RawMedia {
   id: number;
   idMal: number | null;
   type?: string;
+  synonyms?: string[] | null;
   title: { romaji: string | null; english: string | null; native: string | null; userPreferred: string };
   coverImage: { extraLarge: string | null; large: string | null; color: string | null };
   bannerImage: string | null;
@@ -287,6 +289,7 @@ export class AniListClient {
   /** Executes a GraphQL operation. `ttl` > 0 enables the SQLite response cache. */
   async query<T>(query: string, variables: Record<string, unknown>, opts: { ttl?: number; auth?: boolean; token?: string } = {}): Promise<T> {
     const key = `anilist:${hash(query)}:${JSON.stringify(variables)}`;
+    const cacheContext=this.store.cacheContext();
     if (opts.ttl) {
       const cached = this.store.cacheGet<T>(key);
       if (cached) return cached;
@@ -319,7 +322,7 @@ export class AniListClient {
           if (!res.data) throw new AppError('network', `AniList: ${first.message}`);
         }
         if (!res.data) throw new AppError('network', 'AniList returned no data.');
-        if (opts.ttl) this.store.cacheSet(key, res.data, opts.ttl);
+        if (opts.ttl) this.store.cacheSet(key, res.data, opts.ttl, cacheContext);
         return res.data;
       })
       .catch((err) => {
@@ -361,11 +364,17 @@ export class AniListClient {
 
   async browse(q: BrowseQuery): Promise<Page<MediaCard>> {
     const vars = browseVariables(q, this.store.libraryIds(), this.options.showAdult());
-    const data = await this.query<{ Page: { pageInfo: { total: number; currentPage: number; hasNextPage: boolean }; media: RawMedia[] } }>(
+    let data = await this.query<{ Page: { pageInfo: { total: number; currentPage: number; hasNextPage: boolean }; media: RawMedia[] } }>(
       browseQuery(Object.keys(vars)),
       vars,
       { ttl: 600 },
     );
+    // Broaden an empty first page without dropping the user's other filters.
+    const wider=q.search?broaderSearch(q.search):null;
+    if(!data.Page.media.length&&wider&&(q.page??1)===1){
+      data=await this.query(browseQuery(Object.keys(vars)),{...vars,search:wider},{ttl:600});
+      data={Page:{...data.Page,pageInfo:{...data.Page.pageInfo,hasNextPage:false,total:data.Page.media.length}}};
+    }
     return {
       items: data.Page.media.map(mapCard),
       page: data.Page.pageInfo.currentPage,
@@ -381,8 +390,14 @@ export class AniListClient {
 
   async search(q: string): Promise<MediaCard[]> {
     if (!q.trim()) return [];
-    const data = await this.query<{ Page: { media: RawMedia[] } }>(searchQuery(this.options.showAdult()), { search: q.trim() }, { ttl: 1800 });
-    return data.Page.media.map(mapCard);
+    const fetchResults=async(search:string)=>(await this.query<{Page:{media:RawMedia[]}}>(
+      searchQuery(this.options.showAdult()),{search},{ttl:1800})).Page.media;
+    const primary=await fetchResults(q.trim());
+    const wider=broaderSearch(q);
+    const nearby=primary.length<8&&wider ? await fetchResults(wider).catch(()=>[]) : [];
+    const unique=[...new Map([...primary,...nearby].filter(raw=>this.options.showAdult()||!raw.isAdult).map(raw=>[raw.id,raw])).values()];
+    return unique.map(raw=>({raw,score:discoveryScore(q,[...Object.values(raw.title),...(raw.synonyms??[])])}))
+      .sort((a,b)=>b.score-a.score).slice(0,24).map(({raw})=>mapCard(raw));
   }
 
   /**

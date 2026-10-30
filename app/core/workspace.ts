@@ -94,7 +94,9 @@ export class WorkspaceService {
   deleteSkip(mediaId: number, kind: SkipRange['kind']) {
     this.store.db.prepare('DELETE FROM skip_ranges WHERE media_id=? AND kind=?').run(mediaId, kind);
   }
+  resetObservation(){this.previous.clear();}
   record(point: PlaybackPoint) {
+    if(this.store.isPrivate(point.mediaId)){this.previous.delete(point.sessionId);return;}
     const now = this.now(),
       previous = this.previous.get(point.sessionId);
     let seconds = 0,

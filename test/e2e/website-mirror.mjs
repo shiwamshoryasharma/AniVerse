@@ -16,7 +16,7 @@ await build({entryPoints:[path.join(root,'test/e2e/fixtures/mirror-main.ts')],bu
 await build({entryPoints:[path.join(root,'frontend/src/lib/websiteMirror.ts')],bundle:true,platform:'browser',format:'iife',globalName:'Mirror',outfile:path.join(run,'renderer.js'),logLevel:'warning'});
 writeFileSync(path.join(run,'preload.cjs'),"const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('aniverse',{on:(name,listener)=>{const handler=(_,event,payload)=>{if(event===name)listener(payload)};ipcRenderer.on('aniverse:event',handler);return()=>ipcRenderer.removeListener('aniverse:event',handler)},invoke:async(m,i)=>{if(m.startsWith('fixture.'))return ipcRenderer.invoke('fixture',m,i);const r=await ipcRenderer.invoke('aniverse:rpc',m,i);if(!r.ok)throw new Error(r.error.message);return r.data;}});");
 writeFileSync(path.join(run,'host.html'),'<!doctype html><html><body><button id="start">Cast fixture</button><webview partition="persist:src-mirror-fixture" src="https://mirror-fixture.test/player" style="width:960px;height:540px" webpreferences="backgroundThrottling=no"></webview><script src="./renderer.js"></script><script>window.fixtureErrors=[];document.querySelector("webview").addEventListener("dom-ready",()=>window.guestId=document.querySelector("webview").getWebContentsId());document.querySelector("#start").onclick=async()=>{try{const {ticket}=await window.aniverse.invoke("cast.mirrorPrepare",{webContentsId:window.guestId,deviceId:"fixture",title:"Website fixture",upscale:!!window.upscale});window.stopMirror=await Mirror.startWebsiteMirror(ticket,true,e=>fixtureErrors.push(e));}catch(e){fixtureErrors.push(String(e))}};</script></body></html>');
-const app=await _electron.launch({executablePath:require('electron'),args:[path.join(run,'main.cjs')],cwd:root,env:{...process.env,MIRROR_RUN:run,MIRROR_ROOT:root,TEMP:path.join(run,'temp'),TMP:path.join(run,'temp')},timeout:60000});
+const app=await _electron.launch({executablePath:require('electron'),args:[path.join(run,'main.cjs'),...(process.env.E2E_STABLE_UI==='1'?['--disable-gpu-compositing']:[])],cwd:root,env:{...process.env,MIRROR_RUN:run,MIRROR_ROOT:root,TEMP:path.join(run,'temp'),TMP:path.join(run,'temp')},timeout:60000});
 app.process().stdout.on('data',c=>process.stdout.write(c));app.process().stderr.on('data',c=>process.stderr.write(c));
 const reports=[];
 async function until(fn){const deadline=Date.now()+60000;while(Date.now()<deadline){if(await fn())return;await new Promise(r=>setTimeout(r,200));}throw new Error('Mirror state timed out');}
@@ -35,6 +35,7 @@ try{
   await page.click('#start');
   await until(()=>page.evaluate(async()=>{const s=await window.aniverse.invoke('fixture.state');if(s.errors.length||fixtureErrors.length)throw new Error(JSON.stringify({s,fixtureErrors}));return !!s.loaded&&s.state.status==='playing';}));
   const state=await page.evaluate(()=>window.aniverse.invoke('fixture.state'));
+  if(process.env.E2E_STABLE_UI==='1')assert.equal(state.compositing,'disabled_software');
   assert.ok(state.chunks>0);assert.equal(state.state.processing.live,true);
   assert.equal(await page.evaluate(async()=>{try{const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:true});stream.getTracks().forEach(t=>t.stop());return false;}catch{return true;}}),true);
   const segment=readdirSync(state.folder).filter(f=>/segment-\d+\.m4s$/.test(f)).sort()[0];
@@ -80,5 +81,5 @@ try{
  console.error(await (await app.firstWindow()).evaluate(async()=>({state:await window.aniverse.invoke('fixture.state'),errors:window.fixtureErrors})));
  throw error;
 }finally{
- await app.close();writeFileSync(path.join(root,'test/artifacts/release-'+JSON.parse(readFileSync(path.join(root,'package.json'),'utf8')).version+'-mirror.json'),JSON.stringify({reports,physicalTVTested:false},null,2)+'\n');
+ await app.close();writeFileSync(path.join(root,'test/artifacts/release-'+JSON.parse(readFileSync(path.join(root,'package.json'),'utf8')).version+'-mirror.json'),JSON.stringify({reports,stableUI:process.env.E2E_STABLE_UI==='1',physicalTVTested:false},null,2)+'\n');
 }

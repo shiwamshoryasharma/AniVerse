@@ -471,7 +471,7 @@
   display: grid;
   place-items: center;
   background: rgba(7, 8, 11, 0.88);
-  backdrop-filter: blur(6px);
+  backdrop-filter: none;
   text-align: center;
   padding: 20px;
 }
@@ -636,12 +636,12 @@
   z-index: 400;
   padding: 6px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+  background: var(--surface-2);
   border: 1px solid var(--line-2);
   box-shadow:
     0 24px 60px -18px rgba(0, 0, 0, 0.9),
     0 0 0 1px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: none;
   animation: ctx-in 0.13s var(--ease);
   transform-origin: top left;
 }

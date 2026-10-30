@@ -2,6 +2,22 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 1.5.8 — 2026-10-30
+
+- 🪔 **Diwali × Halloween:** restrained violet/ivory/amber dark palette, automatic through December with previous colours restored in January; early opt-out and later manual selection.
+- 🎬 **Episode index:** thumbnail cards, active/watched indicators, search and grid/list controls with Spoiler Shield preserved.
+- 🔎 **Search and recovery:** English, romaji and Japanese aliases, broader nearby word results, and bounded fallback across enabled TXT sources when content is missing.
+- 🔒 **Private viewing:** temporary incognito and persistent private-title rules, memory-only website sessions, no new playback records or future sync, and private-title exclusion from new backups.
+- 🖼️ **Player geometry:** correct cropped/offset videos, embedded player documents and Anime4K overlay alignment.
+- 🚫 **Ad-blocker update:** deny same-site popups, protect top-frame redirects, inject cosmetic rules into the requesting frame, refresh filters automatically and expose Update filters.
+
+- 🔍 **Clear interface:** removed remaining backdrop blur from dialogs, release highlights, menus and navigation overlays.
+- 🖥️ **Stable Windows UI:** software window composition avoids the GPU presentation path while preserving available GPU video decoding, WebGL filtering and sender encoding.
+- ⚙️ **Rendering choice:** Settings → Graphics & GPU offers device-local Stable / Accelerated UI modes, with explicit restart status.
+- 🧪 **Regression coverage:** repeated resizes, fractional display scales, real GPU WebGL, video-codec availability and mode persistence across restarts.
+
+[Full 1.5.8 release notes](docs/releases/1.5.8.md)
+
 ## 1.5.7 — 2026-10-29
 
 - 📺 **Chrome casting:** uses installed Google Chrome’s native receiver discovery and tab-casting transport with an isolated companion window.

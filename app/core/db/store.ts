@@ -85,6 +85,7 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX watch_sessions_started ON watch_sessions(started_at);
   `,
+  `CREATE TABLE private_titles (media_id INTEGER PRIMARY KEY CHECK(media_id>0));`,
 ];
 
 export interface StoredAccount {
@@ -134,6 +135,21 @@ const plainCodec: SecretCodec = { encrypt: (s) => s, decrypt: (s) => s };
 
 export class Store {
   readonly db: DatabaseSync;
+  private incognito = false;
+  private privacyEpoch=0;
+  cacheContext(){return this.privacyEpoch;}
+  private privateSnapshots = new Map<number,MediaSnapshot>();
+  private privateCache = new Map<string,{value:unknown;expires:number}>();
+  isIncognito(){return this.incognito;}
+  setIncognito(on:boolean){this.privacyEpoch++;this.incognito=on;this.privateSnapshots.clear();this.privateCache.clear();return this.privacyState();}
+  isPrivate(mediaId:number){return this.incognito||!!this.get('SELECT 1 FROM private_titles WHERE media_id=?',mediaId);}
+  privacyState(){return {incognito:this.incognito,privateMediaIds:this.all<{media_id:number}>('SELECT media_id FROM private_titles ORDER BY media_id').map(r=>Number(r.media_id))};}
+  setTitlePrivate(mediaId:number,on:boolean){
+    this.privacyEpoch++;
+    if(on){this.run('INSERT OR IGNORE INTO private_titles(media_id) VALUES(?)',mediaId);this.run("DELETE FROM sync_queue WHERE json_extract(payload,'$.mediaId')=?",mediaId);}
+    else this.run('DELETE FROM private_titles WHERE media_id=?',mediaId);
+    return this.privacyState();
+  }
 
   constructor(
     path: string,
@@ -232,6 +248,7 @@ export class Store {
   }
 
   setPin(sourceId: string, mediaId: number, url: string | null) {
+    if(this.isPrivate(mediaId))return;
     if (url === null) {
       this.run('DELETE FROM source_pins WHERE source_id = ? AND media_id = ?', sourceId, mediaId);
       return;
@@ -256,6 +273,7 @@ export class Store {
   }
 
   setSiteLink(sourceId: string, mediaId: number, episode: number, url: string) {
+    if(this.isPrivate(mediaId))return;
     this.run(
       `INSERT INTO site_links (source_id, media_id, episode, url, updated_at) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(source_id, media_id, episode) DO UPDATE SET url = excluded.url, updated_at = excluded.updated_at`,
@@ -268,12 +286,14 @@ export class Store {
   }
 
   clearSiteLinks(sourceId: string, mediaId: number) {
+    if(this.isPrivate(mediaId))return;
     this.run('DELETE FROM site_links WHERE source_id = ? AND media_id = ?', sourceId, mediaId);
   }
 
   // ------------------------------------------------------------------ snapshots
 
   upsertSnapshot(snap: MediaSnapshot) {
+    if(this.incognito){this.privateSnapshots.set(snap.id,snap);return;}
     this.run(
       `INSERT INTO media_snapshot (id, data, updated_at) VALUES (?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
@@ -284,6 +304,7 @@ export class Store {
   }
 
   getSnapshot(id: number): MediaSnapshot | null {
+    if(this.incognito&&this.privateSnapshots.has(id))return this.privateSnapshots.get(id)!;
     const row = this.get<{ data: string }>('SELECT data FROM media_snapshot WHERE id = ?', id);
     return row ? (JSON.parse(row.data) as MediaSnapshot) : null;
   }
@@ -299,6 +320,7 @@ export class Store {
    * crosses the completion threshold so callers can trigger list sync once.
    */
   saveProgress(save: ProgressSave, threshold: number): { completedNow: boolean; libraryProgress: number | null } {
+    if(this.isPrivate(save.media.id))return {completedNow:false,libraryProgress:null};
     return this.tx(() => {
       this.upsertSnapshot(save.media);
       const ts = nowSec();
@@ -325,6 +347,7 @@ export class Store {
   }
 
   setWatched(media: MediaSnapshot, episode: number, watched: boolean): number {
+    if(this.isPrivate(media.id))return this.getLibraryEntry(media.id)?.progress??0;
     return this.tx(() => {
       this.upsertSnapshot(media);
       const ts = nowSec();
@@ -389,10 +412,12 @@ export class Store {
   }
 
   continueWatching(limit = 20): ContinueItem[] {
+    if(this.incognito)return [];
     const rows = this.all<Row>(
       `SELECT p.* FROM progress p
        JOIN (SELECT media_id, MAX(updated_at) AS mu FROM progress GROUP BY media_id) latest
          ON latest.media_id = p.media_id AND latest.mu = p.updated_at
+       WHERE NOT EXISTS(SELECT 1 FROM private_titles hidden WHERE hidden.media_id=p.media_id)
        ORDER BY p.updated_at DESC, p.episode DESC LIMIT ?`,
       limit * 2,
     );
@@ -420,7 +445,8 @@ export class Store {
   }
 
   listHistory(limit: number, offset: number): HistoryEntry[] {
-    return this.all<Row>('SELECT * FROM history ORDER BY watched_at DESC, id DESC LIMIT ? OFFSET ?', limit, offset).map((row) => ({
+    if(this.incognito)return [];
+    return this.all<Row>('SELECT * FROM history WHERE NOT EXISTS(SELECT 1 FROM private_titles p WHERE p.media_id=history.media_id) ORDER BY watched_at DESC, id DESC LIMIT ? OFFSET ?', limit, offset).map((row) => ({
       id: Number(row.id),
       media: this.snapshotOrStub(Number(row.media_id)),
       episode: Number(row.episode),
@@ -458,6 +484,7 @@ export class Store {
   }
 
   setFavourite(media: MediaSnapshot, favourite: boolean, addedAt = nowSec()) {
+    if(this.incognito)throw new Error('Exit incognito before changing saved favourites.');
     this.upsertSnapshot(media);
     if (favourite) this.run('INSERT OR IGNORE INTO favourites (media_id, added_at) VALUES (?, ?)', media.id, addedAt);
     else this.run('DELETE FROM favourites WHERE media_id = ?', media.id);
@@ -482,6 +509,7 @@ export class Store {
   }
 
   setLibraryEntry(media: MediaSnapshot, status: ListStatus | null, progress?: number, score?: number | null, updatedAt = nowSec()) {
+    if(this.incognito)throw new Error('Exit incognito before changing the saved library.');
     this.upsertSnapshot(media);
     if (status === null) {
       this.run('DELETE FROM library WHERE media_id = ?', media.id);
@@ -577,6 +605,7 @@ export class Store {
   // ------------------------------------------------------------------ sync queue
 
   enqueueSync(provider: Provider, op: SyncOp, payload: SyncPayload) {
+    if(this.isPrivate(payload.mediaId))return;
     const key = `${provider}:${op}:${payload.mediaId}`;
     const ts = nowSec();
     if (op === 'entry') this.dropLegacyEntryJobs(provider, payload.mediaId);
@@ -638,6 +667,7 @@ export class Store {
   // ------------------------------------------------------------------ http cache
 
   cacheGet<T>(key: string): T | null {
+    const memory=this.incognito?this.privateCache.get(key):null;if(memory&&memory.expires>=nowSec())return memory.value as T;
     const row = this.get<{ value: string; expires_at: number }>('SELECT value, expires_at FROM http_cache WHERE key = ?', key);
     if (!row || Number(row.expires_at) < nowSec()) return null;
     return JSON.parse(row.value) as T;
@@ -645,11 +675,14 @@ export class Store {
 
   /** Returns a cached value even if expired (used as an offline fallback). */
   cacheGetStale<T>(key: string): T | null {
+    if(this.incognito&&this.privateCache.has(key))return this.privateCache.get(key)!.value as T;
     const row = this.get<{ value: string }>('SELECT value FROM http_cache WHERE key = ?', key);
     return row ? (JSON.parse(row.value) as T) : null;
   }
 
-  cacheSet(key: string, value: unknown, ttlSec: number) {
+  cacheSet(key: string, value: unknown, ttlSec: number, context=this.privacyEpoch) {
+    if(context!==this.privacyEpoch)return;
+    if(this.incognito){if(this.privateCache.size>500)this.privateCache.clear();this.privateCache.set(key,{value,expires:nowSec()+ttlSec});return;}
     this.run(
       `INSERT INTO http_cache (key, value, expires_at) VALUES (?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at`,

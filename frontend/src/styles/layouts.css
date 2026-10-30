@@ -43,7 +43,7 @@
 .layout-cinema .ep-panel-head { display:flex; align-items:center; gap:18px; }
 .layout-cinema .ep-panel-head>.row { flex:1; margin:0; min-width:0; }
 .layout-cinema .ep-list:not(.grid-mode) { display:flex; gap:10px; overflow-x:auto; padding:12px; }
-.layout-cinema .ep-list:not(.grid-mode) .ep-row { flex:0 0 160px; display:flex; min-height:56px; gap:10px; padding:12px; border:1px solid var(--line-2); border-radius:8px; }
+.layout-cinema .ep-list:not(.grid-mode) .ep-row { flex:0 0 280px; min-height:92px; }
 .layout-cinema .hero { height:clamp(360px,56vh,620px); margin:0 0 28px; border-radius:16px; }
 .layout-cinema .home-grid { grid-template-columns:minmax(0,1fr); }
 .layout-cinema .home-grid>aside { position:static!important; }

@@ -108,3 +108,13 @@ release-1.5.6.mjs uses a real cross-origin iframe plus a third-origin video with
 test/e2e/chrome-cast.mjs launches installed Chrome with a fresh profile under test/cache/chrome-cast and private inherited pipes. It uses the production companion and CastService media server to verify MP4 plus embedded 4K HEVC HLS playback, advancing media/frame counters, screenshots and shutdown. The receiver is a local-player test double; physical TV output is not tested. E2E_MEDIA_RESOURCES selects packaged embedded tools.
 
 release-1.5.6.mjs now derives artifact/version names from package.json, retains earlier upscaling/timing regressions and adds real Chrome discovery through trusted IPC plus app zoom, viewport, DPR and non-blurred backdrop checks. Its Windows URI actions remain controlled. On 2026-10-29, the host had no receiver announcements; do not infer receiver support or physical connection from these checks.
+
+## Whole-interface rendering checks (1.5.8)
+
+test/e2e/ui-rendering.mjs validates 22 checks per run through Stable → Accelerated → Stable restarts: fresh release overlays, actual compiled CSS, repeated native resizes, zoom/DPR invariants, live GPU WebGL pixels/renderer, video codec flags, preference persistence and restart status. E2E_DEVICE_SCALE_FACTOR=1.25/1.5 covers fractional scaling; E2E_EXE selects the packaged app. All profiles/config/temp/evidence stay under test/.
+
+E2E_STABLE_UI=1 makes website-mirror.mjs assert disabled_software composition in its Electron fixture, so capture/encoding checks exercise the same path as production. GPU-heavy tests should run sequentially: concurrent sender/GPU startup once produced a zero-pixel accelerated readback, while isolated serial reruns at both scales passed. Do not convert a resource-contention failure into a driver diagnosis or silently retry it away.
+
+gpu.mjs now acknowledges the current release dialog and uses its own neutral config directory. The native desktop user's intermittent hover-to-clear symptom was not directly reproduced by the hidden harness; report the tested compositor workaround and CSS fix without universal driver claims.
+
+The 1.5.8 sources-privacy harness uses real Electron/IPC with neutral protocol handlers, temporary profiles and controlled metadata. It covers bounded fallback/retry, popup prevention, normal/private cookie separation, release/revisit cleanup and restart persistence. player-focus additionally decodes the public test clip for a real 4K overlay under a transformed containing block. New unit suites cover search ranking/aliases, blocker hot refresh/offline fallback, popup policy, seasonal expiry/opt-out and privacy races. These do not certify live external site availability or anonymous browsing.

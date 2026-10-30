@@ -9,17 +9,23 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const temporary = path.join(root, 'test/cache/gpu-ui/temp');
 mkdirSync(temporary, { recursive: true });
+const config = path.join(root, 'test/cache/gpu-ui/config');
+mkdirSync(config, { recursive: true });
+writeFileSync(path.join(config, 'streaming-sites.txt'), 'https://gpu-fixture.test\n');
+writeFileSync(path.join(config, 'filters.txt'), '! GPU test filters\n');
 const reports = [];
 for (const preference of ['high-performance', 'system']) {
   const app = await _electron.launch({
     executablePath: process.env.E2E_EXE ? path.resolve(root, process.env.E2E_EXE) : createRequire(import.meta.url)('electron'), args: process.env.E2E_EXE ? [] : [root], cwd: root,
-    env: { ...process.env, ANIVERSE_HEADLESS: '1', ANIVERSE_GPU_PREFERENCE: preference,
+    env: { ...process.env, ANIVERSE_HEADLESS: '1', ANIVERSE_GPU_PREFERENCE: preference, ANIVERSE_CONFIG_DIR: config,
       ANIVERSE_DATA_DIR: path.join(root, 'test/cache/gpu-ui', preference),
       TEMP: temporary, TMP: temporary, TMPDIR: temporary },
   });
   try {
     const page = await app.firstWindow();
     await page.waitForSelector('.app', { timeout: 30000 });
+    const release = await page.evaluate(() => window.aniverse.invoke('changelog.state'));
+    if (release.unread) { await page.waitForSelector('.release-dialog[open]'); await page.getByRole('button', { name: 'Got it', exact: true }).click(); }
     await page.evaluate(() => { location.hash = '#/settings/graphics'; });
     await page.waitForSelector('.graphics-panel .gpu-device', { timeout: 30000 });
     const iconLayout = await page.evaluate(() => [...document.querySelectorAll('.settings-nav button svg')].every((icon) => {

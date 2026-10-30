@@ -25,3 +25,13 @@ Run `npm run build` before the application E2E scripts — they launch `dist/`.
 The 1.5.6 harness also checks Darken/Thin on native and captured video, and injects a 130 ms render delay to verify that late filtered output is hidden while source playback/audio continue. Unit suites test the actual vendor shader fragments and frame-deadline policy. These checks do not measure physical audio/video lip sync.
 
 `node test/e2e/chrome-cast.mjs` verifies installed Chrome's actual Cast API and the production companion with local MP4 and embedded 3840 × 2160 HEVC HLS. Profiles/temp data stay under cache/chrome-cast; evidence goes to artifacts/chrome-cast*. It does not certify a TV route. E2E_MEDIA_RESOURCES selects packaged tools. The existing release-1.5.6 UI harness now uses the current package version for artifact names and checks Chrome discovery plus unchanged zoom/viewport/DPR and a non-blurred cast backdrop.
+
+`node test/e2e/ui-rendering.mjs` checks non-blurred UI surfaces, repeated resizes, real GPU WebGL pixels, hardware codec availability, and Stable/Accelerated mode changes across three isolated Electron launches. Set E2E_DEVICE_SCALE_FACTOR to 1.25 or 1.5 for fractional-scale checks and E2E_EXE for the packaged build. The test requires a working hardware GPU and keeps everything under cache/ui-rendering and artifacts/ui-rendering-*. E2E_STABLE_UI=1 makes the website-mirror fixture use the same software window compositor as Windows production.
+
+### 1.5.8 source/privacy and layout checks
+
+- `node test/e2e/player-focus.mjs`: neutral cropped/offset video and wrapper regressions, layout restoration, original element identity/controls/subtitles, and real 4K overlay alignment under a transformed wrapper. Requires the existing public Sintel fixture clip in `test/cache/release-1.5.2-ui/`.
+- `node test/e2e/sources-privacy.mjs`: real app IPC, missing-page fallback, bounded exhaustion/retry, popup denial, normal/private cookie isolation, leave/revisit cleanup, restart persistence and seasonal episode/settings UI. Controlled metadata and `.test` protocols only.
+- `node test/e2e/release-1.5.6.mjs`: maintained current-version casting/Anime4K suite, now also checks cropped cross-origin iframe geometry before compatibility filtering.
+
+Serialize GPU-heavy harnesses. `E2E_EXE=release/win-unpacked/AniVerse.exe` selects the signed unpacked app for supported launchers. Evidence remains under `test/artifacts/`; source catalogues, provider account syncing, TV output and installer installation are not validated by these fixtures.

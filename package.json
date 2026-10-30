@@ -1,7 +1,7 @@
 {
   "name": "aniverse",
   "productName": "AniVerse",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "private": true,
   "description": "Desktop anime hub: AniList-powered browsing, isolated source sessions, custom HLS/DASH/MP4 player and AniList/MAL sync.",
   "author": {

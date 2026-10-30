@@ -29,3 +29,9 @@ Keep pinned/learned links, season checks, SUB/DUB/server preferences and the loa
 Use fixtures/unit tests for pure matching/navigation decisions. Use the existing native in-process survey for live website behavior; use Playwright for AniVerse UI. Historical remote-debugging/anti-bot failures must be confirmed outside the Playwright harness before changing product behavior.
 
 Follow [validation guidance](../aniverse-validation/SKILL.md). Put fixtures/scripts/configs and evidence under `test/`; redact configured site identities from shared reports. Do not change Claude's completed layers based only on stale notes or historical screenshots.
+
+## 1.5.8 contracts
+
+Use generic TXT-source parsing and rendered navigation; do not add user-mentioned live sources to tracked code, tests or documentation. Discovery may show broad word/typo matches, but playback still validates title/season/episode. Missing content triggers one bounded enabled-source pass; challenges stay user-visible.
+
+Private guests use issued nonpersistent partitions. Resolve the actual session-owned SourceInfo for navigation; never learn private search/watch links or reuse a released lease. Private title rules and incognito require main-process enforcement, not UI-only hiding. See [privacy](../../../PRIVACY.md).

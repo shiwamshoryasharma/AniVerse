@@ -26,9 +26,10 @@ export async function boundedText(response: Response, limit: number): Promise<st
 }
 export class DriveClient {
   constructor(private fetchFn: FetchFn, private accessToken: () => Promise<string>) {}
-  private async request(url: string, init: RequestInit = {}): Promise<Response> {
+  private async request(url: string, init: RequestInit = {}, beforeSend?:()=>void): Promise<Response> {
     const headers = new Headers(init.headers);
     headers.set('Authorization', 'Bearer ' + await this.accessToken());
+    beforeSend?.();
     const response = await this.fetchFn(url, { ...init, headers, redirect: 'error', signal: AbortSignal.timeout(45000) });
     if (!response.ok) {
       await response.body?.cancel();
@@ -73,7 +74,7 @@ export class DriveClient {
     const response = await this.request(base + '/' + file.id + '?alt=media&supportsAllDrives=true');
     return { text: await boundedText(response, BACKUP_LIMIT), etag: response.headers.get('etag'), file };
   }
-  async upload(folderId: string, text: string, validateExisting: (data: unknown) => void): Promise<void> {
+  async upload(folderId: string, text: string, validateExisting: (data: unknown) => void, beforeSend?:()=>void): Promise<void> {
     if (Buffer.byteLength(text) > BACKUP_LIMIT) throw new Error('Backup exceeds the 25 MB limit.');
     const existing = await this.file(folderId);
     let etag: string | null = null;
@@ -89,7 +90,7 @@ export class DriveClient {
       + '\r\n--' + boundary + '\r\nContent-Type: application/json\r\n\r\n' + text + '\r\n--' + boundary + '--';
     const response = await this.request('https://www.googleapis.com/upload/drive/v3/files' + (existing ? '/' + existing.id : '') + '?uploadType=multipart&supportsAllDrives=true', {
       method: existing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary, ...(etag ? { 'If-Match': etag } : {}) }, body,
-    });
+    },beforeSend);
     await response.body?.cancel();
   }
 }

@@ -26,6 +26,7 @@ await build({
   format: 'cjs',
   logLevel: 'warning',
 });
+await build({entryPoints:[path.join(root,'electron/upscaleGuest.ts')],outfile:path.join(cache,'upscale.js'),bundle:true,platform:'browser',format:'iife',globalName:'AniVerseUpscale',logLevel:'warning'});
 const child = spawn(createRequire(import.meta.url)('electron'), [path.join(root, 'test/e2e/drivers/player-focus.cjs')], {
   cwd: root,
   stdio: 'inherit',

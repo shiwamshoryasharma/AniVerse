@@ -363,7 +363,7 @@ export interface CommentsResult {
 
 // ---------------------------------------------------------------- settings
 
-export type AccentName = 'ember' | 'aqua' | 'violet' | 'sakura' | 'crimson';
+export type AccentName = 'ember' | 'aqua' | 'violet' | 'sakura' | 'crimson' | 'festival';
 
 export interface Settings {
   profile: {
@@ -454,6 +454,8 @@ export interface ProbeResult {
   };
 }
 
+export interface PrivacyState { incognito:boolean; privateMediaIds:number[] }
+
 export interface AppInfo {
   version: string;
   electron: string;
@@ -461,7 +463,7 @@ export interface AppInfo {
   platform: string;
   configPath: string;
   dataPath: string;
-  graphics: import('./graphics').GraphicsSummary & { renderer: string | null };
+  graphics: import('./graphics').GraphicsSummary & { renderer: string | null; uiRendering: import('./graphics').UiRenderingState };
 }
 
 export interface CloudflareEvent {
@@ -471,6 +473,8 @@ export interface CloudflareEvent {
 }
 
 export interface AdblockStats {
+  updating: boolean;
+  error: string | null;
   enabled: boolean;
   ready: boolean;
   listsUpdatedAt: number | null;
@@ -505,6 +509,7 @@ export interface OpenEpisodeRequest {
 
 export interface OpenEpisodeResult {
   ok: boolean;
+  failure?: 'not-found' | 'blocked' | 'unavailable' | 'cancelled';
   url: string;
   via: 'current' | 'cache' | 'derived' | 'search' | 'title' | null;
   focused: boolean;

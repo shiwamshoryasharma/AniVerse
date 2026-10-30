@@ -57,13 +57,14 @@ export class SyncService {
 
   /** Connected and not waiting for the user to reconnect. */
   usable(provider: Provider): boolean {
+    if(this.store.isIncognito())return false;
     const acc = this.store.getAccount(provider);
     return !!acc && !acc.needsReconnect;
   }
 
   /** Queues a change for every connected service and pushes it in the background. */
   queue(op: SyncOp, media: MediaSnapshot, favourite?: boolean) {
-    if (!this.settings().accounts.autoSync) return;
+    if (!this.settings().accounts.autoSync || this.store.isPrivate(media.id)) return;
     for (const provider of PROVIDERS) {
       if (!this.store.getAccount(provider)) continue;
       if (provider === 'mal' && (op === 'favourite' || !media.idMal)) continue;
@@ -99,16 +100,20 @@ export class SyncService {
         const jobs = this.store.dueSyncJobs(provider);
         if (!jobs.length) break;
         for (const job of jobs) {
+          if(this.store.isIncognito())break;
+          if(this.store.isPrivate(job.payload.mediaId)){this.store.completeSyncJob(job.id);continue;}
           try {
+            let privateBeforeSend=false;
             await this.authed(provider, (token) => {
+              if(this.store.isPrivate(job.payload.mediaId)){privateBeforeSend=true;return Promise.resolve('skipped' as const);}
               if (job.op === 'favourite') return this.providers[provider].pushFavourite(token, job.payload, !!job.payload.favourite);
               // Push AniVerse's entry as it is *now*: later edits since queuing are included.
               const local = this.store.getLibraryEntry(job.payload.mediaId);
               const entry: EntryState | null = local ? { status: local.status, progress: local.progress, score: local.score } : null;
               return this.providers[provider].pushEntry(token, job.payload, entry, account.userId);
             });
-            this.store.completeSyncJob(job.id);
-            result.pushed++;
+            if(!this.store.isIncognito())this.store.completeSyncJob(job.id);
+            if(!privateBeforeSend)result.pushed++;
           } catch (err) {
             result.failed++;
             result.errors.push(errorMessage(err));
@@ -152,6 +157,7 @@ export class SyncService {
     const pulled = new Map<Provider, PullResult>();
     if (this.settings().accounts.twoWay) {
       for (const provider of selected) {
+        if(this.store.isIncognito())break;
         const account = this.store.getAccount(provider)!;
         try {
           this.emit({ provider, state: 'syncing', message: `Fetching your ${NAME[provider]} list…` });
@@ -162,9 +168,10 @@ export class SyncService {
           this.emit({ provider, state: 'error', message: errorMessage(err) });
         }
       }
-      if (pulled.size) this.merge(pulled, report);
+      if (pulled.size && !this.store.isIncognito()) this.merge(pulled, report);
     }
     for (const provider of selected) {
+      if(this.store.isIncognito())break;
       const pushed = await this.flush(provider);
       report.pushed += pushed.pushed;
       report.failed += pushed.failed;
@@ -190,6 +197,7 @@ export class SyncService {
 
     this.store.tx(() => {
       for (const id of ids) {
+        if(this.store.isPrivate(id))continue;
         const local = this.store.getLibraryEntry(id);
         const snapshot = local?.media ?? media.get(id);
         if (!snapshot) continue;
@@ -216,7 +224,7 @@ export class SyncService {
         if (plan.conflict) report.resolved++;
       }
       for (const fav of pulled.get('anilist')?.favourites ?? []) {
-        if (!this.store.isFavourite(fav.id)) {
+        if (!this.store.isPrivate(fav.id) && !this.store.isFavourite(fav.id)) {
           this.store.setFavourite(fav, true);
           report.pulled++;
         }

@@ -1,0 +1,20 @@
+import {EventEmitter} from 'node:events';
+import {expect,it,vi} from 'vitest';
+vi.mock('electron',()=>({app:{userAgentFallback:'Chrome/150 Electron/44'},session:{},webContents:{},shell:{openExternal:vi.fn()}}));
+import {SessionManager} from '../../electron/sessions';
+import {DEFAULT_SETTINGS} from '../../app/core/settings';
+it('blocks same-site and cross-site popup windows without replacing the player, and guards HTTP redirects',()=>{
+ let handler:(details:unknown)=>unknown=()=>null;
+ const guest=Object.assign(new EventEmitter(),{id:1,setWindowOpenHandler:vi.fn(fn=>handler=fn),loadURL:vi.fn(),isDestroyed:()=>false});
+ const countPopup=vi.fn();const source={id:'stream-test',name:'Fixture',host:'stream.test',url:'https://stream.test',kind:'web'};
+ const registry={list:()=>[source]};const blocker={countPopup};
+ const manager=new SessionManager(registry as never,blocker as never,{} as never,()=>DEFAULT_SETTINGS,vi.fn(),vi.fn());
+ manager.manageGuest(guest as never,source as never);
+ expect(handler({url:'https://stream.test/ad',disposition:'foreground-tab'})).toEqual({action:'deny'});
+ expect(handler({url:'https://advert.test',disposition:'background-tab'})).toEqual({action:'deny'});
+ expect(guest.loadURL).not.toHaveBeenCalled();expect(countPopup).toHaveBeenCalledTimes(2);
+ const event={preventDefault:vi.fn()};
+ guest.emit('will-redirect',event,'https://advert.test',false,true);expect(event.preventDefault).toHaveBeenCalledTimes(1);
+ guest.emit('will-redirect',event,'https://cdn.test/frame',false,false);expect(event.preventDefault).toHaveBeenCalledTimes(1);
+ guest.emit('will-navigate',event,'https://stream.test/episode-2');expect(event.preventDefault).toHaveBeenCalledTimes(1);
+});

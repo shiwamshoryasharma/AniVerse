@@ -162,8 +162,16 @@ export interface RpcContract {
   'player.control': [{ webContentsId: number; action: 'play' | 'pause' | 'seek' | 'resync'; value?: number }, boolean];
 
   'adblock.stats': [void, AdblockStats];
+  'adblock.update': [void, AdblockStats];
+  'privacy.state': [void, import('./types').PrivacyState];
+  'privacy.incognito': [{on:boolean}, import('./types').PrivacyState];
+  'privacy.title': [{mediaId:number;on:boolean}, import('./types').PrivacyState];
+  'privacy.watchSources': [{mediaId:number}, {leaseId:string|null;sources:SourceInfo[]}];
+  'privacy.releaseSources': [{leaseId:string}, void];
   'app.info': [void, AppInfo];
   'app.openGraphicsSettings': [void, void];
+  'app.setUiRendering': [{ mode: import('./graphics').UiRenderingMode }, import('./graphics').UiRenderingState];
+  'app.restart': [void, void];
   'app.openExternal': [{ url: string }, void];
   'app.cacheClear': [void, void];
 
@@ -181,6 +189,7 @@ export type RpcOutput<M extends RpcMethod> = RpcContract[M][1];
 
 export interface EventContract {
   'sources.changed': SourceInfo[];
+  'privacy.changed': import('./types').PrivacyState;
   'cloudflare.status': CloudflareEvent;
   'sync.status': SyncStatusEvent;
   'adblock.stats': AdblockStats;

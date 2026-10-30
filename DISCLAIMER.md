@@ -79,3 +79,7 @@ AniVerse is a personal project shared on a best-effort basis. Releases may be ra
 The updater does not promise future releases. An outdated or unsupported browser can become incompatible with sites; continued operation is not guaranteed.
 
 This notice may change with the application. Use the version accompanying your release when assessing documented behavior. The About menu contains a shorter notice; this document provides the fuller explanation.
+
+## User-selected content and sources
+
+Users are responsible for the content they watch and the sources they configure. AniVerse's maintainers do not select, endorse or control those sources and are not responsible for users' viewing choices. This notice does not grant content rights, override service terms or guarantee immunity from applicable law.
