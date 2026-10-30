@@ -1,3 +1,4 @@
+import {boundedInput,RpcBudget} from '../app/core/security/rpcBudget';
 import { ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
 import { AppError, errorMessage } from '../app/core/util';
@@ -287,22 +288,26 @@ export type Handlers = { [M in RpcMethod]: (input: RpcContract[M][0], event: Ipc
  * returned as data so their codes survive IPC serialisation.
  */
 export function registerRpc(handlers: Handlers, isTrustedSender: (event: IpcMainInvokeEvent) => boolean) {
+  const budget=new RpcBudget();
+  const watched=new Set<number>();
   ipcMain.handle(RPC_CHANNEL, async (event, method: unknown, input: unknown) => {
-    if (!isTrustedSender(event)) return fail({ code: 'unauthorised', message: 'Untrusted sender.' });
-    if (typeof method !== 'string' || !(method in schemas)) return fail({ code: 'invalid-input', message: `Unknown method ${String(method)}` });
+    try{if (!isTrustedSender(event)) return fail({ code: 'unauthorised', message: 'Untrusted sender.' });}
+    catch{return fail({code:'unauthorised',message:'The calling frame is no longer available.'});}
+    if (typeof method !== 'string' || method.length>80 || !Object.hasOwn(schemas,method)) return fail({ code: 'invalid-input', message: 'Unknown RPC method.' });
+    if(!boundedInput(input))return fail({code:'invalid-input',message:'RPC input exceeds the work limit.'});
+    if(!budget.begin(event.sender.id))return fail({code:'invalid-input',message:'Too many active requests. Try again shortly.'});
+    if(!watched.has(event.sender.id)){watched.add(event.sender.id);event.sender.once?.('destroyed',()=>{budget.forget(event.sender.id);watched.delete(event.sender.id);});}
     const m = method as RpcMethod;
-    const parsed = schemas[m].safeParse(input);
-    if (!parsed.success) {
-      return fail({ code: 'invalid-input', message: parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; ') });
-    }
     try {
+      const parsed = schemas[m].safeParse(input);
+      if (!parsed.success) return fail({ code: 'invalid-input', message: parsed.error.issues.slice(0,8).map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; ') });
       const data = await (handlers[m] as (i: unknown, e: IpcMainInvokeEvent) => unknown)(parsed.data, event);
       return { ok: true, data };
     } catch (err) {
       if (err instanceof AppError) return fail({ code: err.code, message: err.message });
       console.error(`[rpc] ${m} failed:`, err);
       return fail({ code: 'internal', message: errorMessage(err) });
-    }
+    } finally {budget.end(event.sender.id);}
   });
 }
 

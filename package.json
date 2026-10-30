@@ -1,7 +1,7 @@
 {
   "name": "aniverse",
   "productName": "AniVerse",
-  "version": "1.5.8",
+  "version": "2.0.1",
   "private": true,
   "description": "Desktop anime hub: AniList-powered browsing, isolated source sessions, custom HLS/DASH/MP4 player and AniList/MAL sync.",
   "author": {
@@ -24,6 +24,7 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p frontend/tsconfig.json --noEmit",
     "lint": "oxlint app electron frontend/src",
+    "pretest": "node scripts/prepare-security.mjs",
     "test": "vitest run --config test/vitest.config.ts",
     "test:e2e": "node test/e2e/smoke.mjs",
     "test:live": "node test/e2e/sources.mjs",

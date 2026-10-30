@@ -8,7 +8,7 @@
 
 A desktop browser with anime discovery, isolated website sessions, a native media player, and a local workspace.
 
-[Download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Getting started](#getting-started) · [Features](#version-156-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
+[Download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Getting started](#getting-started) · [Features](#version-201-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
 
 Windows 10 / 11 · Electron · React · TypeScript · GPL-3.0-or-later
 
@@ -26,12 +26,13 @@ AniVerse brings the websites **you choose** and the media **you provide** into o
 
 The project does not operate a public episode-hosting service or internet stream relay. Official signed installers contain no streaming-site list. Adding a website does not establish that its content is licensed, and AniVerse does not grant permission to access or redistribute anyone else's work. Read the [disclaimer](DISCLAIMER.md) and [privacy notice](PRIVACY.md).
 
-## Version 1.5.8 features
+## Version 2.0.1 features
 
 | Menu | What you can do |
 | --- | --- |
 | 🧭 **Home & Browse** | Discover titles, filter AniList metadata, search, view detailed pages and airing information. |
 | 📅 **Schedule** | View episode air dates in your timezone and countdowns for unavailable releases. |
+| 🛡️ **Source protection** | Embedded, bounded Rust/WebAssembly URL policy plus software/packaging safeguards. Normal player traffic remains direct. See [security boundaries and limits](docs/SECURITY-ARCHITECTURE.md). |
 | 🌐 **Sources** | Configure websites or supported official YouTube channels. Each website has its own cookie/login session. |
 | ▶️ **Watch** | Thumbnail episode cards, automatic fallback across enabled sources, corrected player sizing, original website controls and Playback Rescue. |
 | 🔒 **Private playback** | Temporary incognito sessions or persistent private-title rules. Suppress new watch records and future sync, with temporary website storage. See [privacy scope](PRIVACY.md). |
@@ -151,7 +152,7 @@ AniVerse is a personal project shared on a best-effort basis. Updates may be rar
 
 ## Build from source
 
-Use Windows 10/11, Node.js 22 or newer, npm and Git. Storage uses the runtime's built-in SQLite.
+Use Windows 10/11, Node.js 22 or newer, npm, Git and Rust/Cargo 1.93 or newer. Install the Rust WebAssembly target with `rustup target add wasm32-unknown-unknown` before development, tests or builds. The embedded policy is compiled automatically; application users do not need Rust. Storage uses the runtime's built-in SQLite.
 
 ~~~powershell
 git clone https://github.com/shiwamshoryasharma/AniVerse.git

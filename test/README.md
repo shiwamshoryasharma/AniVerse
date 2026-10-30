@@ -35,3 +35,11 @@ The 1.5.6 harness also checks Darken/Thin on native and captured video, and inje
 - `node test/e2e/release-1.5.6.mjs`: maintained current-version casting/Anime4K suite, now also checks cropped cross-origin iframe geometry before compatibility filtering.
 
 Serialize GPU-heavy harnesses. `E2E_EXE=release/win-unpacked/AniVerse.exe` selects the signed unpacked app for supported launchers. Evidence remains under `test/artifacts/`; source catalogues, provider account syncing, TV output and installer installation are not validated by these fixtures.
+
+### 2.0.1 security and seasonal checks
+
+Rust developers need Cargo/rustc and the wasm32-unknown-unknown target (`rustup target add wasm32-unknown-unknown`). `npm test` prepares the locked module; Cargo downloads/targets stay under test/cache. Production/dev builds prepare it too.
+
+`node test/e2e/security.mjs` checks the real Rust module, app CSP, source sandbox, private-network blocking with ads off while video keeps advancing, quality changes, normal navigation, 4K output and January loader/logo reversion. `E2E_EXE=release/win-unpacked/AniVerse.exe` tests the production fuse restrictions through renderer-only CDP. Older Playwright Electron main-inspector launchers intentionally cannot drive the fused release; run them on the development bundle for regression coverage.
+
+`node test/e2e/live-playback.mjs` surveys configured website sources against ordinary catalogue metadata. It uses a new isolated profile, muted output and no browser debugging; reports advancing decoded media separately from navigation. SURVEY_INDICES, SURVEY_ID, SURVEY_TIMEOUT and SURVEY_REPORT can select/retry cases. Source configuration is not published; evidence stays ignored under test/artifacts. A failed or unconfirmed live player is not a playback pass.

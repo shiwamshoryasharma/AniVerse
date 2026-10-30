@@ -64,3 +64,16 @@
 .festival-preview .eyebrow {color:#ffa852;}
 .festival-preview .btn {flex-shrink:0;background:#ff9c42;color:#251000;}
 @media(max-width:900px){.festival-preview{flex-direction:column;align-items:flex-start;}}
+
+[data-seasonal='true'] .rail-nav a svg,[data-seasonal='true'] .settings-nav a svg {color:#d6a6dc;}
+[data-seasonal='true'] .rail-nav a.active svg,[data-seasonal='true'] .settings-nav a.active svg {color:#ffc979;}
+.seasonal-logo {flex:none;object-fit:contain;filter:drop-shadow(0 1px 5px #ffb55222);}
+.festival-buffer {position:relative;width:220px;height:180px;margin-bottom:8px;}
+.festival-buffer-lamp {position:absolute;width:104px;height:104px;left:20px;top:48px;animation:festival-breathe 2.8s ease-in-out infinite;}
+.festival-buffer-pumpkin {position:absolute;width:77px;height:77px;right:23px;top:76px;}
+.festival-buffer-star {position:absolute;top:28px;right:50px;font-size:22px;color:#e5c1f0;}
+.festival-orbit {position:absolute;inset:26px 10px 20px;border:1px solid #c69bd433;border-top-color:#ffd18b;border-radius:50%;animation:festival-orbit 4s linear infinite;}
+@keyframes festival-breathe {50%{transform:translateY(-4px);filter:drop-shadow(0 0 12px #eeb35b33);}}
+@keyframes festival-orbit {to{transform:rotate(360deg);}}
+[data-motion='reduce'] .festival-buffer * {animation:none!important;}
+@media(prefers-reduced-motion:reduce){.festival-buffer * {animation:none!important;}}

@@ -77,3 +77,7 @@ Private rules live in private_titles; incognito and metadata cache epochs are me
 FOCUS_CSS normalizes media/ratio paths and the original video stays in place. Subframe focus is reversible and reapplied on frame load. upscaleGuest calculates overlay coordinates in the containing block, including scaling transforms. Adblocker owns session hooks, single-flight refresh, offline cache fallback and per-frame cosmetic dispatch.
 
 The festival rollout marker is device-local KV state; the selectable festival accent is part of visual settings/presets. Its automatic lifetime ends at local January 1, 2027 without changing the chosen structural layout.
+
+### 2.0.1 security and seasonal runtime
+
+See [security boundaries](security.md). The embedded Rust/WebAssembly module is generated before dev/production/test runs, validates only boundary metadata and imports no OS capabilities. SourceNetworkGuard is mandatory even when ads are off. Trusted origins compare scheme/host/port explicitly, not opaque URL.origin values. Production disables Node environment/main-inspector entry points and validates ASAR integrity; use the renderer-only security harness on fused binaries. Seasonal logo/window icon/buffer are reversible and expire independently of manual palette use.

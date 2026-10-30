@@ -1,3 +1,5 @@
+import type {RustPolicy} from '../app/core/security/rustPolicy';
+import {SourceNetworkGuard} from './sourceNetwork';
 import { randomUUID } from 'node:crypto';
 import { app, session, shell, webContents, type Session, type WebContents } from 'electron';
 import { isChallengeTitle, isCloudflareChallenge } from '../app/core/net/cloudflare';
@@ -34,6 +36,7 @@ export function browserUserAgent(): string {
 
 export class SessionManager implements SiteFetcher {
   private configured = new Set<string>();
+  private networkGuards=new Map<string,SourceNetworkGuard>();
   private guests = new Map<number, string>();
   private challengeTimers = new Map<number, NodeJS.Timeout>();
   private privateLeases=new Map<string,SourceInfo[]>();
@@ -59,7 +62,7 @@ export class SessionManager implements SiteFetcher {
     this.privateLeases.delete(leaseId);if(this.incognitoLease===leaseId)this.incognitoLease=null;
     await Promise.all(sources.map(async source=>{
       if(!this.configured.has(source.partition))return;
-      const ses=session.fromPartition(source.partition);this.adblock.detach(ses);this.configured.delete(source.partition);
+      const ses=session.fromPartition(source.partition);this.adblock.detach(ses);this.configured.delete(source.partition);this.networkGuards.delete(source.partition);
       await Promise.all([ses.clearStorageData(),ses.clearCache()]);
     }));
   }
@@ -72,6 +75,7 @@ export class SessionManager implements SiteFetcher {
     private settings: () => Settings,
     private notify: (n: AppNotice) => void,
     private emitCloudflare: (e: CloudflareEvent) => void,
+    private security:RustPolicy,
     private privateSessionActive:()=>boolean=()=>false,
   ) {}
 
@@ -97,8 +101,9 @@ export class SessionManager implements SiteFetcher {
 
   private applyAdblock(source: SourceInfo, ses: Session) {
     const enabled = this.settings().privacy.adblock && source.adblock;
-    if (enabled) this.adblock.attach(ses, source.id);
-    else this.adblock.detach(ses);
+    let guard=this.networkGuards.get(source.partition);
+    if(!guard){guard=new SourceNetworkGuard(this.security,ses,()=>this.registry.get(source.id).url);this.networkGuards.set(source.partition,guard);}
+    this.adblock.attach(ses,source.id,enabled,details=>guard.check(details));
   }
 
   /** Re-applies per-source settings after config or settings changes. */
@@ -125,7 +130,7 @@ export class SessionManager implements SiteFetcher {
     if(this.privateSessionActive()&&partition.startsWith('persist:'))return null;
     const source = this.sourceForPartition(partition);
     if (!source || !source.enabled) return null;
-    if (!this.isAllowedUrl(source, src)) return null;
+    if (!this.isAllowedUrl(source, src)|| (src!=='about:blank'&&!this.security.decide({context:'navigate',url:src,source:source.url}).allowed)) return null;
     this.ensure(source);
     return source;
   }
@@ -145,6 +150,7 @@ export class SessionManager implements SiteFetcher {
         this.adblock.countPopup(source.id);
         return { action: 'deny' };
       }
+      if(!this.security.decide({context:'external',url,source:current.url}).allowed){this.adblock.countPopup(source.id);return {action:'deny'};}
       if (this.isAllowedUrl(current, url) && disposition !== 'background-tab' && !this.isSignInUrl(url)) {
         // Same-site "open in new tab" links stay inside the source session.
         setImmediate(() => !guest.isDestroyed() && guest.loadURL(url));
@@ -158,7 +164,7 @@ export class SessionManager implements SiteFetcher {
 
     const guardNavigation = (event: Electron.Event, url: string) => {
       const current = this.registry.list().find((s) => s.id === source.id) ?? source;
-      if (this.isAllowedUrl(current, url) || this.isSignInUrl(url)) return;
+      if(url==='about:blank'||this.security.decide({context:'navigate',url,source:current.url,allowed_origins:SIGN_IN_HOSTS.map(host=>'https://'+host)}).allowed)return;
       event.preventDefault();
       if (this.settings().privacy.blockPopups) {
         this.adblock.countPopup(source.id);

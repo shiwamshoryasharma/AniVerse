@@ -175,13 +175,17 @@ export class SiteNavigator {
   /** Player documents inside cross-origin embeds need their own layout repair. No media URLs or source data leave the frame. */
   private async focusChildren(wc:WebContents,on:boolean) {
     if(wc.isDestroyed())return;
-    for(const frame of wc.mainFrame.framesInSubtree){
-      if(frame===wc.mainFrame||/recaptcha|hcaptcha|turnstile|challenges\.cloudflare\.com/i.test(frame.url))continue;
+    let root:WebContents['mainFrame'],frames:WebContents['mainFrame'][];
+    try{root=wc.mainFrame;frames=root.framesInSubtree;}catch{return;}
+    for(const frame of frames){
+      try{
+      if(frame===root||frame.detached||/recaptcha|hcaptcha|turnstile|challenges\.cloudflare\.com/i.test(frame.url))continue;
       if(wc.isDestroyed()||this.focusWanted.get(wc.id)!==on)return;
       const code=on
         ?'(()=>{const result='+pageScript({op:'markPlayer',keep:true})+';if(!result?.found)return;let style=document.getElementById("aniverse-frame-focus");if(!style){style=document.createElement("style");style.id="aniverse-frame-focus";document.documentElement.append(style);}style.textContent='+JSON.stringify(FOCUS_CSS)+';})()'
         :pageScript({op:'releasePlayer'})+';document.getElementById("aniverse-frame-focus")?.remove();';
-      await frame.executeJavaScript(code).catch(()=>undefined);
+      await frame.executeJavaScript(code);
+      }catch{/* Sites routinely replace or dispose nested player frames during navigation. */}
     }
   }
 

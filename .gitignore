@@ -33,3 +33,6 @@ build/vendor/
 
 # generated installer art (scripts/make-installer-art.cjs)
 build/installer/
+
+# Embedded Rust development outputs; the maintained builder uses test/cache/.
+native/**/target/

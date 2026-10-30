@@ -457,6 +457,7 @@ export interface ProbeResult {
 export interface PrivacyState { incognito:boolean; privateMediaIds:number[] }
 
 export interface AppInfo {
+  security:{engine:'rust-wasm';ready:boolean;abi:number;sha256:string};
   version: string;
   electron: string;
   chrome: string;
@@ -473,6 +474,7 @@ export interface CloudflareEvent {
 }
 
 export interface AdblockStats {
+  securityBlocked: Record<string,number>;
   updating: boolean;
   error: string | null;
   enabled: boolean;

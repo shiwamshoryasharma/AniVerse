@@ -1,3 +1,4 @@
+import type {RustPolicy} from '../app/core/security/rustPolicy';
 import { dialog, net, protocol, webContents, type BrowserWindow, type WebContents } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
@@ -38,20 +39,27 @@ export class MediaProtocols {
   constructor(
     private rendererDir: string,
     private profileDir: string,
+    private security:RustPolicy,
   ) {}
 
   install() {
     protocol.handle('app', async (request) => {
+      if(!['GET','HEAD'].includes(request.method)||!this.security.decide({context:'asset',url:request.url}).allowed)return new Response('Forbidden',{status:403});
       const { pathname } = new URL(request.url);
       const rel = decodeURIComponent(pathname === '/' ? '/index.html' : pathname);
       const file = path.normalize(path.join(this.rendererDir, rel));
       const relative = path.relative(this.rendererDir, file);
       if (relative.startsWith('..') || path.isAbsolute(relative)) return new Response('Forbidden', { status: 403 });
       const target = await stat(file).then((s) => (s.isFile() ? file : null)).catch(() => null);
-      return net.fetch(pathToFileURL(target ?? path.join(this.rendererDir, 'index.html')).toString());
+      const response=await net.fetch(pathToFileURL(target ?? path.join(this.rendererDir, 'index.html')).toString());
+      const headers=new Headers(response.headers);
+      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data: blob: media:; font-src 'self' data:; media-src 'self' https: http: data: blob: media:; connect-src 'self' https: http: ws: wss: media:; frame-src https: http:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+      headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','no-referrer');
+      return new Response(response.body,{status:response.status,headers});
     });
 
     protocol.handle('media', async (request) => {
+      if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
       const { host, pathname } = new URL(request.url);
       if (host === 'profile') {
         // media://profile/avatar.webp — only the two profile images, nothing else in the folder.
@@ -59,6 +67,7 @@ export class MediaProtocols {
         if (!/^(avatar|banner)\.(png|jpe?g|webp)$/.test(name)) return new Response('Not found', { status: 404 });
         return net.fetch(pathToFileURL(path.join(this.profileDir, name)).toString()).catch(() => new Response('Not found', { status: 404 }));
       }
+      if(host!=='local')return new Response('Not found',{status:404});
       const token = pathname.replace(/^\//, '');
       const file = this.files.get(token);
       if (!file) return new Response('Not found', { status: 404 });
@@ -71,12 +80,12 @@ export class MediaProtocols {
         if (start >= size || start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
         return new Response(Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream, {
           status: 206,
-          headers: { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' },
+          headers: { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': 'app://aniverse' },
         });
       }
       return new Response(Readable.toWeb(createReadStream(file)) as ReadableStream, {
         status: 200,
-        headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': 'app://aniverse' },
       });
     });
   }

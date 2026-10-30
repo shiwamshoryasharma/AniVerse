@@ -4,6 +4,7 @@ import { build as viteBuild } from 'vite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { oauthDefine } from './oauthConfig.mjs';
+import { prepareSecurity } from './prepare-security.mjs';
 import { prepareMediaRuntime } from './prepare-media.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,6 +41,7 @@ export const preloadOptions = {
 };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  prepareSecurity();
   await prepareMediaRuntime();
   // Only the renderer output is cleared (Vite's emptyOutDir); dist/electron is overwritten in place
   // so a running `npm run dev` session keeps its main bundle.

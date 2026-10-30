@@ -24,7 +24,7 @@ Pull requests that break these rules can't be merged.
 
 ## Development setup
 
-You need Windows 10/11, Node.js 22+, npm and Git.
+You need Windows 10/11, Node.js 22+, npm, Git and Rust/Cargo 1.93+. Install the embedded policy's target with `rustup target add wasm32-unknown-unknown`. Development, tests and builds compile the locked Rust module automatically; Cargo caches stay under `test/cache/`.
 
 ```bash
 git clone https://github.com/shiwamshoryasharma/AniVerse.git

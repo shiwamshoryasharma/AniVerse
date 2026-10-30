@@ -18,6 +18,10 @@ Please include:
 
 You'll get an acknowledgement as soon as possible. Fixes are coordinated before any public disclosure, and reporters are credited unless they prefer otherwise.
 
+## Implemented controls and limitations
+
+[Security architecture](docs/SECURITY-ARCHITECTURE.md) describes the embedded Rust policy, software boundaries, production fuses and residual risks. These controls are defence in depth, not a guarantee that all attacks or vulnerabilities are prevented. Playback compatibility is a required regression check.
+
 ## Scope
 
 **In scope:** AniVerse's own code and builds. That includes:

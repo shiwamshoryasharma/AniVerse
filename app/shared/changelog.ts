@@ -5,6 +5,15 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.0.1',date:'2026-10-30',title:'Stronger boundaries. A festive loading space.',
+   summary:'Embedded Rust URL policy, software security controls and temporary Diwali × Halloween branding.',
+   items:[
+    {kind:'added',icon:'shield',title:'Embedded Rust source protection',description:'An import-free WebAssembly policy checks source URLs, navigation identity and local-network address access. It runs inside the app and remains active when ad blocking is off.'},
+    {kind:'improved',icon:'shield',title:'Software and package hardening',description:'Strict trusted app-origin checks, bounded RPC inputs and active requests, an app content policy, and production controls against Node environment/inspector entry points. These reduce specific risks; they do not make every website or device safe.'},
+    {kind:'added',icon:'sparkles',title:'Diwali × Halloween logo and icons',description:'A temporary lamp-gold, pumpkin-orange and violet mark appears in the app and running-window icon. It reverts on January 1, 2027, and follows an early palette opt-out. Installer and permanent shortcut branding stay standard.',action:{label:'Theme settings',path:'/settings/themes'}},
+    {kind:'added',icon:'layout',title:'A temporary festive buffer',description:'A soft lamp-and-pumpkin loading animation replaces the cat through December. Reduced motion is respected; the cat automatically returns in January.'},
+   ]},
+
   { version: '1.5.8', date: '2026-10-30', title: 'A calmer watch space. More ways to find your anime.',
     summary: 'Episode cards, broader search, automatic source recovery, private playback and a temporary Diwali × Halloween palette.',
     items: [

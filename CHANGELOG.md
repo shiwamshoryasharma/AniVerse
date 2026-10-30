@@ -2,6 +2,16 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.0.1 — 2026-10-30
+
+- 🛡️ **Embedded Rust policy:** bounded, import-free WebAssembly checks source URLs, local-network destinations, source navigation and app asset identity.
+- 🔒 **Software hardening:** exact trusted origins, own-property RPC dispatch, input/call budgets, app CSP and strict read-only media grants.
+- 📦 **Production safeguards:** disable Node environment/inspector entry points; validate ASAR integrity and load only the signed application bundle.
+- 🪔 **Temporary branding:** vector logo, running-window icon and lamp/pumpkin buffer; standard branding and the cat return in January, with reduced motion respected.
+- 🎬 **Preserve playback:** normal/4K media, original controls and navigation remain; disposed iframe lifecycle handling is fixed.
+
+[Full 2.0.1 release notes](docs/releases/2.0.1.md) · [Security scope](docs/SECURITY-ARCHITECTURE.md)
+
 ## 1.5.8 — 2026-10-30
 
 - 🪔 **Diwali × Halloween:** restrained violet/ivory/amber dark palette, automatic through December with previous colours restored in January; early opt-out and later manual selection.

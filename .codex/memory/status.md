@@ -1,6 +1,20 @@
 # Status and provenance
 
-Snapshot: 2026-10-29, Asia/Calcutta. Scoped source/runtime validation is recorded below; it is not certification of every external service or device.
+Snapshot: 2026-10-30, Asia/Calcutta. Scoped source/runtime validation is recorded below; it is not certification of every external service or device.
+
+## Version 2.0.1 (2026-10-30)
+
+User-selected release version: 2.0.1, replacing the unpublished 1.5.9 development label. Adds the import-free, bounded Rust/WASM policy and software/package controls documented in [security.md](security.md). Source requests use metadata checks, not a stream proxy or replacement. Mandatory protection remains active with ad blocking off. A disposed-frame focus race found during live navigation was repaired.
+
+Seasonal vector branding, running-window icon, semantic icon accents and lamp/pumpkin buffering follow the festive palette. They restore the standard mark and preserved original cat on January 1, 2027, including when the palette is manually retained. Early palette opt-out and reduced motion work. Static installer/shortcut branding remains standard.
+
+Final 2.0.1 verification: typecheck and lint pass; 233 unit tests in 48 files pass. The signed production binary passes 11 runtime checks: actual Rust engine, disabled production Node environment/RunAsNode/inspection entry points, app CSP, source sandbox, blocked unrelated loopback request while decoded video advances with ads off, quality changes, original video identity, 4K filtering, allowed navigation and blocked takeover, clean invalid RPC handling, local file decoding and January restoration. Package verification confirms main-bundle equality, embedded WASM hash/no imports, notices, selected fuses, feed digest, vendor tool/shader hashes and the existing pinned signer. Its Windows trust status remains UntrustedRoot for the project's existing self-signed certificate; no public publisher trust is claimed.
+
+Development runtime checks completed before the version-only update: 10 casting/upscaling checks including six presets and timing fallback, 10 Workspace checks, and 8 source/privacy checks. These are development results, not packaged checks. The 11 production checks were rerun on the final 2.0.1 executable.
+
+Live ordinary-title testing used all 14 configured website sources in isolated muted native sessions, without extraction or remote debugging. Twelve navigated; seven showed actual decoded video-clock advancement across the initial run and retry. The seven unconfirmed cases were compared against the hash-verified 1.5.8 installer in an isolated extracted baseline: all seven remained unconfirmed there, including the same two navigation timeouts. No new playback failure was observed in this comparison. This does not certify all websites, episodes, source availability, speaker quality or physical TV output.
+
+Evidence: test/artifacts/release-2.0.1-package.json, security-ui.json, release-2.0.1-validation.json, security-live-playback.json, security-live-playback-retry.json and security-live-baseline.json. The live reports retain their actual development/baseline versions; do not relabel them. The previous installer was SHA256 d05baaa27fe64a90eb87f066d42de3272a312b6861395c725080e8e891ed5814. The final 2.0.1 installer is SHA256 e76c6a519a60f54b97f39c517010a98a15c8b2ce7895fcd559e8185839222f42. Physical installation/update installation, image/model quality and exhaustive vulnerability scanning were not performed.
 
 ## Version 1.5.8 (2026-10-30)
 

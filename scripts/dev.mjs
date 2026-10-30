@@ -6,11 +6,13 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import {prepareSecurity} from './prepare-security.mjs';
 import { mainOptions, preloadOptions } from './build.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronBinary = createRequire(import.meta.url)('electron');
 
+prepareSecurity();
 const server = await createServer({ configFile: path.join(root, 'frontend/vite.config.ts'), mode: 'development' });
 await server.listen();
 const devUrl = server.resolvedUrls.local[0];

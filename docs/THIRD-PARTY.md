@@ -24,3 +24,7 @@ To update embedded FFmpeg, review the new upstream build, update the pinned mani
 - [FFmpeg license and legal information](https://ffmpeg.org/legal.html)
 
 The original distributor README shipped alongside the binaries records build settings and external library versions. Preserve these notices, the source information and applicable source-distribution obligations when redistributing the binaries.
+
+## Embedded Rust security policy
+
+The application's Rust module is in native/security and is compiled to import-free WebAssembly. Cargo.lock pins the exact dependency graph, including URL/IDNA parsing, serde JSON and percent decoding. The build includes security-LICENSES.txt beside the module inside app.asar, with each dependency's name, version, license and available license text; build dependencies are included conservatively. No separate native runtime, executable download or system service is required on an installed user's device.

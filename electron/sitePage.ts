@@ -467,6 +467,7 @@ function PAGE_FN(A: PageOp): unknown {
       if (!keeper.__aniverseKeeper) {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const check = () => {
+          if(!keeper.__aniverseKeeper)return;
           const current = document.querySelector('[data-aniverse-player]');
           if (!current || !current.isConnected || area(current) < 240 * 135 || !document.querySelector('[data-aniverse-media]')) markPlayer(keeper.__aniverseKeeperSelector);
         };

@@ -1,3 +1,6 @@
+import {trustedAppUrl} from '../app/shared/trustedOrigin';
+import {seasonalVisuals} from '../app/shared/seasonal';
+import {RustPolicy} from '../app/core/security/rustPolicy';
 import { app, BrowserWindow, Menu, dialog, safeStorage, session, shell, webContents, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -219,6 +222,9 @@ function secretCodec(profile: string): { codec: SecretCodec; secure: boolean } {
 
 async function bootstrap() {
   const paths = resolvePaths();
+  const securityManifest=JSON.parse(readFileSync(path.join(__dirname,'security-manifest.json'),'utf8')) as {sha256:string};
+  if(!/^[a-f0-9]{64}$/.test(securityManifest.sha256))throw new Error('Invalid security manifest.');
+  const security=new RustPolicy(readFileSync(path.join(__dirname,'security.wasm')),securityManifest.sha256);
   // No default app menu in production: it would add reload/devtools accelerators.
   if (!isDev) Menu.setApplicationMenu(null);
   app.userAgentFallback = browserUserAgent();
@@ -267,6 +273,7 @@ async function bootstrap() {
     () => settings.get(),
     (n) => emit('app.notice', n),
     (e) => emit('cloudflare.status', e),
+    security,
     () => store.isIncognito(),
   );
   const comments = new CommentsService(anilist, apiFetch, store, () => settings.get(), youtube, () => oauthClientIds().mal);
@@ -304,7 +311,7 @@ async function bootstrap() {
     updates.applySettings(s);
   });
 
-  const protocols = new MediaProtocols(paths.renderer, paths.profileDir);
+  const protocols = new MediaProtocols(paths.renderer, paths.profileDir,security);
   protocols.install();
   const collection = new LocalCollection(store,protocols,()=>mainWindow);
   const mediaResources = app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build/vendor');
@@ -563,6 +570,7 @@ async function bootstrap() {
       const info = await app.getGPUInfo('complete').catch(() => null);
       const aux = (info as { auxAttributes?: { glRenderer?: string } } | null)?.auxAttributes;
       return {
+        security:security.snapshot(),
         version: app.getVersion(),
         electron: process.versions.electron,
         chrome: process.versions.chrome,
@@ -593,6 +601,8 @@ async function bootstrap() {
       if (process.platform === 'win32') await shell.openExternal('ms-settings:display-advancedgraphics');
     },
     'app.openExternal': async ({ url }) => {
+      const source=registry.list().find(source=>{try{return new URL(source.url).origin===new URL(url).origin;}catch{return false;}});
+      if(!security.decide({context:'external',url,source:source?.url}).allowed)throw new AppError('unauthorised','This external URL is blocked by source protection.');
       await shell.openExternal(url);
     },
     'app.cacheClear': async () => {
@@ -606,7 +616,7 @@ async function bootstrap() {
     'update.install': () => updates.install(),
   };
 
-  registerRpc(handlers, (event: IpcMainInvokeEvent) => !!mainWindow && event.sender === mainWindow.webContents && event.senderFrame?.parent === null);
+  registerRpc(handlers, (event: IpcMainInvokeEvent) => !!mainWindow && event.sender === mainWindow.webContents && event.senderFrame?.parent === null && isAppUrl(event.senderFrame.url));
 
   adblock.setEnabled(settings.get().privacy.adblock);
   void adblock.load();
@@ -623,11 +633,11 @@ async function bootstrap() {
   }, 5 * 60 * 1000).unref();
 
   const onGuest = (guest: WebContents) => navigator.attach(guest);
-  mainWindow = createWindow(paths.preload, sessions, onGuest);
+  mainWindow = createWindow(paths.preload, sessions, onGuest,security,()=>seasonalVisuals(new Date(),settings.get().appearance.accent));
   if (isDev && process.env.ANIVERSE_TEST_DRIVER) runTestDriver(process.env.ANIVERSE_TEST_DRIVER, mainWindow);
   updates.start();
   app.on('activate', () => {
-    if (!BrowserWindow.getAllWindows().length) mainWindow = createWindow(paths.preload, sessions, onGuest);
+    if (!BrowserWindow.getAllWindows().length) mainWindow = createWindow(paths.preload, sessions, onGuest,security,()=>seasonalVisuals(new Date(),settings.get().appearance.accent));
   });
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
@@ -664,12 +674,7 @@ function appUrl(): string {
 }
 
 function isAppUrl(url: string): boolean {
-  const base = new URL(appUrl());
-  try {
-    return new URL(url).origin === base.origin;
-  } catch {
-    return false;
-  }
+  return trustedAppUrl(url,appUrl());
 }
 
 function hardenDefaultSession(canCapture: (wc: WebContents | null) => boolean = () => false) {
@@ -699,7 +704,10 @@ function runTestDriver(file: string, win: BrowserWindow) {
   });
 }
 
-function createWindow(preload: string, sessions: SessionManager, onGuest: (guest: WebContents) => void): BrowserWindow {
+function createWindow(preload: string, sessions: SessionManager, onGuest: (guest: WebContents) => void, security:RustPolicy, seasonal:()=>boolean): BrowserWindow {
+  const standardIcon=path.join(__dirname,'..','..','build','icon.png');
+  const festiveIcon=path.join(__dirname,'..','..','build','seasonal-icon.png');
+  let festive=seasonal();
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -710,7 +718,7 @@ function createWindow(preload: string, sessions: SessionManager, onGuest: (guest
     skipTaskbar: HEADLESS,
     backgroundColor: '#07080b',
     title: 'AniVerse',
-    icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
+    icon: festive?festiveIcon:standardIcon,
     titleBarStyle: 'hidden',
     titleBarOverlay: process.platform === 'darwin' ? true : { color: '#00000000', symbolColor: '#e8e8ec', height: 44 },
     webPreferences: {
@@ -718,6 +726,8 @@ function createWindow(preload: string, sessions: SessionManager, onGuest: (guest
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      nodeIntegrationInWorker:false,
+      nodeIntegrationInSubFrames:false,
       webviewTag: true,
       spellcheck: false,
       webSecurity: true,
@@ -725,19 +735,23 @@ function createWindow(preload: string, sessions: SessionManager, onGuest: (guest
     },
   });
 
+  const brandingTimer=setInterval(()=>{const next=seasonal();if(!win.isDestroyed()&&next!==festive){festive=next;win.setIcon(next?festiveIcon:standardIcon);}},1000);brandingTimer.unref();
+  win.once('closed',()=>clearInterval(brandingTimer));
   const wc = win.webContents;
   wc.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    if (security.decide({context:'external',url}).allowed) void shell.openExternal(url);
     return { action: 'deny' };
   });
   wc.on('will-navigate', (event, url) => {
     if (!isAppUrl(url)) event.preventDefault();
   });
+  wc.on('will-redirect',(event,url,_inPlace,isMainFrame)=>{if(isMainFrame&&!isAppUrl(url))event.preventDefault();});
   wc.on('will-attach-webview', (event, webPreferences, params) => {
     // Webviews may only host configured sources, in their own partition, with no Node or preload access.
     delete webPreferences.preload;
     webPreferences.nodeIntegration = false;
     webPreferences.nodeIntegrationInSubFrames = false;
+    webPreferences.nodeIntegrationInWorker = false;
     webPreferences.contextIsolation = true;
     webPreferences.sandbox = true;
     webPreferences.webSecurity = true;

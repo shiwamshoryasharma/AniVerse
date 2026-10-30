@@ -1,5 +1,6 @@
+import {boundedInput} from '../app/core/security/rpcBudget';
 import { ElectronBlocker } from '@ghostery/adblocker-electron';
-import { ipcMain, net, type Session, type IpcMainInvokeEvent } from 'electron';
+import { ipcMain, net, type Session, type IpcMainInvokeEvent, type OnBeforeRequestListenerDetails } from 'electron';
 import { readFile, stat, writeFile, rename } from 'node:fs/promises';
 import type { AdblockStats } from '../app/shared/types';
 import { errorMessage } from '../app/core/util';
@@ -11,8 +12,8 @@ const PRELOAD_PATH = require.resolve('@ghostery/adblocker-electron-preload');
 export class Adblocker {
   private blocker: ElectronBlocker | null = null;
   private loading: Promise<void> | null = null;
-  private attached = new Map<Session, { sourceId: string; preloadId: string | null }>();
-  private stats: AdblockStats = { enabled: true, ready: false, updating: false, error: null, listsUpdatedAt: null, blocked: {}, popupsBlocked: {} };
+  private attached = new Map<Session, { sourceId: string; preloadId: string | null; ads:boolean; guard?: (details:OnBeforeRequestListenerDetails)=>Promise<boolean> }>();
+  private stats: AdblockStats = { enabled: true, ready: false, updating: false, error: null, listsUpdatedAt: null, blocked: {}, popupsBlocked: {},securityBlocked:{} };
   private dirty = false;
 
   constructor(private cachePath: string, private filtersPath: string, private emit: (stats: AdblockStats) => void) {
@@ -26,17 +27,18 @@ export class Adblocker {
     ipcMain.removeHandler('@ghostery/adblocker/is-mutation-observer-enabled');
     ipcMain.handle('@ghostery/adblocker/inject-cosmetic-filters', (event, url: unknown, msg: unknown) => this.cosmetics(event,url,msg));
     ipcMain.handle('@ghostery/adblocker/is-mutation-observer-enabled', event =>
-      this.stats.enabled && this.attached.has(event.sender.session) ? this.blocker?.onIsMutationObserverEnabled(event) ?? false : false);
+      this.stats.enabled && this.attached.get(event.sender.session)?.ads ? this.blocker?.onIsMutationObserverEnabled(event) ?? false : false);
   }
   snapshot(): AdblockStats {
-    return { ...this.stats, blocked: { ...this.stats.blocked }, popupsBlocked: { ...this.stats.popupsBlocked } };
+    return { ...this.stats, blocked: { ...this.stats.blocked }, popupsBlocked: { ...this.stats.popupsBlocked },securityBlocked:{...this.stats.securityBlocked} };
   }
   setEnabled(enabled: boolean) { this.stats.enabled=enabled;this.dirty=true; }
   countPopup(sourceId: string) {
     this.stats.popupsBlocked[sourceId]=(this.stats.popupsBlocked[sourceId]??0)+1;this.dirty=true;
   }
   private async cosmetics(event:IpcMainInvokeEvent,url:unknown,msg:unknown) {
-    if(!this.stats.enabled||!this.blocker||!this.attached.has(event.sender.session)||typeof url!=='string')return;
+    if(!this.stats.enabled||!this.blocker||!this.attached.get(event.sender.session)?.ads||typeof url!=='string')return;
+    if(url.length>4096||!boundedInput(msg))return;
     const frame=event.senderFrame;
     if(!frame||frame.detached||url!==frame.url||!/^https?:\/\//i.test(url))return;
     // Ghostery's Electron helper injects into WebContents (the top document).
@@ -89,9 +91,11 @@ export class Adblocker {
       throw err;
     } finally { this.stats.updating=false;this.dirty=true;this.emit(this.snapshot()); }
   }
-  attach(ses:Session,sourceId:string) {
-    if(!this.attached.has(ses))this.attached.set(ses,{sourceId,preloadId:null});
-    if(this.blocker)this.hook(ses,sourceId);else void this.load();
+  attach(ses:Session,sourceId:string,ads=true,guard?:(details:OnBeforeRequestListenerDetails)=>Promise<boolean>) {
+    const existing=this.attached.get(ses);
+    this.attached.set(ses,{sourceId,preloadId:existing?.preloadId??null,ads,guard:guard??existing?.guard});
+    this.hook(ses,sourceId);
+    if(ads&&!this.blocker)void this.load();
   }
   detach(ses:Session) {
     const info=this.attached.get(ses);if(!info)return;
@@ -101,16 +105,20 @@ export class Adblocker {
   }
   private hook(ses:Session,sourceId:string) {
     const info=this.attached.get(ses)!;
-    if(!info.preloadId)info.preloadId=ses.registerPreloadScript({type:'frame',filePath:PRELOAD_PATH});
-    ses.webRequest.onBeforeRequest({urls:['<all_urls>']},(details,callback)=>{
-      if(!this.stats.enabled||!this.blocker)return callback({});
+    if(this.blocker&&info.ads&&!info.preloadId)info.preloadId=ses.registerPreloadScript({type:'frame',filePath:PRELOAD_PATH});
+    if(!info.ads&&info.preloadId){ses.unregisterPreloadScript(info.preloadId);info.preloadId=null;}
+    ses.webRequest.onBeforeRequest({urls:['<all_urls>']},async(details,callback)=>{
+      if(info.guard&&!await info.guard(details).catch(()=>false)){
+        this.stats.securityBlocked[sourceId]=(this.stats.securityBlocked[sourceId]??0)+1;this.dirty=true;return callback({cancel:true});
+      }
+      if(!info.ads||!this.stats.enabled||!this.blocker)return callback({});
       this.blocker.onBeforeRequest(details,response=>{
         if(response.cancel||response.redirectURL){this.stats.blocked[sourceId]=(this.stats.blocked[sourceId]??0)+1;this.dirty=true;}
         callback(response);
       });
     });
     ses.webRequest.onHeadersReceived({urls:['<all_urls>']},(details,callback)=>{
-      if(!this.stats.enabled||!this.blocker)return callback({});
+      if(!info.ads||!this.stats.enabled||!this.blocker)return callback({});
       this.blocker.onHeadersReceived(details,callback);
     });
   }

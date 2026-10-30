@@ -27,6 +27,7 @@ import { useToast } from '../lib/useToast';
 import { Logo, Spinner } from './common';
 import { ContextMenuProvider } from './ContextMenu';
 import { interfaceStyle } from '../../../app/shared/interface';
+import {seasonalVisuals} from '../../../app/shared/seasonal';
 import { IncognitoButton } from './Privacy';
 import { ReleaseAnnouncements } from './Changelog';
 import { UpdateBadge } from './Updates';
@@ -70,6 +71,12 @@ export function Shell() {
     root.dataset.font = settings.appearance.fontFamily;
     root.dataset.motion = settings.appearance.reduceMotion ? 'reduce' : 'full';
   }, [settings.appearance]);
+
+  useEffect(()=>{
+    const icon=document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    const refresh=()=>{const on=seasonalVisuals(new Date(),settings.appearance.accent);document.documentElement.dataset.seasonal=String(on);if(icon)icon.href=on?'./festival-icon.svg':'./favicon.svg';};
+    refresh();const timer=setInterval(refresh,1000);return()=>clearInterval(timer);
+  },[settings.appearance.accent]);
 
   useEffect(() => {
     main.current?.scrollTo({ top: 0 });
@@ -261,12 +268,12 @@ function AdblockBadge() {
   const { data } = useAdblockStats();
   const navigate = useNavigate();
   if (!data) return null;
-  const total = Object.values(data.blocked).reduce((a, b) => a + b, 0) + Object.values(data.popupsBlocked).reduce((a, b) => a + b, 0);
+  const total = Object.values(data.blocked).reduce((a, b) => a + b, 0) + Object.values(data.popupsBlocked).reduce((a, b) => a + b, 0) + Object.values(data.securityBlocked??{}).reduce((a,b)=>a+b,0);
   return (
     <button
       className={cx('shield', !data.enabled && 'off')}
       style={{ border: 0, cursor: 'pointer', height: 30 }}
-      title={data.enabled ? (data.ready ? 'Ads, trackers and popups blocked this session' : 'Loading filter lists…') : 'Ad blocking is off'}
+      title={data.enabled ? (data.ready ? 'Ads, popups and unsafe source requests blocked this session' : 'Loading filter lists…') : 'Ad blocking is off'}
       onClick={() => navigate('/settings/privacy')}
     >
       <ShieldCheck size={14} /> {data.enabled ? (data.ready ? total.toLocaleString() : '…') : 'Off'}

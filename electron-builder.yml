@@ -1,5 +1,14 @@
 appId: app.aniverse.desktop
 productName: AniVerse
+
+# Production-only binary controls; development Electron remains available for tooling.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
 copyright: Copyright © 2026 Shiwam Shorya Sharma
 
 # aniverse:// deep links bring AniList / MyAnimeList sign-ins back to the app
@@ -18,6 +27,7 @@ files:
   - '!dist/**/*.map'
   - package.json
   - build/icon.png
+  - build/seasonal-icon.png
 
 # Shipped defaults; on first run they are copied to <userData>/config (or a
 # portable <exe dir>/config is used when present) — see electron/paths.ts.

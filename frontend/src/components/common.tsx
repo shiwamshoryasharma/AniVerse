@@ -2,9 +2,12 @@ import { AlertTriangle, RotateCw, SearchX } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { SourceInfo } from '../../../app/shared/types';
 import { errorText } from '../lib/bridge';
+import {useSeasonalVisuals} from '../lib/seasonal';
 import { cx } from '../lib/format';
 
 export function Logo({ size = 26 }: { size?: number }) {
+  const seasonal=useSeasonalVisuals();
+  if(seasonal)return <img className="seasonal-logo" src="./festival-icon.svg" width={size} height={size} alt="" aria-hidden/>;
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
       <defs>

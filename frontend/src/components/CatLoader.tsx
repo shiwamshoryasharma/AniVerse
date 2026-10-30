@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import {useSeasonalVisuals} from '../lib/seasonal';
 import { useSettings } from '../lib/queries';
 
 /**
@@ -18,9 +19,10 @@ const GROUND_PERIOD = 48; // px, one dash + gap
 
 export function CatLoader({ label, hint, children }: { label: string; hint?: string; children?: ReactNode }) {
   const reduce = useSettings().appearance.reduceMotion;
+  const seasonal=useSeasonalVisuals();
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    if (reduce) return;
+    if (reduce||seasonal) return;
     let raf = 0;
     let start: number | null = null;
     const loop = (t: number) => {
@@ -30,17 +32,17 @@ export function CatLoader({ label, hint, children }: { label: string; hint?: str
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [reduce]);
+  }, [reduce,seasonal]);
   const frame = Math.floor(tick / TICKS_PER_DRAWING) % FRAMES.length;
   return (
     <div className="cat-loader" role="status" aria-live="polite">
-      <div className="cat-stage" aria-hidden>
+      {seasonal?<div className="festival-buffer" aria-hidden><div className="festival-orbit"/><img className="festival-buffer-lamp" src="./festival-lamp.svg" alt=""/><img className="festival-buffer-pumpkin" src="./festival-pumpkin.svg" alt=""/><span className="festival-buffer-star">✦</span></div>:<div className="cat-stage" aria-hidden>
         {FRAMES.map((src, i) => (
           // A frame that fails to load is hidden rather than drawn as a broken image.
           <img key={src} src={src} alt="" draggable={false} className={i === frame ? 'cat-frame on' : 'cat-frame'} onError={(e) => (e.currentTarget.hidden = true)} />
         ))}
         <div className="cat-ground" style={{ backgroundPositionX: `${-((tick * GROUND_STEP) % GROUND_PERIOD)}px` }} />
-      </div>
+      </div>}
       <strong className="cat-label">{label}</strong>
       {hint && <span className="cat-hint">{hint}</span>}
       {children}
