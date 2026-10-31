@@ -509,11 +509,19 @@ export interface OpenEpisodeRequest {
   focus?: boolean;
 }
 
+export interface SiteEpisodeCard {
+  episode:number;
+  thumbnail:string|null;
+  /** Only language badges explicitly reported for this episode. Empty means unknown. */
+  audio:('sub'|'dub')[];
+}
+
 export interface OpenEpisodeResult {
   ok: boolean;
   failure?: 'not-found' | 'blocked' | 'unavailable' | 'cancelled';
   url: string;
   via: 'current' | 'cache' | 'derived' | 'search' | 'title' | null;
+  episodes?:SiteEpisodeCard[];
   focused: boolean;
   message: string | null;
   options: SiteOptions;

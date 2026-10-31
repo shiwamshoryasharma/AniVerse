@@ -30,6 +30,8 @@ module.exports=async({window,webContents})=>{
    await sleep(1200);
    const nav=await Promise.race([rpc('site.openEpisode',{webContentsId:id,sourceId:source.id,mediaId:details.id,titles,episode:1,focus:true}),sleep(Number(process.env.SURVEY_TIMEOUT??45000)).then(()=>({failure:'timeout'}))]);
    result.navigation=!!nav.ok;result.failure=nav.failure??(nav.ok?null:'unavailable');
+   result.episodeCards=nav.episodes?.length??0;result.episodeArtwork=nav.episodes?.filter(card=>card.thumbnail).length??0;
+   result.confirmedAudio=[...new Set((nav.episodes??[]).flatMap(card=>card.audio))];
    if(nav.ok){
     await rpc('player.control',{webContentsId:id,action:'play'});
     for(let attempt=0;attempt<2;attempt++){

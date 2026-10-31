@@ -4,10 +4,10 @@ import type { Store } from '../app/core/db/store';
 import { isChallengeTitle } from '../app/core/net/cloudflare';
 import { parseRecipes, recipeFor, type RecipeBook, type SiteRecipe } from '../app/core/sources/recipes';
 import type { SourceRegistry } from '../app/core/sources/registry';
-import { episodeFromUrl, seasonOf } from '../app/core/sources/text';
+import { episodeFromUrl, seriesMarkers } from '../app/core/sources/text';
 import { buildSearchUrl, siteDomain } from '../app/core/sources/web';
 import { sleep } from '../app/core/util';
-import type { OpenEpisodeRequest, OpenEpisodeResult, ProbeResult, SiteOption, SiteOptions, SiteStatusEvent, SourceInfo } from '../app/shared/types';
+import type { OpenEpisodeRequest, OpenEpisodeResult, ProbeResult, SiteOption, SiteOptions, SiteStatusEvent, SourceInfo, SiteEpisodeCard } from '../app/shared/types';
 import { FOCUS_CSS, pageScript, recipeSelector, SCROLLBAR_CSS, type PageOp, type PickResult, type RawSiteOption } from './sitePage';
 
 const WORLD = 1017;
@@ -120,6 +120,7 @@ interface SitePreference {
  */
 export class SiteNavigator {
   private jobs = new Map<number, number>();
+  private episodeContexts=new Map<number,{sourceId:string;mediaId:number;slug:string|null;pageKey:string}>();
   private focusCss = new Map<number, string>();
   private focusWanted = new Map<number, boolean>();
   private focusGen = new Map<number, number>();
@@ -134,6 +135,8 @@ export class SiteNavigator {
     private probe: (wc: WebContents) => Promise<ProbeResult | null>,
     private autoplay: () => boolean,
     private control?: (wc: WebContents, action: 'seek' | 'play' | 'pause', value?: number) => Promise<boolean>,
+    private artwork?:(wc:WebContents,url:string)=>string|null,
+    private observeAudio?:(sourceId:string,mediaId:number,cards:SiteEpisodeCard[])=>void,
   ) {}
 
   /** Recipes are re-read when the file changes (cheap mtime check). */
@@ -166,6 +169,7 @@ export class SiteNavigator {
     });
     wc.once('destroyed', () => {
       this.jobs.delete(wc.id);
+      this.episodeContexts.delete(wc.id);
       this.focusCss.delete(wc.id);
       this.focusWanted.delete(wc.id);
       this.focusGen.delete(wc.id);
@@ -239,6 +243,7 @@ export class SiteNavigator {
   async openEpisode(wc: WebContents, source: SourceInfo, req: OpenEpisodeRequest): Promise<OpenEpisodeResult> {
     const token = (this.jobs.get(wc.id) ?? 0) + 1;
     this.jobs.set(wc.id, token);
+    this.episodeContexts.delete(wc.id);
     const alive = () => this.jobs.get(wc.id) === token && !wc.isDestroyed();
     const status = (message: string | null) => {
       if (alive()) this.emit({ webContentsId: wc.id, sourceId: source.id, message });
@@ -249,6 +254,15 @@ export class SiteNavigator {
     const links = cache ? this.store.getSiteLinks(source.id, req.mediaId) : {};
     const pinned = this.store.getPin(source.id, req.mediaId);
     let titlePage: string | null = pinned ?? links[0] ?? null;
+    const episodeCards=new Map<number,SiteEpisodeCard>();
+    const readCards=async()=>{
+      if(!alive())return;
+      const cards=await this.page<SiteEpisodeCard[]>(wc,{op:'episodeCards',slug:slugOf(titlePage)});
+      for(const card of cards??[]){
+        const prior=episodeCards.get(card.episode);
+        episodeCards.set(card.episode,{...card,thumbnail:prior?.thumbnail??(card.thumbnail?this.artwork?.(wc,card.thumbnail)??null:null),audio:[...new Set([...(prior?.audio??[]),...card.audio])]});
+      }
+    };
     // Keep the site quiet while AniVerse works behind the loading screen.
     if (!req.adopt) wc.setAudioMuted(true);
 
@@ -262,8 +276,12 @@ export class SiteNavigator {
       let focused = false;
       let options = EMPTY_OPTIONS;
       if (ok && alive()) {
+        await readCards();
+        if(alive()&&!this.store.isPrivate(req.mediaId))this.observeAudio?.(source.id,req.mediaId,[...episodeCards.values()]);
         status('Getting the player ready…');
         options = await this.applyPreferences(wc, source, alive);
+        await readCards();
+        if(alive())this.episodeContexts.set(wc.id,{sourceId:source.id,mediaId:req.mediaId,slug:slugOf(titlePage),pageKey:titleKey(wc.getURL())});
         if (req.focus ?? true) focused = await this.focus(wc, true, recipe);
         if (alive()) wc.setAudioMuted(false);
         if (focused && alive() && !req.adopt) await this.kickPlayback(wc, alive);
@@ -271,7 +289,7 @@ export class SiteNavigator {
         wc.setAudioMuted(false);
       }
       status(null);
-      return { ok, url, via, focused, message, options };
+      return { ok, url, via, focused, message, options,episodes:ok?[...episodeCards.values()]:[] };
     };
     const fail = (message: string | null, via: OpenEpisodeResult['via'] = null, failure: OpenEpisodeResult['failure'] = 'unavailable'): OpenEpisodeResult => {
       failure = !alive() ? 'cancelled' : isChallengeTitle(wc.getTitle()) ? 'blocked' : failure;
@@ -314,6 +332,7 @@ export class SiteNavigator {
         if (!titlePage) return fail(`Couldn’t find this title on ${source.name}.`, null, 'not-found');
       }
 
+      await readCards();
       // 3. Title links that already point at an episode (`/watch/<id>/1`): derive N directly.
       const here = wc.getURL();
       const hereEp = episodeFromUrl(here);
@@ -338,8 +357,20 @@ export class SiteNavigator {
     }
   }
 
+
+  /** A bounded follow-up read for SPA episode lists that hydrate after cached navigation. */
+  async episodeCards(wc:WebContents):Promise<SiteEpisodeCard[]> {
+    const context=this.episodeContexts.get(wc.id);
+    if(!context||wc.isDestroyed()||context.pageKey!==titleKey(wc.getURL()))return [];
+    const raw=await this.page<SiteEpisodeCard[]>(wc,{op:'episodeCards',slug:context.slug});
+    if(this.episodeContexts.get(wc.id)!==context||wc.isDestroyed())return [];
+    const cards=(raw??[]).map(card=>({...card,thumbnail:card.thumbnail?this.artwork?.(wc,card.thumbnail)??null:null}));
+    if(!this.store.isPrivate(context.mediaId))this.observeAudio?.(context.sourceId,context.mediaId,cards);
+    return cards;
+  }
+
   private async searchTitle(wc: WebContents, source: SourceInfo, recipe: SiteRecipe | null, req: OpenEpisodeRequest, alive: () => boolean, status: (m: string | null) => void): Promise<string | null> {
-    const season = Math.max(1, ...req.titles.map((t) => seasonOf(t) ?? 1));
+    const season = Math.max(1, ...req.titles.map((t) => seriesMarkers(t).season ?? 1));
     const titleSelector = recipeSelector(recipe, 'titleLink');
     // Make sure discovery (OpenSearch / GET form / SearchAction) has had a chance first.
     if (!this.registry.get(source.id).searchTemplate && !this.store.isPrivate(req.mediaId)) await this.registry.discover(source.id).catch(() => null);

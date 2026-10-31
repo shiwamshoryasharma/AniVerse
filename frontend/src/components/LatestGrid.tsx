@@ -5,10 +5,13 @@ import { useNavigate } from 'react-router';
 import type { AiringItem } from '../../../app/shared/types';
 import { call } from '../lib/bridge';
 import { cx, timeAgo, titleOf } from '../lib/format';
-import { useSettings } from '../lib/queries';
+import {AudioFilter,AudioCoverageNote,type AudioChoice} from './AudioFilter';
+import { useSourceAudio,useSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { ErrorState } from './common';
 import { MediaCard, SkeletonCards } from './MediaCard';
+
+import {matchesAudio} from '../../../app/shared/audioAvailability';
 
 type Filter = 'all' | 'tv' | 'other' | 'top';
 const FILTERS: [Filter, string][] = [
@@ -36,6 +39,8 @@ function readSeen(): number {
 export function LatestGrid() {
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<Filter>('all');
+  const [audio,setAudio]=useState<AudioChoice>('all');
+  const availability=useSourceAudio();
   const [seenAt] = useState(readSeen);
   const [now, setNow] = useState(() => Date.now());
   const navigate = useNavigate();
@@ -91,18 +96,18 @@ export function LatestGrid() {
   }, []);
 
   const items = useMemo(() => {
-    const list = data?.items ?? [];
+    const list = (data?.items ?? []).filter(item=>matchesAudio(item.media.id,audio,availability.data,item.episode));
     const tv = (a: AiringItem) => a.media.format === 'TV' || a.media.format === 'TV_SHORT';
     if (filter === 'tv') return list.filter(tv);
     if (filter === 'other') return list.filter((a) => !tv(a));
     if (filter === 'top') return [...list].sort((a, b) => (b.media.score ?? 0) - (a.media.score ?? 0));
     return list;
-  }, [data, filter]);
+  }, [data, filter,audio,availability.data]);
 
   const updated = dataUpdatedAt ? Math.max(0, Math.round((now - dataUpdatedAt) / 60000)) : null;
 
   return (
-    <section className="section">
+    <section className="section latest-episodes">
       <div className="section-head">
         <h2 className="section-title">Latest episodes</h2>
         <span className="row faint" style={{ gap: 6, fontSize: 'var(--fs-xs)' }} title="Checks for new episodes every 5 minutes">
@@ -115,6 +120,7 @@ export function LatestGrid() {
             </button>
           ))}
         </div>
+        <AudioFilter value={audio} onChange={setAudio} label="Latest episode audio availability"/>
         <div className="rail-arrows">
           <button className="icon-btn bordered" aria-label="Newer" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             <ChevronLeft size={16} />
@@ -127,6 +133,7 @@ export function LatestGrid() {
           <CalendarDays size={14} /> Schedule
         </button>
       </div>
+      <AudioCoverageNote value={audio}/>
       {error && !data ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
       ) : (

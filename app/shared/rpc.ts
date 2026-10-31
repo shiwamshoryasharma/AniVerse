@@ -26,6 +26,7 @@ import type {
   OpenEpisodeResult,
   SiteStatusEvent,
   SiteOptions,
+  SiteEpisodeCard,
   LibraryEntry,
   ListStatus,
   MediaCard,
@@ -69,6 +70,7 @@ export interface RpcContract {
   'meta.hover': [{ id: number }, HoverInfo];
 
   'sources.list': [void, SourceInfo[]];
+  'sources.audio': [void,{mediaId:number;audio:('sub'|'dub')[];episodes:{episode:number;audio:('sub'|'dub')[]}[]}[]];
   'sources.reload': [void, SourceInfo[]];
   'sources.update': [{ id: string; patch: SourceOverridePatch }, SourceInfo];
   'sources.openConfig': [void, { path: string }];
@@ -82,6 +84,7 @@ export interface RpcContract {
   'site.openEpisode': [OpenEpisodeRequest, OpenEpisodeResult];
   'site.focus': [{ webContentsId: number; on: boolean }, { focused: boolean }];
   'site.options': [{ webContentsId: number }, SiteOptions];
+  'site.episodes':[{webContentsId:number},SiteEpisodeCard[]];
   'site.choose': [{ webContentsId: number; sourceId: string; kind: 'type' | 'server'; value: string }, { options: SiteOptions; focused: boolean }];
   'site.forget': [{ sourceId: string; mediaId: number }, void];
 

@@ -5,6 +5,17 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.0.2',date:'2026-10-31',title:'Find the right arc. See the episode.',
+   summary:'Generic series matching, actual episode stills and source-confirmed audio filters.',
+   items:[
+    {kind:'fixed',icon:'fix',title:'Named arcs and seasons resolve correctly',description:'A source can use an arc name while AniList uses a Season 2 alias. Missing numbers remain unknown; explicit seasons, parts and cours stay separate across English, romaji and Japanese titles.'},
+    {kind:'added',icon:'layout',title:'Actual episode thumbnails',description:'Episode cards use the selected source’s per-episode stills when available, including lazy-loaded images. Spoiler Shield keeps future artwork hidden.'},
+    {kind:'added',icon:'sparkles',title:'ALL · DUB · SUB',description:'Filter the episode list, Latest Episodes and Browse using explicit source badges observed this session. Unknown audio stays in ALL; the latest episode needs its own confirmed badge.',action:{label:'Browse anime',path:'/browse'}},
+    {kind:'fixed',icon:'fix',title:'Reliable artwork after revisiting',description:'Cached SPA pages can render their episode list late. Bounded metadata refreshes fill the cards without reloading video, and a successful replacement image becomes visible after an earlier failure.'},
+    {kind:'improved',icon:'shield',title:'Keep source sessions and private viewing intact',description:'Read-only image grants use the original isolated source session. Cookies stay there; private titles do not enter the session-only catalogue audio index.'},
+   ]},
+
+
   {version:'2.0.1',date:'2026-10-30',title:'Stronger boundaries. A festive loading space.',
    summary:'Embedded Rust URL policy, software security controls and temporary Diwali × Halloween branding.',
    items:[

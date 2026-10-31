@@ -123,3 +123,28 @@ export function videoScore(videoTitle: string, titles: string[]): number {
   if (videoSeason !== mediaSeason) return 0;
   return titleScore(cleaned, titles);
 }
+
+/** Self-contained because the rendered-page navigator serializes it into an isolated world.
+ * Season and part/cour are separate axes; an omitted number is unknown, not Season 1.
+ */
+export function seriesMarkers(value: string): {title:string;season:number|null;part:number|null} {
+  let title=value.normalize('NFKC'),season:number|null=null,part:number|null=null;
+  const romans=['','i','ii','iii','iv','v','vi','vii','viii','ix','x','xi','xii','xiii','xiv','xv','xvi','xvii','xviii','xix','xx'];
+  const number='(\\d{1,2}|[ivx]{1,4})';
+  const read=(kind:'season'|'part',pattern:RegExp)=>{
+    title=title.replace(pattern,(match,raw:string)=>{
+      const n=/^\d+$/.test(raw)?Number(raw):romans.indexOf(raw.toLowerCase());
+      if(n<1||n>99)return match;
+      if(kind==='season')season=n;else part=n;
+      return ' ';
+    });
+  };
+  read('season',new RegExp('\\bseason\\s*'+number+'\\b','gi'));
+  read('season',/\b(\d{1,2})(?:st|nd|rd|th)\s+season\b/gi);
+  read('season',/\bS(\d{1,2})(?:\s*E\d{1,4})?\b/gi);
+  read('season',/(?:第\s*)?(\d{1,2})\s*期/g);
+  read('part',new RegExp('\\b(?:part|cour)\\s*'+number+'\\b','gi'));
+  read('part',/\b(\d{1,2})(?:st|nd|rd|th)\s+(?:part|cour)\b/gi);
+  read('part',/(?:第\s*)?(\d{1,2})\s*クール/g);
+  return {title:title.replace(/\s+/g,' ').trim(),season,part};
+}

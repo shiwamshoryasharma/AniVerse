@@ -1,8 +1,8 @@
 # AniVerse memory index
 
-Last inspected: 2026-10-30, Asia/Calcutta. Repository: `E:\14-OCT-2026\aniverse`.
+Last inspected: 2026-10-31, Asia/Calcutta. Repository: `E:\14-OCT-2026\aniverse`.
 
-AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 2.0.1; read the current package file before relying on versions.
+AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 2.0.2; read the current package file before relying on versions.
 
 Read the relevant reference only:
 
@@ -25,3 +25,5 @@ Skills: [development](../skills/aniverse-development/SKILL.md), [source navigati
 Version 1.5.8 scope includes stable rendering, reversible normal/4K player layout, broad alias search, bounded enabled-source recovery, main-process private playback and memory-session leases, blocker updates, episode cards, and the temporary 2026 festive palette. Its automatic rollout expires January 1, 2027; portable v1 backups keep standard colour values. See status/architecture for verified paths and limits.
 
 Version 2.0.1 adds the embedded Rust policy, software/package safeguards and temporary seasonal logo/icons/buffer. Final validation and live-versus-baseline results are in [status](status.md); read [security](security.md) before modifying these boundaries.
+
+The user-selected 2.0.2 follow-up (2026-10-31) fixes generic named-arc/season identity, adds bounded source-session episode artwork and explicit ALL/DUB/SUB filters. See [status](status.md) for the exact live case, test evidence and the distinction between development/live tests and the final signed release checks.

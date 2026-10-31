@@ -2,6 +2,7 @@ import { Check, LayoutGrid, List, Search, Play, EyeOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { hideEpisode } from '../../../app/shared/workspace';
 import { cx } from '../lib/format';
+import {AudioFilter,type AudioChoice} from './AudioFilter';
 import { Checkbox, Select } from './controls';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   available: Set<number> | null;
   titles: Map<number, string>;
   thumbs: Map<number, string>;
+  audio?:Map<number,('sub'|'dub')[]>;
   onSelect: (episode: number) => void;
   sourceLabel?: string;
   spoilerShield?: boolean;
@@ -19,9 +21,10 @@ interface Props {
 
 const CHUNK = 100;
 
-export function EpisodePanel({ total, current, watched, available, titles, thumbs, onSelect, sourceLabel, spoilerShield = false }: Props) {
+export function EpisodePanel({ total, current, watched, available, titles, thumbs, audio, onSelect, sourceLabel, spoilerShield = false }: Props) {
   const [mode, setMode] = useState<'list' | 'grid'>(total > 30 ? 'grid' : 'list');
   const [filter, setFilter] = useState('');
+  const [language,setLanguage]=useState<AudioChoice>('all');
   const [hideWatched, setHideWatched] = useState(false);
   // A range picked by the user applies until the current episode changes.
   const [picked, setPicked] = useState<{ forEpisode: number; chunk: number } | null>(null);
@@ -39,9 +42,10 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
     let list = Array.from({ length: total }, (_, i) => i + 1);
     if (q) list = list.filter((n) => String(n) === q || String(n).startsWith(q) || (!hideEpisode(n,current,watched,spoilerShield) && (titles.get(n) ?? '').toLowerCase().includes(q)));
     else if (chunks > 1) list = list.slice(chunk * CHUNK, chunk * CHUNK + CHUNK);
+    if(language!=='all')list=list.filter(n=>audio?.get(n)?.includes(language));
     if (hideWatched) list = list.filter((n) => !watched.has(n) || n === current);
     return list;
-  }, [filter, total, chunks, chunk, hideWatched, watched, current, titles, spoilerShield]);
+  }, [filter, total, chunks, chunk, hideWatched, watched, current, titles, spoilerShield,language,audio]);
 
   return (
     <div className="card ep-panel">
@@ -52,6 +56,7 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
             {watched.size}/{total} watched{sourceLabel ? ` · ${sourceLabel}` : ''}
           </span>
         </div>
+        <AudioFilter value={language} onChange={setLanguage} label="Episode audio availability"/>
         <div className="row">
           <div style={{ position: 'relative', flex: 1 }}>
             <Search size={13} style={{ position: 'absolute', left: 9, top: 9, color: 'var(--text-3)' }} />
@@ -80,7 +85,7 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
         </div>
       </div>
       <div className={cx('ep-list', mode === 'grid' && 'grid-mode')}>
-        {numbers.length === 0 && <div className="faint" style={{ padding: 12 }}>No episodes match.</div>}
+        {numbers.length === 0 && <div className="faint" style={{ padding: 12 }}>{language==='all'?'No episodes match.':'No '+language.toUpperCase()+' episodes confirmed by this source. Check ALL for unverified episodes.'}</div>}
         {numbers.map((n) => {
           const unavailable = available !== null && !available.has(n);
           const cls = cx(n === current && 'active', watched.has(n) && 'watched', unavailable && 'unavailable');
@@ -94,12 +99,13 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
           ) : (
             <button key={n} ref={n === current ? activeRef : undefined} className={cx('ep-row', cls)} aria-current={n===current?'true':undefined} aria-label={tip} title={tip} onClick={() => onSelect(n)}>
               <span className="ep-thumb">
-                {!hidden&&thumbs.get(n)?<img src={thumbs.get(n)} alt="" loading="lazy" onError={event=>{event.currentTarget.style.display='none';}}/>:null}
+                {!hidden&&thumbs.get(n)?<img key={thumbs.get(n)} src={thumbs.get(n)} alt="" loading="lazy" onLoad={event=>event.currentTarget.style.removeProperty('display')} onError={event=>{event.currentTarget.style.display='none';}}/>:null}
                 <span className="ep-thumb-symbol">{hidden?<EyeOff size={20}/>:<Play size={20} fill="currentColor"/>}</span>
               </span>
               <span className="ep-description">
                 <span className="ep-number">EP {String(n).padStart(2,'0')}</span>
                 <strong className="ellipsis">{label ?? `Episode ${n}`}</strong>
+                {!!audio?.get(n)?.length&&<span className="ep-audio-badges">{audio.get(n)!.map(value=><span key={value} className={value}>{value.toUpperCase()}</span>)}</span>}
                 <span className="ep-state">{watched.has(n)?<><Check size={12}/> Watched</>:n===current?<><Play size={11}/> Now watching</>:unavailable?'Try another source':hidden?'Spoiler hidden':'Episode '+n}</span>
               </span>
             </button>

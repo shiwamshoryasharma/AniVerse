@@ -77,3 +77,14 @@
 @keyframes festival-orbit {to{transform:rotate(360deg);}}
 [data-motion='reduce'] .festival-buffer * {animation:none!important;}
 @media(prefers-reduced-motion:reduce){.festival-buffer * {animation:none!important;}}
+
+.audio-filter {display:inline-flex;gap:3px;padding:3px;border:1px solid var(--border);border-radius:9px;background:var(--bg-2);}
+.audio-filter button {border:0;background:transparent;color:var(--text-2);font:inherit;font-size:var(--fs-xs);font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;}
+.audio-filter button.active {background:var(--accent-soft);color:var(--accent);}
+.audio-filter button:focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
+.audio-coverage {font-size:var(--fs-xs);margin:8px 0 12px;}
+.ep-audio-badges {display:flex;gap:5px;font-size:10px;font-weight:800;letter-spacing:.04em;}
+.ep-audio-badges span {padding:2px 6px;border-radius:4px;background:var(--surface-3);color:var(--text-2);}
+.ep-audio-badges .dub {background:var(--accent-soft);color:var(--accent);}
+
+.latest-episodes .section-head {flex-wrap:wrap;}

@@ -1,3 +1,4 @@
+import {EpisodeArtwork} from './episodeArtwork';
 import type {RustPolicy} from '../app/core/security/rustPolicy';
 import { dialog, net, protocol, webContents, type BrowserWindow, type WebContents } from 'electron';
 import { randomBytes } from 'node:crypto';
@@ -34,13 +35,14 @@ export function registerSchemes() {
  * issued by the dialog, so the renderer cannot read arbitrary files).
  */
 export class MediaProtocols {
+  readonly artwork:EpisodeArtwork;
   private files = new Map<string, string>();
 
   constructor(
     private rendererDir: string,
     private profileDir: string,
     private security:RustPolicy,
-  ) {}
+  ) {this.artwork=new EpisodeArtwork(security);}
 
   install() {
     protocol.handle('app', async (request) => {
@@ -67,6 +69,7 @@ export class MediaProtocols {
         if (!/^(avatar|banner)\.(png|jpe?g|webp)$/.test(name)) return new Response('Not found', { status: 404 });
         return net.fetch(pathToFileURL(path.join(this.profileDir, name)).toString()).catch(() => new Response('Not found', { status: 404 }));
       }
+      if(host==='episode')return this.artwork.serve(pathname.replace(/^\//,''));
       if(host!=='local')return new Response('Not found',{status:404});
       const token = pathname.replace(/^\//, '');
       const file = this.files.get(token);

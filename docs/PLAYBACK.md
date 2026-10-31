@@ -95,3 +95,9 @@ Focused players now normalize the selected video and its internal ratio wrappers
 Popup protection blocks all new windows, including same-site popups, while ordinary same-site navigation and player iframes remain available. Filters check hourly and refresh after 24 hours. Privacy settings has Update filters; reload an open page to apply new cosmetic rules. Offline failures retain working cached rules.
 
 Private viewing controls and their limits are documented in [PRIVACY.md](../PRIVACY.md).
+
+## Episode images and audio availability (2.0.2)
+
+Episode cards can show the selected website's per-episode stills when its rendered episode list supplies them. AniList/adapter artwork remains a fallback. Image loading uses an opaque read-only grant through that source's isolated browser session; source cookies stay there. Requests are bounded and do not replace or extract the video. Spoiler Shield hides future episode images.
+
+ALL/DUB/SUB filters appear in the episode index, home Latest Episodes and Browse. SUB/DUB means an explicit source badge was observed during this app session. Unknown availability remains in ALL; AniList alone does not certify dubbing. Latest Episodes checks that particular episode's audio, while Browse filters confirmed series in loaded results. Private viewing does not add catalogue availability records, and permanently private titles are excluded. The hints are not persisted or synced.

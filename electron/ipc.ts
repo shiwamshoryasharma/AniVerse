@@ -121,6 +121,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'meta.hover': z.object({ id }),
 
   'sources.list': none,
+  'sources.audio':none,
   'sources.reload': none,
   'sources.update': z.object({
     id: sourceId,
@@ -154,6 +155,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   }),
   'site.focus': z.object({ webContentsId: id, on: z.boolean() }),
   'site.options': z.object({ webContentsId: id }),
+  'site.episodes':z.object({webContentsId:id}),
   'site.choose': z.object({ webContentsId: id, sourceId, kind: z.enum(['type', 'server']), value: text(60) }),
   'site.forget': z.object({ sourceId, mediaId: id }),
 

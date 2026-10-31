@@ -19,14 +19,14 @@ import {
   Globe,
   ChevronUp,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback,useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { usePrivacy, useWatchSources } from '../lib/privacy';
 import { PrivateTitleButton } from '../components/Privacy';
 import { SourceFallback, shouldFallback } from '../../../app/shared/sourceFallback';
 import { episodeFromUrl } from '../../../app/core/sources/text';
 import { playbackHealth, type PlaybackHealth, type PlaybackSample } from '../../../app/shared/playback';
-import type { MediaDetails, ProbeResult, SiteOptions, SourceInfo, Stream } from '../../../app/shared/types';
+import type { MediaDetails, ProbeResult, SiteOptions, SourceInfo, Stream, SiteEpisodeCard } from '../../../app/shared/types';
 import { CommentsPanel } from '../components/CommentsPanel';
 import { CatLoader } from '../components/CatLoader';
 import { Empty, ErrorState, Loading, SourceIcon } from '../components/common';
@@ -138,7 +138,18 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const maxKnown = Math.max(episode, ...(adapterEpisodes?.map((e) => e.number) ?? [0]), ...(state?.progress.map((p) => p.episode) ?? [0]));
   const total = Math.max(availableEpisodes(media, maxKnown), 1);
   const available = adapterEpisodes ? new Set(adapterEpisodes.map((e) => e.number)) : null;
-  const { titles, thumbs } = useMemo(() => episodeMeta(media, adapterEpisodes), [media, adapterEpisodes]);
+  const artworkKey=source?.partition+':'+media.id;
+  const [siteEpisodes,setSiteEpisodes]=useState<{key:string;cards:SiteEpisodeCard[]}|null>(null);
+  const cards=useMemo(()=>siteEpisodes?.key===artworkKey?siteEpisodes.cards:[],[siteEpisodes,artworkKey]);
+  const acceptEpisodes=useCallback((result:{episodes?:SiteEpisodeCard[]})=>{
+    if(result.episodes?.length)setSiteEpisodes(previous=>({key:artworkKey,cards:[...new Map([...(previous?.key===artworkKey?previous.cards:[]),...result.episodes!].map(card=>[card.episode,card])).values()]}));
+    void qc.invalidateQueries({queryKey:['source-audio']});
+  },[artworkKey,qc]);
+  const { titles, thumbs } = useMemo(() => {
+    const meta=episodeMeta(media,adapterEpisodes);
+    for(const card of cards)if(card.thumbnail)meta.thumbs.set(card.episode,card.thumbnail);
+    return meta;
+  }, [media, adapterEpisodes,cards]);
 
   const [theater, setTheater] = useState(settings.player.theater);
   const [lightsOff, setLightsOff] = useState(false);
@@ -192,6 +203,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         if (cancelled) return;
         setFocused(r.focused);
         setSiteOptions(r.options);
+        acceptEpisodes(r);
         if (shouldFallback(r)) sourceUnavailable();
         else if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
         // Some sites only render their audio/server switches seconds after the player loads.
@@ -222,6 +234,15 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
     // The navigation key captures source, title, webview and episode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navKey, navAttempt]);
+
+  useEffect(()=>{
+    if(!navKey||navDone!==navKey||!webContentsId)return;
+    let cancelled=false;
+    const timers=[1500,4000,10000].map(delay=>window.setTimeout(()=>{
+      void call('site.episodes',{webContentsId}).then(episodes=>{if(!cancelled&&episodes.length)acceptEpisodes({episodes});}).catch(()=>undefined);
+    },delay));
+    return()=>{cancelled=true;timers.forEach(timer=>window.clearTimeout(timer));};
+  },[navKey,navDone,webContentsId,acceptEpisodes]);
 
   useEffect(() => {
     if(localId||!sourceId||match.isFetching||retrying.current)return;
@@ -257,6 +278,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
       .then((r) => {
         setFocused(r.focused);
         setSiteOptions(r.options);
+        acceptEpisodes(r);
         if (shouldFallback(r)) sourceUnavailable();
         else if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
       })
@@ -471,6 +493,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
           available={available}
           titles={titles}
           thumbs={thumbs}
+          audio={new Map(cards.map(card=>[card.episode,card.audio]))}
           onSelect={(n) => goEpisode(n)}
           sourceLabel={localId ? 'Local collection' : source?.name}
           spoilerShield={settings.appearance.spoilerShield}

@@ -2,6 +2,15 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.0.2 — 2026-10-31
+
+- 🔎 Resolve named arcs and alternate English/romaji/Japanese titles even when only another metadata alias contains the season number. Explicitly different seasons and parts/cours remain separate; ordinal, shorthand, Roman and Japanese numeric markers are normalized.
+- 🎬 Episode cards can use the source's actual per-episode artwork, including lazy-loaded images and opaque episode links. Images are read-only, bounded grants fetched through the original isolated source session. No stream extraction or replacement is added.
+- 🔊 Add **ALL | DUB | SUB** to the episode list, home Latest Episodes and Browse. Only explicit source badges confirm language availability. Latest Episodes checks the specific episode, not merely an earlier dubbed episode of the same series.
+- 🔒 Artwork grants expire/revoke with their source owner, do not expose source cookies, use origin-only referrers and do not persist image bytes. Spoiler Shield hides future artwork. Availability hints are session-local, excluded from sync, filtered by enabled sources and removed for private titles.
+
+Home/Browse language filtering covers availability observed from source pages during this app session. AniList's catalogue does not provide reliable dub status; unknown titles remain in ALL. A source without per-episode images keeps the existing metadata artwork or neutral placeholder.
+
 ## 2.0.1 — 2026-10-30
 
 - 🛡️ **Embedded Rust policy:** bounded, import-free WebAssembly checks source URLs, local-network destinations, source navigation and app asset identity.

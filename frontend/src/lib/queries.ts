@@ -50,6 +50,8 @@ export const useBrowse = (q: BrowseQuery) =>
     staleTime: 5 * 60_000,
   });
 
+export const useSourceAudio=()=>useQuery({queryKey:['source-audio'],queryFn:()=>call('sources.audio'),staleTime:0,refetchInterval:15000});
+
 export const useSources = () => useQuery({ queryKey: keys.sources, queryFn: () => call('sources.list'), staleTime: Infinity });
 
 export const useSessionInfo = (id: string) => useQuery({ queryKey: keys.session(id), queryFn: () => call('sources.session', { id }), staleTime: 15_000 });

@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
 import type { SiteRecipe } from '../app/core/sources/recipes';
+import {seriesMarkers} from '../app/core/sources/text';
 
 /**
  * Operations the site navigator runs inside a source page (in an isolated JS
@@ -9,6 +10,7 @@ import type { SiteRecipe } from '../app/core/sources/recipes';
  */
 export type PageOp =
   | { op: 'findTitle'; titles: string[]; season: number; selector?: string }
+  | { op: 'episodeCards'; slug:string|null }
   | { op: 'findEpisode'; episode: number; slug: string | null; selector?: string }
   | { op: 'watchLink'; slug: string | null; selector?: string }
   | { op: 'openSearch'; attempt: number }
@@ -39,7 +41,7 @@ export interface PickResult {
 }
 
 export function pageScript(args: PageOp): string {
-  return `(${PAGE_FN.toString()})(${JSON.stringify(args)})`;
+  return `(${PAGE_FN.toString()})(${JSON.stringify(args)},${seriesMarkers.toString()})`;
 }
 
 export function recipeSelector(recipe: SiteRecipe | null, key: 'titleLink' | 'watchLink' | 'episodeLink' | 'player', episode?: number): string | undefined {
@@ -50,7 +52,7 @@ export function recipeSelector(recipe: SiteRecipe | null, key: 'titleLink' | 'wa
 
 /* eslint-disable */
 // Serialised into the page with Function.prototype.toString — keep it self-contained.
-function PAGE_FN(A: PageOp): unknown {
+function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
   const norm = (s: unknown) =>
     String(s || '')
       .normalize('NFKC')
@@ -70,11 +72,6 @@ function PAGE_FN(A: PageOp): unknown {
       if (y.has(t)) c++;
     });
     return (2 * c) / (x.size + y.size);
-  };
-  const seasonOf = (s: unknown) => {
-    const t = String(s || '');
-    const m = t.match(/\bseason\s*(\d{1,2})\b/i) || t.match(/\b(\d{1,2})(?:st|nd|rd|th)\s+season\b/i) || t.match(/\bS(\d{1,2})\s*E\d{1,4}\b/i) || t.match(/\bS(\d{1,2})\b/);
-    return m ? Number(m[1]) : null;
   };
   const abs = (h: string | null) => {
     if (!h) return null;
@@ -211,16 +208,26 @@ function PAGE_FN(A: PageOp): unknown {
   }
 
   const titleScore = (t: unknown, titles: string[], season: number) => {
-    const n = norm(t);
-    if (!n || n.length > 160) return 0;
-    if ((seasonOf(t) || 1) !== season) return 0;
+    const identity=markers(String(t||''));
+    const n = norm(identity.title);
+    if (!n || n.length > 300) return 0;
+    const part=Math.max(1,...titles.map(title=>markers(title).part??1));
+    if(identity.season!==null&&identity.season!==season)return 0;
+    if(identity.part!==null&&identity.part!==part)return 0;
     let best = 0;
     for (const title of titles) {
-      const nt = norm(title);
+      const alias=markers(title);
+      // A named arc can omit its season, but a numbered alias alone must not
+      // authorize the unqualified parent or a different part of that series.
+      if(identity.season===null&&season>1&&alias.season!==null)continue;
+      if(identity.part===null&&part>1&&alias.part!==null)continue;
+      if(alias.season!==null&&alias.season!==season)continue;
+      if(alias.part!==null&&alias.part!==part)continue;
+      const nt = norm(alias.title);
       if (!nt) continue;
       if (n === nt) return 1.1;
       if (nt.length >= 4 && (' ' + n + ' ').includes(' ' + nt + ' ')) best = Math.max(best, 1 - Math.min(0.3, (n.length - nt.length) / (n.length * 3)));
-      else best = Math.max(best, dice(t, title));
+      else best = Math.max(best, dice(identity.title, alias.title));
     }
     return best;
   };
@@ -271,6 +278,37 @@ function PAGE_FN(A: PageOp): unknown {
     const ranked = [...found.values()].sort((a, b) => b.s - a.s).slice(0, 3);
     if (!ranked.length) return null;
     return ranked.map((c) => ({ href: c.href, pick: c.href ? null : mark(c.el), score: c.s }));
+  }
+
+  if(A.op==='episodeCards'){
+    const found=new Map<number,{episode:number;thumbnail:string|null;audio:('sub'|'dub')[]}>();
+    const nodes=document.querySelectorAll('a[href],button,[role="button"],[data-episode],[data-episode-number],[data-number],[data-num],[data-ep]');
+    for(const el of nodes){
+      if(found.size>=500)break;
+      const u=abs(el.getAttribute('href')||el.getAttribute('data-href'));
+      const episodeList=el.closest('[class*="episode" i],[id*="episode" i],[class*="ep-list" i]');
+      if(u&&(!onSite(u)||(A.slug&&!u.pathname.toLowerCase().includes(A.slug.toLowerCase())&&!episodeList)))continue;
+      const ds=(el as HTMLElement).dataset||{};
+      const marker=[ds.episode,ds.episodeNumber,ds.number,ds.num,ds.ep].find(value=>value&&/^\d{1,4}$/.test(value));
+      const explicit=text(el).match(/^(?:ep(?:isode)?\.?\s*#?\s*)0*(\d{1,4})(?!\d)/i);
+      const episode=marker?Number(marker):((u?epFromUrl(u):null)??(explicit?Number(explicit[1]):null));
+      if(!episode||episode>5000)continue;
+      let card=el;
+      for(let parent=el.parentElement,i=0;!card.querySelector('img')&&parent&&i<2;i++,parent=parent.parentElement){
+        if(parent.querySelectorAll('img').length!==1)break;
+        card=parent;
+      }
+      const image=card.querySelector('img');
+      const src=image?.getAttribute('data-src')||image?.getAttribute('data-original')||(image as HTMLImageElement|null)?.currentSrc||image?.getAttribute('src');
+      const thumbnail=src?abs(src)?.href??null:null;
+      const labels=[text(card),...Array.from(card.querySelectorAll('span,b,strong,small,em,[title],[aria-label],[data-type]')).slice(0,40).map(node=>[text(node),node.getAttribute('title'),node.getAttribute('aria-label'),node.getAttribute('data-type')].filter(Boolean).join(' '))].join(' ').slice(0,2000);
+      const audio:('sub'|'dub')[]=[];
+      if(/\b(?:sub|subbed|subtitled)\b/i.test(labels))audio.push('sub');
+      if(/\b(?:dub|dubbed)\b/i.test(labels))audio.push('dub');
+      const previous=found.get(episode);
+      found.set(episode,{episode,thumbnail:previous?.thumbnail??thumbnail,audio:[...new Set([...(previous?.audio??[]),...audio])]});
+    }
+    return [...found.values()].sort((a,b)=>a.episode-b.episode);
   }
 
   if (A.op === 'findEpisode') {

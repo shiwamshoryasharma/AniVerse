@@ -43,3 +43,12 @@ Rust developers need Cargo/rustc and the wasm32-unknown-unknown target (`rustup 
 `node test/e2e/security.mjs` checks the real Rust module, app CSP, source sandbox, private-network blocking with ads off while video keeps advancing, quality changes, normal navigation, 4K output and January loader/logo reversion. `E2E_EXE=release/win-unpacked/AniVerse.exe` tests the production fuse restrictions through renderer-only CDP. Older Playwright Electron main-inspector launchers intentionally cannot drive the fused release; run them on the development bundle for regression coverage.
 
 `node test/e2e/live-playback.mjs` surveys configured website sources against ordinary catalogue metadata. It uses a new isolated profile, muted output and no browser debugging; reports advancing decoded media separately from navigation. SURVEY_INDICES, SURVEY_ID, SURVEY_TIMEOUT and SURVEY_REPORT can select/retry cases. Source configuration is not published; evidence stays ignored under test/artifacts. A failed or unconfirmed live player is not a playback pass.
+
+### Series matching, episode artwork and audio filters
+
+- `node test/e2e/series-matching.mjs`: real isolated-world DOM regression for named arcs, English/romaji/Japanese aliases, explicit season/part separation, Roman/ordinal/shorthand numbers, lazy episode images and opaque episode links.
+- `node test/e2e/series-ui.mjs`: after a build, exercises the full source navigation path, three distinct still images, ALL/DUB/SUB in episode/home/browse UI, original video clock, Spoiler Shield, responsive layout and private-title exclusion. Uses neutral protocols, isolated profiles and frames from the existing public video fixture; all generated frames stay in test/cache.
+
+Audio availability is source-confirmed and session-local. A successful All filter is not evidence of verified dubbing, and a source without artwork is not an image-loading pass. These checks do not install or publish an updated app.
+
+The series UI fixture deliberately delays watch-page episode cards for 6.5 seconds, then reloads a cached episode with Spoiler Shield enabled. It must recover the current image through bounded metadata refreshes. Live test drivers must overwrite reports on failure; never accept a stale passing JSON after a later timeout.

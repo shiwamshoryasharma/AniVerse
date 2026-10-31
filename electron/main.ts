@@ -1,5 +1,6 @@
 import {trustedAppUrl} from '../app/shared/trustedOrigin';
 import {seasonalVisuals} from '../app/shared/seasonal';
+import {SourceAudioIndex} from '../app/core/sources/audioIndex';
 import {RustPolicy} from '../app/core/security/rustPolicy';
 import { app, BrowserWindow, Menu, dialog, safeStorage, session, shell, webContents, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
@@ -255,6 +256,7 @@ async function bootstrap() {
     token: () => store.getAccount('anilist')?.token ?? null,
   });
   const youtube = new YouTubeAdapter(apiFetch, fetcher, store, () => settings.get().accounts.youtubeApiKey);
+  const sourceAudio=new SourceAudioIndex();
   let navigator!: SiteNavigator;
   const registry = new SourceRegistry(store, fetcher, [new WebSiteAdapter(), youtube], () => navigator.book());
   navigator = new SiteNavigator(
@@ -265,6 +267,8 @@ async function bootstrap() {
     (wc) => probe.probe(wc.id),
     () => settings.get().player.autoplay,
     (wc, action, value) => probe.control(wc.id, action, value),
+    (wc,url)=>protocols.artwork.grant(wc,url),
+    (sourceId,mediaId,cards)=>sourceAudio.observe(sourceId,mediaId,cards),
   );
   sessions = new SessionManager(
     registry,
@@ -381,6 +385,7 @@ async function bootstrap() {
     'meta.hover': ({ id }) => anilist.hoverInfo(id),
 
     'sources.list': () => sessions.sourceList(),
+    'sources.audio':()=>sourceAudio.list(new Set(registry.list().filter(source=>source.enabled).map(source=>source.id)),id=>store.isPrivate(id)),
     'sources.reload': () => {
       config.reload(true);
       return sessions.sourceList();
@@ -413,6 +418,7 @@ async function bootstrap() {
     'site.openEpisode': (req) => {const guest=guestFor(req.webContentsId,req.sourceId);return navigator.openEpisode(guest,sessions.sourceForSession(guest.session)??registry.get(req.sourceId),req);},
     'site.focus': async ({ webContentsId, on }) => ({ focused: await navigator.focus(guestFor(webContentsId), on, null) }),
     'site.options': ({ webContentsId }) => navigator.options(guestFor(webContentsId)),
+    'site.episodes':({webContentsId})=>navigator.episodeCards(guestFor(webContentsId)),
     'site.choose': ({ webContentsId, sourceId, kind, value }) => navigator.choose(guestFor(webContentsId, sourceId), registry.get(sourceId), kind, value),
     'site.forget': ({ sourceId, mediaId }) => {
       registry.get(sourceId);
