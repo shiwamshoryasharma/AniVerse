@@ -121,6 +121,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'meta.hover': z.object({ id }),
 
   'sources.list': none,
+  'sources.catalogue':z.object({sourceId,audio:z.enum(['all','sub','dub']),page:z.number().int().min(1).max(20),query:browse.optional()}),
   'sources.audio':none,
   'sources.reload': none,
   'sources.update': z.object({

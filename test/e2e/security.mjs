@@ -18,9 +18,13 @@ const forbidden=createServer((_req,res)=>{forbiddenRequests++;res.setHeader('Acc
 await new Promise(resolve=>forbidden.listen(0,'127.0.0.1',resolve));
 const forbiddenURL='http://127.0.0.1:'+forbidden.address().port;
 const html='<!doctype html><meta charset="utf-8"><title>Security playback fixture</title><style>body{margin:0;background:#151020;color:white;font:16px sans-serif}#player{position:relative;width:960px;height:540px}video{width:100%;height:100%;object-fit:contain}a,button{margin:10px}</style><div id="player"><video id="v" controls muted loop src="/video.mp4"></video></div><button id="quality">Switch quality</button><a href="/next" id="next">Next page</a><script>window.originalVideo=v;quality.onclick=()=>{v.src="/video.mp4?quality=low";v.play();};</script>';
-const episodeList='<div class="episodes">'+[1,2,3].map(n=>'<a href="/watch/fixture/'+n+'" data-episode="'+n+'"><img src="/still/'+n+'.gif"><span>Episode '+n+'</span><b>'+(n===1?'SUB DUB':n===2?'SUB':'DUB')+'</b></a>').join('')+'</div>';
+const episodeList='<div class="episodes">'+[1,2,3].map(n=>'<a href="/watch/fixture/'+n+'" data-episode="'+n+'"><img src="/still/'+n+'.gif"><span>Episode '+n+'</span><b>'+(n===2?'SUB':'SUB DUB')+'</b></a>').join('')+'</div>';
 const server=createServer((req,res)=>{
  if(req.url.startsWith('/still/')){res.writeHead(200,{'Content-Type':'image/gif'});res.end(Buffer.from('R0lGODlhAQABAPAAAP8AAAAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==','base64'));return;}
+ if(req.url==='/'){
+  const card='<a data-anilist-id="7" data-sub-count="12" data-dub-count="11" data-total-count="12" href="/watch/fixture/1"><img src="/still/7.gif"><h3>Fixture Series</h3></a>';
+  res.writeHead(200,{'Content-Type':'text/html'});res.end(html+'<section><h2>Latest Episodes</h2><button data-audio="all" aria-pressed="true">All</button><button data-audio="sub">Sub</button><button data-audio="dub">Dub</button>'+card+'</section><script>document.querySelectorAll("[data-audio]").forEach(button=>button.onclick=()=>document.querySelectorAll("[data-audio]").forEach(node=>node.setAttribute("aria-pressed",String(node===button))));</script>');return;
+ }
  if(req.url.startsWith('/video.mp4')){
   const m=req.headers.range?.match(/^bytes=(\d+)-(\d*)$/),start=m?Number(m[1]):0,end=m&&m[2]?Math.min(Number(m[2]),clip.length-1):clip.length-1;
   res.writeHead(m?206:200,{'Content-Type':'video/mp4','Accept-Ranges':'bytes','Content-Length':end-start+1,...(m?{'Content-Range':'bytes '+start+'-'+end+'/'+clip.length}:{})});res.end(clip.subarray(start,end+1));return;
@@ -38,7 +42,7 @@ const store=new Store(path.join(profile,'aniverse.db'));
 const raw=JSON.parse(readFileSync(path.join(root,'test/fixtures/anilist-home.json'),'utf8')).data.trending.media[0];
 Object.assign(raw,{id:7,idMal:null,title:{english:'Fixture Series',romaji:'Fixture Series',native:null,userPreferred:'Fixture Series'},coverImage:{large:'',extraLarge:'',color:null},bannerImage:null,status:'FINISHED',episodes:3,synonyms:[],streamingEpisodes:[],externalLinks:[],relations:{edges:[]},recommendations:{nodes:[]},characters:{edges:[]},studios:{nodes:[]},tags:[]});
 const data={Media:raw,Page:{media:[raw]},trending:{media:[]},spotlight:{media:[]},popularSeason:{media:[]},upcoming:{media:[]},topRated:{media:[]},recent:{airingSchedules:[]}};
-const client=new AniListClient(async()=>new Response(JSON.stringify({data})),store,{showAdult:()=>false,token:()=>null});await client.details(7);await client.home();
+const client=new AniListClient(async()=>new Response(JSON.stringify({data})),store,{showAdult:()=>false,token:()=>null});await client.details(7);await client.home();await client.catalogueCards([7]);
 store.setKv('settings',{updates:{autoCheck:false,autoDownload:false},accounts:{autoSync:false},privacy:{adblock:false},player:{autoplay:false,volume:0},appearance:{accent:'festival',reduceMotion:false,spoilerShield:false}});
 const localFile=path.join(run,'Fixture Series - 01.mp4');writeFileSync(localFile,clip);store.setKv('collection:roots',[run]);
 store.db.prepare('INSERT INTO local_media(path,name,bytes,query,episode,media_id,missing) VALUES(?,?,?,?,?,?,0)').run(localFile,path.basename(localFile),clip.length,'Fixture Series',1,7);
@@ -69,6 +73,10 @@ try{
  assert.equal(csp,true);check('App CSP blocks untrusted inline scripts');
  assert.equal(await page.locator('.seasonal-logo').count(),1);
  const sources=await rpc('sources.list'),source=sources[0];
+ const fresh=await rpc('sources.catalogue',{sourceId:source.id,audio:'dub',page:1});
+ assert.equal(fresh.items.length,1);assert.equal(fresh.items[0].sub,12);assert.equal(fresh.items[0].dub,11);
+ check('A fresh signed app reads source catalogue DUB eligibility independently of watched episodes');
+
  await rpc('sources.pin',{sourceId:source.id,mediaId:7,url:origin+'/slow/episode-1'});
  await page.evaluate(id=>location.hash='#/watch/7/1?source='+id,source.id);
  await page.waitForSelector('.festival-buffer');await page.screenshot({path:path.join(artifacts,'security-festive-buffer.png')});
@@ -114,7 +122,7 @@ try{
  check('Source episode images render through opaque grants in the compiled application');
  const audio=page.getByRole('group',{name:'Episode audio availability'});
  await audio.getByRole('button',{name:'DUB',exact:true}).click();assert.equal(await page.locator('.ep-row').count(),2);
- await audio.getByRole('button',{name:'SUB',exact:true}).click();assert.equal(await page.locator('.ep-row').count(),2);
+ await audio.getByRole('button',{name:'SUB',exact:true}).click();assert.equal(await page.locator('.ep-row').count(),3);
  await audio.getByRole('button',{name:'ALL',exact:true}).click();assert.equal(await page.locator('.ep-row').count(),3);
  const known=await rpc('sources.audio');assert.ok(known.find(row=>row.mediaId===7)?.audio.includes('dub'));
  check('Compiled episode audio filters and main-process availability observations agree');

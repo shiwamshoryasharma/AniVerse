@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Cookie, FileText, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Empty, Loading, SourceIcon } from '../components/common';
 import { WebSession } from '../components/WebSession';
 import { call, errorText } from '../lib/bridge';
@@ -81,6 +81,7 @@ export function SourcesPage() {
 
 export function SourceBrowserPage() {
   const { id } = useParams();
+  const [params]=useSearchParams();
   const { data: sources } = useSources();
   const navigate = useNavigate();
   const source = sources?.find((s) => s.id === id);
@@ -123,7 +124,7 @@ export function SourceBrowserPage() {
         </button>
       </div>
       <div className="card" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <WebSession source={source} src={source.url} onNavigate={() => void qc.invalidateQueries({ queryKey: keys.session(source.id) })} />
+        <WebSession source={source} src={(()=>{try{const page=new URL(params.get('page')??source.url),base=new URL(source.url);return /^https?:$/.test(page.protocol)&&page.hostname.replace(/^www\./,'')===base.hostname.replace(/^www\./,'')&&!page.username&&!page.password?page.href:source.url;}catch{return source.url;}})()} onNavigate={() => void qc.invalidateQueries({ queryKey: keys.session(source.id) })} />
       </div>
     </div>
   );

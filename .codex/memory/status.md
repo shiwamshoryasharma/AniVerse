@@ -2,6 +2,16 @@
 
 Snapshot: 2026-10-31, Asia/Calcutta. Scoped source/runtime validation is recorded below; it is not certification of every external service or device.
 
+## Version 2.1.0 (2026-10-31)
+
+The user rejected 2.0.2's observed-session filter and requested a 2.1.0 release. Actual public source UI inspection confirms that DUB lists mixed series even when dubbing lags, and SUB includes mixed plus sub-only. Source identities remain only in ignored configuration/evidence.
+
+Home/Browse now use selected-source public catalogue cards, the website's audio controls and actual pagination, with public AniList ID matching and raw-page fallback. The new catalogue is independent of SourceAudioIndex/watch history. A reproduced rapid-toggle race was fixed by serializing bounded reads without cancelling shared in-flight category queries. Per-episode availability stays individual. Source/session/security boundaries and normal/4K playback remain.
+
+Verified: typecheck, clean lint, 250 unit tests in 50 files, 14 integrated catalogue/series UI checks, 8 source/privacy checks and 14 checks on the final signed application. Package verification confirms exact bundle/WASM bytes, pinned signer, selected fuses, embedded vendor hashes and update feed. The installer SHA256 is c24e959877472df739b88914d7ed07c089fdd60caa64bbd9bd59476d1751fdf5. The existing self-signed signer remains UntrustedRoot on this host. Full results are recorded in test/artifacts/release-2.1.0-validation.json and release-2.1.0-package.json. The fresh native live Home run returned 12 DUB and 12 SUB cards with no watched-title hints; it included a SUB 12 / DUB 11 series and sub-only entries. The source/card/layout checks do not establish universal provider compatibility. No physical TV/audio, model/image-quality or installer/update installation check is claimed.
+
+[2.1.0 release notes](../../docs/releases/2.1.0.md).
+
 ## Version 2.0.2 (2026-10-31)
 
 The user reported similarly named series failing to load, then requested actual episode stills and ALL/DUB/SUB in both episode and home/browse UI. The user selected 2.0.2 for this follow-up. Initial development/live validation used the 2.0.1 package label; final 2.0.2 signed-package verification is recorded separately.

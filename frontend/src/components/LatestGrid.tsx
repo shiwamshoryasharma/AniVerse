@@ -5,13 +5,13 @@ import { useNavigate } from 'react-router';
 import type { AiringItem } from '../../../app/shared/types';
 import { call } from '../lib/bridge';
 import { cx, timeAgo, titleOf } from '../lib/format';
-import {AudioFilter,AudioCoverageNote,type AudioChoice} from './AudioFilter';
-import { useSourceAudio,useSettings } from '../lib/queries';
+import {SourceCatalogueResults} from './SourceCatalogueResults';
+import {AudioFilter,type AudioChoice} from './AudioFilter';
+import { useSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { ErrorState } from './common';
 import { MediaCard, SkeletonCards } from './MediaCard';
 
-import {matchesAudio} from '../../../app/shared/audioAvailability';
 
 type Filter = 'all' | 'tv' | 'other' | 'top';
 const FILTERS: [Filter, string][] = [
@@ -40,7 +40,6 @@ export function LatestGrid() {
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<Filter>('all');
   const [audio,setAudio]=useState<AudioChoice>('all');
-  const availability=useSourceAudio();
   const [seenAt] = useState(readSeen);
   const [now, setNow] = useState(() => Date.now());
   const navigate = useNavigate();
@@ -48,6 +47,7 @@ export function LatestGrid() {
   const lang = useSettings().appearance.titleLanguage;
   const { data, error, refetch, isPlaceholderData, dataUpdatedAt } = useQuery({
     queryKey: ['latest', page],
+    enabled:audio==='all',
     queryFn: () => call('meta.latest', { page }),
     placeholderData: keepPreviousData,
     refetchInterval: REFRESH_MS,
@@ -96,13 +96,13 @@ export function LatestGrid() {
   }, []);
 
   const items = useMemo(() => {
-    const list = (data?.items ?? []).filter(item=>matchesAudio(item.media.id,audio,availability.data,item.episode));
+    const list = data?.items ?? [];
     const tv = (a: AiringItem) => a.media.format === 'TV' || a.media.format === 'TV_SHORT';
     if (filter === 'tv') return list.filter(tv);
     if (filter === 'other') return list.filter((a) => !tv(a));
     if (filter === 'top') return [...list].sort((a, b) => (b.media.score ?? 0) - (a.media.score ?? 0));
     return list;
-  }, [data, filter,audio,availability.data]);
+  }, [data, filter]);
 
   const updated = dataUpdatedAt ? Math.max(0, Math.round((now - dataUpdatedAt) / 60000)) : null;
 
@@ -111,7 +111,7 @@ export function LatestGrid() {
       <div className="section-head">
         <h2 className="section-title">Latest episodes</h2>
         <span className="row faint" style={{ gap: 6, fontSize: 'var(--fs-xs)' }} title="Checks for new episodes every 5 minutes">
-          <span className="dot" /> {updated === null ? 'Loading…' : updated === 0 ? 'Updated just now' : `Updated ${updated}m ago`}
+          <span className="dot" /> {audio!=='all'?'Live source catalogue':updated === null ? 'Loading…' : updated === 0 ? 'Updated just now' : `Updated ${updated}m ago`}
         </span>
         <div className="tabs" style={{ marginLeft: 'auto' }}>
           {FILTERS.map(([f, label]) => (
@@ -121,7 +121,7 @@ export function LatestGrid() {
           ))}
         </div>
         <AudioFilter value={audio} onChange={setAudio} label="Latest episode audio availability"/>
-        <div className="rail-arrows">
+        {audio==='all'&&<div className="rail-arrows">
           <button className="icon-btn bordered" aria-label="Newer" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             <ChevronLeft size={16} />
           </button>
@@ -129,12 +129,12 @@ export function LatestGrid() {
             <ChevronRight size={16} />
           </button>
         </div>
+        }
         <button className="more" style={{ marginLeft: 0 }} onClick={() => navigate('/schedule')}>
           <CalendarDays size={14} /> Schedule
         </button>
       </div>
-      <AudioCoverageNote value={audio}/>
-      {error && !data ? (
+      {audio!=='all'?<SourceCatalogueResults audio={audio} query={filter==='tv'?{formats:['TV','TV_SHORT']}:filter==='other'?{formats:['ONA','OVA','SPECIAL','MOVIE','MUSIC']}:filter==='top'?{sort:'SCORE_DESC'}:{}}/>:error && !data ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
       ) : (
         <div className={cx('grid six', isPlaceholderData && 'fading')}>
@@ -151,10 +151,10 @@ export function LatestGrid() {
               ))}
         </div>
       )}
-      {data && items.length === 0 && <p className="muted">Nothing in this filter on this page.</p>}
-      <div className="row" style={{ justifyContent: 'center', marginTop: 14 }}>
+      {audio==='all'&&data && items.length === 0 && <p className="muted">Nothing in this filter on this page.</p>}
+      {audio==='all'&&<div className="row" style={{ justifyContent: 'center', marginTop: 14 }}>
         <span className="faint" style={{ fontSize: 'var(--fs-sm)' }}>Page {page}</span>
-      </div>
+      </div>}
     </section>
   );
 }

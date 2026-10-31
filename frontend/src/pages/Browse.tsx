@@ -6,10 +6,10 @@ import { Empty, ErrorState, Spinner } from '../components/common';
 import { Checkbox, Select, type SelectOption } from '../components/controls';
 import { MediaCard, SkeletonCards } from '../components/MediaCard';
 import { cx, formatLabel } from '../lib/format';
-import {AudioFilter,AudioCoverageNote,type AudioChoice} from '../components/AudioFilter';
-import { useSourceAudio,useBrowse, useGenres } from '../lib/queries';
+import {SourceCatalogueResults} from '../components/SourceCatalogueResults';
+import {AudioFilter,type AudioChoice} from '../components/AudioFilter';
+import { useBrowse, useGenres } from '../lib/queries';
 
-import {matchesAudio} from '../../../app/shared/audioAvailability';
 
 const FORMATS: MediaFormat[] = ['TV', 'TV_SHORT', 'MOVIE', 'OVA', 'ONA', 'SPECIAL', 'MUSIC'];
 const SEASONS: MediaSeason[] = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
@@ -75,7 +75,6 @@ function readQuery(p: URLSearchParams): BrowseQuery {
 
 export function BrowsePage() {
   const [audio,setAudio]=useState<AudioChoice>('all');
-  const availability=useSourceAudio();
   const [params, setParams] = useSearchParams();
   const query = useMemo(() => readQuery(params), [params]);
   const [text, setText] = useState(query.search ?? '');
@@ -136,7 +135,7 @@ export function BrowsePage() {
     set('formats', [...set_].join(','));
   };
 
-  const items = (result.data?.pages.flatMap((p) => p.items) ?? []).filter(media=>matchesAudio(media.id,audio,availability.data));
+  const items = result.data?.pages.flatMap((p) => p.items) ?? [];
   const total = result.data?.pages[0]?.total ?? 0;
   const activeFilters = [...params.keys()].length;
 
@@ -186,7 +185,7 @@ export function BrowsePage() {
         <div style={{ minWidth: 0 }}>
           <h1 className="page-title">Browse anime</h1>
           <p className="page-sub">
-            {result.isLoading
+            {audio!=='all'?'Browsing the selected source catalogue':result.isLoading
               ? 'Searching AniList…'
               : // AniList reports a placeholder total of 5000 for broad filtered queries.
                 total >= 5000
@@ -253,9 +252,7 @@ export function BrowsePage() {
           </div>
 
           <AudioFilter value={audio} onChange={setAudio} label="Browse audio availability"/>
-          <AudioCoverageNote value={audio}/>
-          {audio!=='all'&&<p className="faint audio-coverage">{items.length} confirmed matches in loaded results. {hasNextPage&&<button className="more" disabled={isFetchingNextPage} onClick={()=>void fetchNextPage()}>Load more results</button>}</p>}
-          {result.error && !items.length ? (
+          {audio!=='all'?<SourceCatalogueResults audio={audio} query={query}/>:result.error && !items.length ? (
             <ErrorState error={result.error} onRetry={() => void result.refetch()} />
           ) : !result.isLoading && !items.length ? (
             <Empty title="No anime match these filters">Try removing a filter or searching a different title.</Empty>
@@ -267,10 +264,10 @@ export function BrowsePage() {
               {(result.isLoading || isFetchingNextPage) && <SkeletonCards count={12} />}
             </div>
           )}
-          <div ref={sentinel} style={{ height: 40, display: 'grid', placeItems: 'center', marginTop: 16 }}>
+          {audio==='all'&&<div ref={sentinel} style={{ height: 40, display: 'grid', placeItems: 'center', marginTop: 16 }}>
             {isFetchingNextPage && <Spinner />}
             {!hasNextPage && items.length > 0 && <span className="faint">That’s everything.</span>}
-          </div>
+          </div>}
         </div>
       </div>
     </div>

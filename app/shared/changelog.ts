@@ -5,6 +5,15 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.1.0',date:'2026-10-31',title:'DUB and SUB, straight from your source.',
+   summary:'Live source catalogues that work before you watch anything.',
+   items:[
+    {kind:'fixed',icon:'fix',title:'DUB includes series with both audio options',description:'A series with SUB 12 and DUB 11 belongs in DUB, even while its newest dub is still coming. SUB includes mixed-language and sub-only series.'},
+    {kind:'improved',icon:'layout',title:'Browse real source catalogues',description:'Home and Browse read the selected website’s public cards and audio controls. Choose your source, see its actual SUB/DUB counts and turn its pages without opening titles first.',action:{label:'Browse anime',path:'/browse'}},
+    {kind:'fixed',icon:'sparkles',title:'Switch filters reliably',description:'Rapid DUB/SUB changes preserve the final requested category. Catalogue failures offer Retry and Open source instead of claiming there are no dubbed titles.'},
+    {kind:'improved',icon:'shield',title:'Private, isolated catalogue reads',description:'A bounded, muted source browser uses the correct isolated session. Browsing the catalogue does not add watched-title hints, history or sync records.'},
+   ]},
+
   {version:'2.0.2',date:'2026-10-31',title:'Find the right arc. See the episode.',
    summary:'Generic series matching, actual episode stills and source-confirmed audio filters.',
    items:[

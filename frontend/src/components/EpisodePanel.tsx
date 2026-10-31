@@ -2,6 +2,7 @@ import { Check, LayoutGrid, List, Search, Play, EyeOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { hideEpisode } from '../../../app/shared/workspace';
 import { cx } from '../lib/format';
+import {audioMatches} from '../../../app/shared/audioAvailability';
 import {AudioFilter,type AudioChoice} from './AudioFilter';
 import { Checkbox, Select } from './controls';
 
@@ -42,7 +43,7 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
     let list = Array.from({ length: total }, (_, i) => i + 1);
     if (q) list = list.filter((n) => String(n) === q || String(n).startsWith(q) || (!hideEpisode(n,current,watched,spoilerShield) && (titles.get(n) ?? '').toLowerCase().includes(q)));
     else if (chunks > 1) list = list.slice(chunk * CHUNK, chunk * CHUNK + CHUNK);
-    if(language!=='all')list=list.filter(n=>audio?.get(n)?.includes(language));
+    if(language!=='all')list=list.filter(n=>audioMatches(audio?.get(n),language));
     if (hideWatched) list = list.filter((n) => !watched.has(n) || n === current);
     return list;
   }, [filter, total, chunks, chunk, hideWatched, watched, current, titles, spoilerShield,language,audio]);

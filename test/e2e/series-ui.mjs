@@ -18,7 +18,7 @@ await build({stdin:{contents:"export {Store} from './app/core/db/store';export {
 const {Store,AniListClient}=createRequire(import.meta.url)(path.join(run,'seed.cjs')),db=new Store(path.join(profile,'aniverse.db'));
 const raw=JSON.parse(readFileSync(path.join(root,'test/fixtures/anilist-home.json'),'utf8')).data.trending.media[0];
 Object.assign(raw,{id:7,idMal:null,title:{english:'Skybound Chronicle: River Arc',romaji:'Skybound Chronicle: Kawa-hen',native:'空の旅 川編',userPreferred:'Skybound Chronicle: River Arc'},coverImage:{extraLarge:'',large:'',color:null},bannerImage:null,status:'FINISHED',episodes:3,synonyms:['Skybound Chronicle Season 2'],streamingEpisodes:[],externalLinks:[],relations:{edges:[]},recommendations:{nodes:[]},characters:{edges:[]},studios:{nodes:[]},tags:[]});
-const other={...raw,id:8,title:{english:'Unknown Audio Series',romaji:'Unknown Audio Series',native:null,userPreferred:'Unknown Audio Series'},synonyms:[]};
+const other={...raw,id:8,title:{english:'Sub Only Series',romaji:'Sub Only Series',native:null,userPreferred:'Sub Only Series'},synonyms:[]};
 const data={Media:raw,Page:{media:[raw,other],airingSchedules:[{id:1,episode:1,airingAt:Math.floor(Date.now()/1000)-600,media:raw},{id:2,episode:1,airingAt:Math.floor(Date.now()/1000)-800,media:other}],pageInfo:{currentPage:1,total:2,hasNextPage:false}},trending:{media:[raw]},spotlight:{media:[]},popularSeason:{media:[]},upcoming:{media:[]},topRated:{media:[]},recent:{airingSchedules:[]}};
 const client=new AniListClient(async()=>new Response(JSON.stringify({data})),db,{showAdult:()=>false,token:()=>null});await client.details(7);await client.home();await client.latest();await client.browse({page:1,perPage:30});
 db.setKv('settings',{privacy:{adblock:false,blockPopups:true},updates:{autoCheck:false,autoDownload:false},player:{autoplay:false},appearance:{spoilerShield:false,accent:'festival'}});
@@ -35,11 +35,18 @@ try{
    if(url.hostname==='media-fixture.test')return new Response(Buffer.from(input.clip,'base64'),{headers:{'Content-Type':'video/mp4'}});
    if(url.hostname==='image-fixture.test'){if(url.pathname.includes('missing'))return new Response(null,{status:404});globalThis.imageRequests.push({partition:ses.getStoragePath(),url:url.pathname});return new Response(Buffer.from(input.images[Number(url.pathname.match(/\d+/)?.[0]??1)-1],'base64'),{headers:{'Content-Type':'image/jpeg'}});}
    globalThis.seriesPaths.push(url.pathname);
-   const cards=[1,2,3].map(n=>'<a href="/watch/skybound-river/'+n+'" data-episode="'+n+'"><img src="https://image-fixture.test/'+(n===1&&url.pathname.startsWith('/anime/')?'missing-1':'frame-'+n)+'.jpg"><span>Episode '+n+'</span><b>'+(n===1?'SUB DUB':n===2?'SUB':'DUB')+'</b></a>').join('');
+   const catalog=()=>{
+    const row=(id,title,sub,dub)=>'<a data-anilist-id="'+id+'" data-sub-count="'+sub+'" data-dub-count="'+dub+'" data-total-count="12" href="/anime/'+(id===7?'skybound-river':'sub-only')+'"><img src="https://image-fixture.test/frame-1.jpg"><h3>'+title+'</h3></a>';
+    const mixed=row(7,'Skybound Chronicle: River Arc',12,11),only=row(8,'Sub Only Series',6,0);
+    const second=mixed.replace('data-dub-count="11"','data-dub-count="10"').replace('/anime/skybound-river','/anime/skybound-river?sourcepage=2');
+    const pages={all:[mixed+only,second+only],sub:[mixed+only,second+only],dub:[mixed,second]};
+    return '<section><h2>Latest Episodes</h2><div><button data-audio="all" aria-pressed="true">All</button><button data-audio="sub">Sub</button><button data-audio="dub">Dub</button><button id="more" aria-label="Next page">Next</button></div><div id="catalogue">'+mixed+only+'</div></section><script>const pages='+JSON.stringify(pages)+';let audio="all",n=0;function paint(){document.getElementById("catalogue").innerHTML=pages[audio][n];document.getElementById("more").disabled=n===1;}document.querySelectorAll("[data-audio]").forEach(button=>button.onclick=()=>{audio=button.dataset.audio;n=0;document.querySelectorAll("[data-audio]").forEach(node=>node.setAttribute("aria-pressed",String(node===button)));paint();});document.getElementById("more").onclick=()=>{n=1;paint();};</script>';
+   };
+   const cards=[1,2,3].map(n=>'<a href="/watch/skybound-river/'+n+'" data-episode="'+n+'"><img src="https://image-fixture.test/'+(n===1&&url.pathname.startsWith('/anime/')?'missing-1':'frame-'+n)+'.jpg"><span>Episode '+n+'</span><b>'+(n===2?'SUB':'SUB DUB')+'</b></a>').join('');
    const search='<h1>Search</h1><a href="/anime/skybound-parent"><h3>Skybound Chronicle</h3></a><a href="/anime/skybound-river"><h3>Skybound Chronicle: River Arc</h3></a>';
    const series='<h1>Skybound Chronicle: River Arc</h1>'+(url.pathname.startsWith('/watch/')?'<div class="episodes" id="late-cards"></div><script>setTimeout(()=>document.getElementById("late-cards").innerHTML='+JSON.stringify(cards)+',6500)</script>':'<div class="episodes">'+cards+'</div>');
    const video=url.pathname.startsWith('/watch/')?'<div id="player" style="width:960px;height:540px"><video id="actual-video" controls loop src="https://media-fixture.test/video.mp4"></video></div>':'';
-   return new Response('<!doctype html><title>Skybound Chronicle: River Arc</title><style>body{background:#000;color:white}a{display:block}img{width:150px;height:85px}video{width:100%;height:100%}</style>'+(url.pathname.startsWith('/search')||url.pathname==='/'?search:video+series),{headers:{'Content-Type':'text/html'}});
+   return new Response('<!doctype html><title>Skybound Chronicle: River Arc</title><style>body{background:#000;color:white}a{display:block}img{width:150px;height:85px}video{width:100%;height:100%}</style>'+(url.pathname==='/'?catalog():url.pathname.startsWith('/search')?search:video+series),{headers:{'Content-Type':'text/html'}});
   });
   install(session.defaultSession);install(session.fromPartition('persist:src-series-one-test'));app.on('session-created',install);
  },{data,clip,images});
@@ -47,6 +54,26 @@ try{
  if(await page.locator('.release-dialog[open]').count())await page.getByRole('button',{name:'Got it',exact:true}).click();
  const rpc=(method,input)=>page.evaluate(({method,input})=>window.aniverse.invoke(method,input),{method,input});
  const go=hash=>page.evaluate(hash=>location.hash=hash,hash);
+ assert.deepEqual(await rpc('sources.audio'),[]);
+ const initial=page.getByRole('group',{name:'Latest episode audio availability'});await initial.waitFor();
+ await initial.getByRole('button',{name:'DUB',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelectorAll('.source-catalogue .mcard').length===1);
+ assert.match(await page.locator('.source-catalogue [title="Source episode counts"]').innerText(),/12\s+11/);
+ check('Fresh-profile DUB loads the source catalogue and includes a series with SUB 12 / DUB 11 without opening it');
+ await page.getByRole('button',{name:'Next catalogue page',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('.source-catalogue')?.getAttribute('aria-busy')==='false'&&document.querySelector('.source-catalogue').textContent.includes('Source page 2'));
+ assert.match(await page.locator('.source-catalogue [title="Source episode counts"]').innerText(),/12\s+10/);
+ await page.getByRole('button',{name:'Previous catalogue page',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('.source-catalogue')?.getAttribute('aria-busy')==='false'&&document.querySelector('.source-catalogue').textContent.includes('Source page 1'));
+ check('Source pagination advances the actual listing and returns to the first page');
+
+ await initial.getByRole('button',{name:'SUB',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelectorAll('.source-catalogue .mcard').length===2);
+ check('Fresh-profile SUB includes mixed and sub-only series from the source catalogue');
+ await initial.getByRole('button',{name:'DUB',exact:true}).click();await initial.getByRole('button',{name:'SUB',exact:true}).click();await initial.getByRole('button',{name:'DUB',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('.source-catalogue')?.getAttribute('aria-busy')==='false'&&document.querySelectorAll('.source-catalogue .mcard').length===1);
+ check('Rapid filter changes settle on the final requested category');
+
  await go('#/watch/7/1?source=series-one-test');
  await page.waitForFunction(()=>document.querySelectorAll('.ep-thumb img').length===3&&Array.from(document.querySelectorAll('.ep-thumb img')).every(img=>img.complete&&img.naturalWidth>0),{},{timeout:60000});
  const paths=await app.evaluate(()=>globalThis.seriesPaths);assert.ok(paths.includes('/anime/skybound-river'));assert.ok(!paths.includes('/anime/skybound-parent'));
@@ -57,7 +84,7 @@ try{
  await page.screenshot({path:path.join(artifacts,'series-episode-thumbnails.png')});
  const audio=page.getByRole('group',{name:'Episode audio availability'});
  await audio.getByRole('button',{name:'DUB',exact:true}).click();assert.equal(await page.locator('.ep-row').count(),2);assert.equal(await page.locator('.ep-row').filter({hasText:'Episode 2'}).count(),0);
- await audio.getByRole('button',{name:'SUB',exact:true}).click();assert.equal(await page.locator('.ep-row').count(),2);assert.equal(await page.locator('.ep-row').filter({hasText:'Episode 3'}).count(),0);
+ await audio.getByRole('button',{name:'SUB',exact:true}).click();assert.equal(await page.locator('.ep-row').count(),3);
  await audio.getByRole('button',{name:'ALL',exact:true}).click();assert.equal(await page.locator('.ep-row').count(),3);check('Episode ALL/DUB/SUB filters use per-episode badges');
  const id=await page.locator('webview').evaluate(view=>view.getWebContentsId());await rpc('player.control',{webContentsId:id,action:'play'});const before=await rpc('player.probe',{webContentsId:id});await page.waitForTimeout(1200);const after=await rpc('player.probe',{webContentsId:id});assert.ok(after.currentTime>before.currentTime+.3);
  check('Original source video continues decoding with thumbnail fetches and filters active');
@@ -66,12 +93,20 @@ try{
  assert.equal(await page.locator('.ep-row').filter({hasText:'Episode 2'}).locator('img').count(),0);
  check('Cached navigation refreshes late-rendered episode cards while Spoiler Shield hides future artwork');
  await go('#/');const latest=page.getByRole('group',{name:'Latest episode audio availability'});await latest.waitFor();await page.waitForFunction(()=>document.querySelectorAll('.mcard').length>=2);
- await latest.getByRole('button',{name:'DUB',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.audio-coverage')&&document.querySelectorAll('.mcard').length===1&&document.querySelector('.mcard').textContent.includes('Skybound'));
- await page.screenshot({path:path.join(artifacts,'series-home-audio-filter.png')});check('Home DUB filter keeps confirmed episode availability and excludes unknown titles');
+ await latest.getByRole('button',{name:'DUB',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.source-catalogue')&&document.querySelectorAll('.mcard').length===1&&document.querySelector('.mcard').textContent.includes('Skybound'));
+ await page.screenshot({path:path.join(artifacts,'series-home-audio-filter.png')});check('Home DUB reads live source series availability');
  await page.setViewportSize({width:1180,height:900});await page.waitForTimeout(150);
  assert.ok(await latest.evaluate(group=>{const r=group.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}));check('Home audio controls remain visible at a narrower window width');
  await page.setViewportSize({width:1560,height:1000});
- await go('#/browse');const browse=page.getByRole('group',{name:'Browse audio availability'});await browse.waitFor();await browse.getByRole('button',{name:'SUB',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.mcard').length===1&&document.querySelector('.mcard').textContent.includes('Skybound'));check('Browse SUB filter excludes unverified titles and retains source-confirmed series');
+ await go('#/browse');const browse=page.getByRole('group',{name:'Browse audio availability'});await browse.waitFor();await browse.getByRole('button',{name:'SUB',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.source-catalogue .mcard').length===2);check('Browse SUB includes mixed and sub-only catalogue series');
+ await rpc('privacy.incognito',{on:true});await go('#/');
+ const privateFilter=page.getByRole('group',{name:'Latest episode audio availability'});await privateFilter.waitFor();await privateFilter.getByRole('button',{name:'DUB',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('.source-catalogue')?.getAttribute('aria-busy')==='false'&&document.querySelectorAll('.source-catalogue .mcard').length===1);
+ const privateCatalogue=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().filter(window=>window.webContents.getURL().startsWith('https://series-one.test')).map(window=>window.webContents.session.isPersistent()));
+ assert.ok(privateCatalogue.length>0&&privateCatalogue.every(persistent=>!persistent));
+ await rpc('privacy.incognito',{on:false});
+ assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().filter(window=>window.webContents.getURL().startsWith('https://series-one.test')).length),0);
+ check('Incognito catalogues use memory-only sessions and their background windows close on exit');
  await go('#/watch/7/1?source=series-one-test');await page.getByRole('button',{name:'Keep title private',exact:true}).click();await page.waitForSelector('.privacy-banner');
  assert.deepEqual(await rpc('sources.audio'),[]);check('Private titles are removed from the session-local home/browse availability index');
  assert.deepEqual(errors,[]);

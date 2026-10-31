@@ -2,6 +2,17 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.1.0 — 2026-10-31
+
+- 🔊 **Correct DUB/SUB rules:** DUB includes series with both options even when dubbed episodes lag; SUB includes mixed and sub-only series.
+- 🌐 **Live source catalogues:** Home and Browse use the selected source’s public cards, actual SUB/DUB counts, audio controls and pagination. No watched-title hints are required.
+- ⚡ **Reliable category switching:** rapid filter changes keep the final requested result.
+- 🔒 **Isolated browsing:** bounded, muted source sessions preserve privacy and existing normal/4K playback.
+
+This replaces 2.0.2’s session-observation catalogue filter. ALL retains AniList discovery. Unreadable source layouts have Retry/Open source actions.
+
+[Full 2.1.0 release notes](docs/releases/2.1.0.md)
+
 ## 2.0.2 — 2026-10-31
 
 - 🔎 Resolve named arcs and alternate English/romaji/Japanese titles even when only another metadata alias contains the season number. Explicitly different seasons and parts/cours remain separate; ordinal, shorthand, Roman and Japanese numeric markers are normalized.

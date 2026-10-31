@@ -15,12 +15,13 @@ interface Props {
   to?: string;
   badge?: ReactNode;
   progress?: number;
+  audioCounts?:{sub:number|null;dub:number|null;total:number|null};
   subtitle?: ReactNode;
   /** Shows a remove (✕) button and menu item, e.g. "Remove from Continue watching". */
   onRemove?: { label: string; run: () => void };
 }
 
-export function MediaCard({ media, to, badge, progress, subtitle, onRemove }: Props) {
+export function MediaCard({ media, to, badge, progress, subtitle, onRemove, audioCounts }: Props) {
   const navigate = useNavigate();
   const lang = useSettings().appearance.titleLanguage;
   const title = titleOf(media, lang);
@@ -80,12 +81,12 @@ export function MediaCard({ media, to, badge, progress, subtitle, onRemove }: Pr
           {badge ?? (release ? <span className="chip accent">{release.reason === 'cinema' ? 'In cinemas' : 'Upcoming'}</span> : media.isAdult && <span className="chip err">18+</span>)}
         </div>
         <div className="bottom">
-          {aired > 0 && (
+          {audioCounts?<span className="chip glass" title="Source episode counts"><Subtitles size={11}/> {audioCounts.sub??'?'} <Mic size={11}/> {audioCounts.dub??'?'} / {audioCounts.total??'?'}</span>:aired > 0 && (
             <span className="chip glass" title="Episodes available">
               <Subtitles size={11} /> {aired}
             </span>
           )}
-          {media.episodes && media.episodes !== aired && (
+          {!audioCounts&&media.episodes && media.episodes !== aired && (
             <span className="chip glass" title="Total episodes">
               <Mic size={11} /> {media.episodes}
             </span>

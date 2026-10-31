@@ -509,6 +509,10 @@ export interface OpenEpisodeRequest {
   focus?: boolean;
 }
 
+export interface SourceCatalogueRequest {sourceId:string;audio:'all'|'sub'|'dub';page:number;query?:BrowseQuery;}
+export interface SourceCatalogueItem {title:string;url:string;cover:string|null;sub:number|null;dub:number|null;total:number|null;media:MediaCard|null;}
+export interface SourceCataloguePage {items:SourceCatalogueItem[];sourceId:string;sourceName:string;page:number;hasNext:boolean;audio:'all'|'sub'|'dub';metadataError:boolean;}
+
 export interface SiteEpisodeCard {
   episode:number;
   thumbnail:string|null;

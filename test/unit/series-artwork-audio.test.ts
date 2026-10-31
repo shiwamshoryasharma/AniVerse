@@ -24,13 +24,13 @@ describe('generic series identity',()=>{
   ['Skybound: The River Arc',{title:'Skybound: The River Arc',season:null,part:null}],
  ] as const)('reads separate season/part axes: %s',(title,expected)=>expect(seriesMarkers(title)).toEqual(expected));
 });
-it('keeps unknown and private observations out of source-confirmed filters and distinguishes latest episode audio',()=>{
+it('keeps unknown and private observations out of source-confirmed filters and uses series-wide catalogue audio',()=>{
  const index=new SourceAudioIndex();
  index.observe('one',8,[{episode:1,thumbnail:null,audio:['dub','sub']},{episode:2,thumbnail:null,audio:['sub']}]);
  index.observe('disabled',9,[{episode:1,thumbnail:null,audio:['dub']}]);
  const rows=index.list(new Set(['one']),()=>false);
  expect(matchesAudio(8,'dub',rows)).toBe(true);
- expect(matchesAudio(8,'dub',rows,2)).toBe(false);
+ expect(matchesAudio(8,'dub',rows,2)).toBe(true);
  expect(matchesAudio(8,'sub',rows,2)).toBe(true);
  expect(matchesAudio(99,'dub',rows)).toBe(false);
  expect(matchesAudio(99,'all',rows)).toBe(true);

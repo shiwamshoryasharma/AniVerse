@@ -40,6 +40,8 @@ import type {
   Provider,
   Settings,
   SourceInfo,
+  SourceCatalogueRequest,
+  SourceCataloguePage,
   SourceMatch,
   SourceOverridePatch,
   Stream,
@@ -70,6 +72,7 @@ export interface RpcContract {
   'meta.hover': [{ id: number }, HoverInfo];
 
   'sources.list': [void, SourceInfo[]];
+  'sources.catalogue':[SourceCatalogueRequest,SourceCataloguePage];
   'sources.audio': [void,{mediaId:number;audio:('sub'|'dub')[];episodes:{episode:number;audio:('sub'|'dub')[]}[]}[]];
   'sources.reload': [void, SourceInfo[]];
   'sources.update': [{ id: string; patch: SourceOverridePatch }, SourceInfo];

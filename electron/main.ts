@@ -1,5 +1,6 @@
 import {trustedAppUrl} from '../app/shared/trustedOrigin';
 import {seasonalVisuals} from '../app/shared/seasonal';
+import {SourceCatalogue} from './sourceCatalogue';
 import {SourceAudioIndex} from '../app/core/sources/audioIndex';
 import {RustPolicy} from '../app/core/security/rustPolicy';
 import { app, BrowserWindow, Menu, dialog, safeStorage, session, shell, webContents, type IpcMainInvokeEvent, type WebContents } from 'electron';
@@ -317,6 +318,7 @@ async function bootstrap() {
 
   const protocols = new MediaProtocols(paths.renderer, paths.profileDir,security);
   protocols.install();
+  const catalogue=new SourceCatalogue(()=>sessions.sourceList(),sessions,security,protocols.artwork,anilist);
   const collection = new LocalCollection(store,protocols,()=>mainWindow);
   const mediaResources = app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build/vendor');
   const chromeCast = new ChromeCast(path.join(paths.dataDir, 'cast-chrome'), undefined, undefined, (message) => emit('app.notice', { level: 'info', message }));
@@ -385,6 +387,7 @@ async function bootstrap() {
     'meta.hover': ({ id }) => anilist.hoverInfo(id),
 
     'sources.list': () => sessions.sourceList(),
+    'sources.catalogue':request=>catalogue.list(request),
     'sources.audio':()=>sourceAudio.list(new Set(registry.list().filter(source=>source.enabled).map(source=>source.id)),id=>store.isPrivate(id)),
     'sources.reload': () => {
       config.reload(true);
@@ -589,13 +592,13 @@ async function bootstrap() {
     'privacy.state': () => store.privacyState(),
     'privacy.incognito': async ({on}) => {
       if(on)store.setIncognito(true);
-      sessions.closeGuests();await sessions.clearPrivate();workspace.resetObservation();
+      catalogue.close();sessions.closeGuests();await sessions.clearPrivate();workspace.resetObservation();
       if(!on)store.setIncognito(false);
       const state=store.privacyState();emit('privacy.changed',state);emit('sources.changed',sessions.sourceList());return state;
     },
     'privacy.title': async ({mediaId,on}) => {
       if(on)store.setTitlePrivate(mediaId,true);
-      sessions.closeGuests();await sessions.clearPrivate();workspace.resetObservation();
+      catalogue.close();sessions.closeGuests();await sessions.clearPrivate();workspace.resetObservation();
       if(!on)store.setTitlePrivate(mediaId,false);
       const state=store.privacyState();emit('privacy.changed',state);emit('sources.changed',sessions.sourceList());return state;
     },
@@ -612,7 +615,7 @@ async function bootstrap() {
       await shell.openExternal(url);
     },
     'app.cacheClear': async () => {
-      store.cachePurge(true);
+      catalogue.close();store.cachePurge(true);
       await session.defaultSession.clearCache();
     },
 
@@ -640,10 +643,11 @@ async function bootstrap() {
 
   const onGuest = (guest: WebContents) => navigator.attach(guest);
   mainWindow = createWindow(paths.preload, sessions, onGuest,security,()=>seasonalVisuals(new Date(),settings.get().appearance.accent));
+  mainWindow.once('closed',()=>catalogue.close());
   if (isDev && process.env.ANIVERSE_TEST_DRIVER) runTestDriver(process.env.ANIVERSE_TEST_DRIVER, mainWindow);
   updates.start();
   app.on('activate', () => {
-    if (!BrowserWindow.getAllWindows().length) mainWindow = createWindow(paths.preload, sessions, onGuest,security,()=>seasonalVisuals(new Date(),settings.get().appearance.accent));
+    if (!mainWindow||mainWindow.isDestroyed()){mainWindow = createWindow(paths.preload, sessions, onGuest,security,()=>seasonalVisuals(new Date(),settings.get().appearance.accent));mainWindow.once('closed',()=>catalogue.close());}
   });
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
@@ -654,7 +658,7 @@ async function bootstrap() {
     drive.cancel();
     config.stop();
     updates.stop();
-    void cast.stop(); chromeCast.close();void sessions.clearPrivate();
+    catalogue.close();void cast.stop(); chromeCast.close();void sessions.clearPrivate();
   });
   app.on('will-quit', () => {
     try {

@@ -57,6 +57,7 @@ const BROWSE_TYPES: Record<string, string> = {
   episodes_lesser: 'Int',
   sort: '[MediaSort]',
   id_not_in: '[Int]',
+  id_in:'[Int]',
   isAdult: 'Boolean',
 };
 
@@ -386,6 +387,16 @@ export class AniListClient {
   async details(id: number): Promise<MediaDetails> {
     const data = await this.query<{ Media: RawDetails }>(DETAILS_QUERY, { id }, { ttl: 3600 });
     return mapDetails(data.Media);
+  }
+
+  /** Resolve only public catalogue IDs, with the same official metadata/adult/library filters. */
+  async catalogueCards(ids:number[],query:BrowseQuery={}):Promise<MediaCard[]>{
+    const selected=[...new Set(ids.filter(id=>Number.isInteger(id)&&id>0))].slice(0,50);
+    if(!selected.length)return [];
+    const vars=browseVariables({...query,search:undefined,page:1,perPage:50},this.store.libraryIds(),this.options.showAdult());
+    vars.id_in=selected;
+    const data=await this.query<{Page:{media:RawMedia[]}}>(browseQuery(Object.keys(vars)),vars,{ttl:600});
+    return data.Page.media.map(mapCard);
   }
 
   async search(q: string): Promise<MediaCard[]> {
