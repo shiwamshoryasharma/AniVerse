@@ -1211,3 +1211,7 @@
   background: var(--accent);
   transition: width 0.3s ease;
 }
+
+.hover-audio { display: grid; gap: 5px; }
+.audio-tag[data-state="unavailable"] { opacity: .6; }
+.audio-tag[data-state="unknown"] { border: 1px dashed var(--line-2); }

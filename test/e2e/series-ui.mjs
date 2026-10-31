@@ -40,10 +40,10 @@ try{
     const mixed=row(7,'Skybound Chronicle: River Arc',12,11),only=row(8,'Sub Only Series',6,0);
     const second=mixed.replace('data-dub-count="11"','data-dub-count="10"').replace('/anime/skybound-river','/anime/skybound-river?sourcepage=2');
     const pages={all:[mixed+only,second+only],sub:[mixed+only,second+only],dub:[mixed,second]};
-    return '<section><h2>Latest Episodes</h2><div><button data-audio="all" aria-pressed="true">All</button><button data-audio="sub">Sub</button><button data-audio="dub">Dub</button><button id="more" aria-label="Next page">Next</button></div><div id="catalogue">'+mixed+only+'</div></section><script>const pages='+JSON.stringify(pages)+';let audio="all",n=0;function paint(){document.getElementById("catalogue").innerHTML=pages[audio][n];document.getElementById("more").disabled=n===1;}document.querySelectorAll("[data-audio]").forEach(button=>button.onclick=()=>{audio=button.dataset.audio;n=0;document.querySelectorAll("[data-audio]").forEach(node=>node.setAttribute("aria-pressed",String(node===button)));paint();});document.getElementById("more").onclick=()=>{n=1;paint();};</script>';
+    return '<form action="/search"><input type="search" name="q" placeholder="Search anime"></form><section><h2>Latest Episodes</h2><div><button data-audio="all" aria-pressed="true">All</button><button data-audio="sub">Sub</button><button data-audio="dub">Dub</button><button id="more" aria-label="Next page">Next</button></div><div id="catalogue">'+mixed+only+'</div></section><script>const pages='+JSON.stringify(pages)+';let audio="all",n=0;function paint(){document.getElementById("catalogue").innerHTML=pages[audio][n];document.getElementById("more").disabled=n===1;}document.querySelectorAll("[data-audio]").forEach(button=>button.onclick=()=>{audio=button.dataset.audio;n=0;document.querySelectorAll("[data-audio]").forEach(node=>node.setAttribute("aria-pressed",String(node===button)));paint();});document.getElementById("more").onclick=()=>{n=1;paint();};</script>';
    };
    const cards=[1,2,3].map(n=>'<a href="/watch/skybound-river/'+n+'" data-episode="'+n+'"><img src="https://image-fixture.test/'+(n===1&&url.pathname.startsWith('/anime/')?'missing-1':'frame-'+n)+'.jpg"><span>Episode '+n+'</span><b>'+(n===2?'SUB':'SUB DUB')+'</b></a>').join('');
-   const search='<h1>Search</h1><a href="/anime/skybound-parent"><h3>Skybound Chronicle</h3></a><a href="/anime/skybound-river"><h3>Skybound Chronicle: River Arc</h3></a>';
+   const search='<h1>Search</h1><a href="/anime/skybound-parent"><h3>Skybound Chronicle</h3></a><a data-anilist-id="7" data-sub-count="12" data-dub-count="11" href="/anime/skybound-river"><img src="https://image-fixture.test/frame-1.jpg"><h3>Skybound Chronicle: River Arc</h3></a><a data-anilist-id="8" data-sub-count="6" data-dub-count="0" href="/anime/sub-only"><img src="https://image-fixture.test/frame-2.jpg"><h3>Sub Only Series</h3></a>';
    const series='<h1>Skybound Chronicle: River Arc</h1>'+(url.pathname.startsWith('/watch/')?'<div class="episodes" id="late-cards"></div><script>setTimeout(()=>document.getElementById("late-cards").innerHTML='+JSON.stringify(cards)+',6500)</script>':'<div class="episodes">'+cards+'</div>');
    const video=url.pathname.startsWith('/watch/')?'<div id="player" style="width:960px;height:540px"><video id="actual-video" controls loop src="https://media-fixture.test/video.mp4"></video></div>':'';
    return new Response('<!doctype html><title>Skybound Chronicle: River Arc</title><style>body{background:#000;color:white}a{display:block}img{width:150px;height:85px}video{width:100%;height:100%}</style>'+(url.pathname==='/'?catalog():url.pathname.startsWith('/search')?search:video+series),{headers:{'Content-Type':'text/html'}});
@@ -70,9 +70,23 @@ try{
  await initial.getByRole('button',{name:'SUB',exact:true}).click();
  await page.waitForFunction(()=>document.querySelectorAll('.source-catalogue .mcard').length===2);
  check('Fresh-profile SUB includes mixed and sub-only series from the source catalogue');
+ await page.locator('.source-catalogue .mcard').first().hover();await page.waitForSelector('.hovercard');
+ assert.equal(await page.locator('.hovercard [data-audio="sub"][data-state="available"]').count(),1);
+ assert.equal(await page.locator('.hovercard [data-audio="dub"][data-state="available"]').count(),1);
+ await page.mouse.move(10,10);await page.waitForSelector('.hovercard',{state:'detached'});
+ await page.locator('.source-catalogue .mcard').nth(1).hover();await page.waitForSelector('.hovercard');
+ assert.equal(await page.locator('.hovercard [data-audio="sub"][data-state="available"]').count(),1);
+ assert.equal(await page.locator('.hovercard [data-audio="dub"][data-state="unavailable"]').count(),1);
+ await page.mouse.move(10,10);await page.waitForSelector('.hovercard',{state:'detached'});
+ check('Source card hover previews distinguish mixed audio from explicitly sub-only series');
  await initial.getByRole('button',{name:'DUB',exact:true}).click();await initial.getByRole('button',{name:'SUB',exact:true}).click();await initial.getByRole('button',{name:'DUB',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('.source-catalogue')?.getAttribute('aria-busy')==='false'&&document.querySelectorAll('.source-catalogue .mcard').length===1);
  check('Rapid filter changes settle on the final requested category');
+ const withoutTemplate=await rpc('sources.update',{id:'series-one-test',patch:{searchTemplate:null}});assert.equal(withoutTemplate.searchTemplate,null);
+ const searched=await rpc('sources.catalogue',{sourceId:'series-one-test',audio:'all',page:1,query:{search:'Sub Only Series'}});
+ assert.equal(searched.items.length,1);assert.equal(searched.items[0].media.id,8);assert.equal(searched.items[0].dub,0);
+ await rpc('sources.update',{id:'series-one-test',patch:{searchTemplate:'https://series-one.test/search?q={query}'}});
+ check('Unknown search URLs use the public website search form and preserve explicit zero DUB');
 
  await go('#/watch/7/1?source=series-one-test');
  await page.waitForFunction(()=>document.querySelectorAll('.ep-thumb img').length===3&&Array.from(document.querySelectorAll('.ep-thumb img')).every(img=>img.complete&&img.naturalWidth>0),{},{timeout:60000});
@@ -98,7 +112,20 @@ try{
  await page.setViewportSize({width:1180,height:900});await page.waitForTimeout(150);
  assert.ok(await latest.evaluate(group=>{const r=group.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}));check('Home audio controls remain visible at a narrower window width');
  await page.setViewportSize({width:1560,height:1000});
- await go('#/browse');const browse=page.getByRole('group',{name:'Browse audio availability'});await browse.waitFor();await browse.getByRole('button',{name:'SUB',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.source-catalogue .mcard').length===2);check('Browse SUB includes mixed and sub-only catalogue series');
+ await go('#/browse');const browse=page.getByRole('group',{name:'Browse audio availability'});await browse.waitFor();
+ await page.getByRole('combobox',{name:'Audio',exact:true}).click();await page.getByRole('option',{name:'DUB + SUB',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelectorAll('.source-catalogue .mcard').length===1&&location.hash.includes('audio=dub'));
+ assert.equal(await browse.getByRole('button',{name:'DUB',exact:true}).getAttribute('aria-pressed'),'true');
+ await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.source-catalogue .mcard').length===1);
+ assert.equal(await page.getByRole('combobox',{name:'Audio',exact:true}).innerText(),'DUB + SUB');
+ await page.getByRole('button',{name:'Reset filters',exact:true}).click();await page.waitForFunction(()=>!location.hash.includes('audio=')&&!document.querySelector('.source-catalogue'));
+ check('Explore audio dropdown, tabs, reload and reset share the same filter state');
+ await page.locator('.mcard').first().hover();await page.waitForSelector('.hovercard');
+ await page.waitForSelector('.hovercard [data-audio="dub"][data-state="available"]',{timeout:45000});
+ await page.screenshot({path:path.join(artifacts,'explore-hover-audio.png')});
+ await page.mouse.move(10,10);await page.waitForSelector('.hovercard',{state:'detached'});
+ check('ALL Explore hover confirms audio from public source search before playback');
+ await browse.getByRole('button',{name:'SUB',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.source-catalogue .mcard').length===2);check('Browse SUB includes mixed and sub-only catalogue series');
  await rpc('privacy.incognito',{on:true});await go('#/');
  const privateFilter=page.getByRole('group',{name:'Latest episode audio availability'});await privateFilter.waitFor();await privateFilter.getByRole('button',{name:'DUB',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('.source-catalogue')?.getAttribute('aria-busy')==='false'&&document.querySelectorAll('.source-catalogue .mcard').length===1);
@@ -109,6 +136,12 @@ try{
  check('Incognito catalogues use memory-only sessions and their background windows close on exit');
  await go('#/watch/7/1?source=series-one-test');await page.getByRole('button',{name:'Keep title private',exact:true}).click();await page.waitForSelector('.privacy-banner');
  assert.deepEqual(await rpc('sources.audio'),[]);check('Private titles are removed from the session-local home/browse availability index');
+ await go('#/browse');await page.getByRole('button',{name:'ALL',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.mcard').length===2);
+ await page.locator('.mcard').first().hover();await page.waitForSelector('.hovercard');await page.waitForTimeout(1000);
+ assert.equal(await page.locator('.hovercard [data-audio="dub"][data-state="unknown"]').count(),1);
+ assert.match(await page.locator('.hover-audio').innerText(),/incognito/);
+ assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().filter(window=>window.webContents.getURL().startsWith('https://series-one.test')).length),0);
+ check('Private-title hover never starts an automatic lookup in a persistent source session');
  assert.deepEqual(errors,[]);
 }catch(error){errors.push(String(error.stack||error));console.error(error);if(app)try{await(await app.firstWindow()).screenshot({path:path.join(artifacts,'series-ui-failure.png')});}catch{};process.exitCode=1;}
 finally{if(app)await app.close();writeFileSync(path.join(artifacts,'series-ui.json'),JSON.stringify({passed:!errors.length,checks,errors,run},null,2)+'\n');}

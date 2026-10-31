@@ -2,7 +2,7 @@
 
 Last inspected: 2026-10-31, Asia/Calcutta. Repository: `E:\14-OCT-2026\aniverse`.
 
-AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 2.1.0; read the current package file before relying on versions.
+AniVerse is an implemented desktop anime hub, not a model-generation project. Package metadata currently says 2.1.1; read the current package file before relying on versions.
 
 Read the relevant reference only:
 
@@ -29,3 +29,5 @@ Version 2.0.1 adds the embedded Rust policy, software/package safeguards and tem
 The user-selected 2.0.2 follow-up (2026-10-31) fixes generic named-arc/season identity, adds bounded source-session episode artwork and explicit ALL/DUB/SUB filters. See [status](status.md) for the exact live case, test evidence and the distinction between development/live tests and the final signed release checks.
 
 Version 2.1.0 replaces the incorrect session-hint catalogue filter with source-backed Home/Browse DUB/SUB pages. DUB is series-wide SUB + DUB even if dubbing lags; SUB includes mixed and sub-only. See current architecture/decisions/status before reusing historical 2.0.2 filtering rules.
+
+Version 2.1.1 (2026-10-31) is the user-approved Explore/hover follow-up after 2.1.0 was already published. It adds an in-panel Audio selector and shared SUB/DUB hover badges. See status for final package/runtime evidence; keep the immutable 2.1.0 tag intact.

@@ -5,6 +5,15 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.1.1',date:'2026-10-31',title:'Audio filters where you expect them.',
+   summary:'Explore audio controls and clear SUB/DUB tags on anime previews.',
+   items:[
+    {kind:'added',icon:'layout',title:'Explore audio dropdown',description:'Choose All audio, DUB + SUB or inclusive SUB inside the main filter panel. The dropdown and button row stay synchronized across reloads and Reset filters.',action:{label:'Explore anime',path:'/browse'}},
+    {kind:'added',icon:'sparkles',title:'SUB and DUB on hover cards',description:'Shared anime previews show coloured source-confirmed tags. Catalogue cards use their actual counts; unviewed titles can be checked through the source’s public search. Unavailable and unverified remain distinct.'},
+    {kind:'fixed',icon:'fix',title:'Episode totals are not dub counts',description:'AniList episode totals now use an episode icon. A microphone is shown for actual source DUB counts, so a total cannot be mistaken for a dubbed release.'},
+    {kind:'improved',icon:'shield',title:'Keep automatic checks private',description:'Audio lookups use the isolated source browser without starting playback. Permanently private titles skip automatic persistent-session searches; use incognito to check them privately.'},
+   ]},
+
   {version:'2.1.0',date:'2026-10-31',title:'DUB and SUB, straight from your source.',
    summary:'Live source catalogues that work before you watch anything.',
    items:[

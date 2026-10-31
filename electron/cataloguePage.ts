@@ -1,14 +1,14 @@
 import type {AudioChoice} from '../app/shared/audioAvailability';
 export interface CatalogueRawCard {title:string;url:string;image:string|null;anilistId:number|null;sub:number|null;dub:number|null;total:number|null}
 export interface CatalogueSnapshot {items:CatalogueRawCard[];active:string|null;canFilter:boolean;hasNext:boolean;empty:boolean}
-type Op={kind:'read'|'filter'|'next';audio?:AudioChoice};
+type Op={kind:'read'|'filter'|'next';audio?:AudioChoice;search?:boolean};
 export function catalogueScript(op:Op){return '('+PAGE.toString()+')('+JSON.stringify(op)+')';}
 /** Fixed DOM operations only: public catalogue cards and the website's own controls. */
 function PAGE(op:Op):unknown{
  const text=(node:Element|null)=>node?.textContent?.replace(/\s+/g,' ').trim()??'';
  const headings=[...document.querySelectorAll('h1,h2,h3')];
- const heading=headings.find(node=>/^(latest episodes?|recently updated|latest updates?|latest releases?)$/i.test(text(node)));
- let scope:Element=heading??document.querySelector('main')??document.body;
+ const heading=!op.search&&headings.find(node=>/^(latest episodes?|recently updated|latest updates?|latest releases?)$/i.test(text(node)));
+ let scope:Element=op.search?document.body:heading||document.querySelector('main')||document.body;
  if(heading)while(scope.parentElement&&!scope.querySelector('a[href] img'))scope=scope.parentElement;
  const controls=()=>[...scope.querySelectorAll('button,a,[role="tab"],input[type="radio"]')];
  const label=(node:Element)=>text(node)||node.getAttribute('aria-label')||node.getAttribute('value')||'';

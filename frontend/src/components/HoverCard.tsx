@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { CalendarClock, Info, Play, Star } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import type { MediaCard } from '../../../app/shared/types';
 import { call } from '../lib/bridge';
 import { availableEpisodes, countdown, pendingRelease, formatLabel, seasonLabel, statusLabel, titleOf } from '../lib/format';
 import { useSettings } from '../lib/queries';
+import {AudioTags,type HoverAudioProps} from './AudioTags';
 
 const OPEN_DELAY = 420;
 const CLOSE_DELAY = 140;
@@ -16,7 +17,7 @@ const CLOSE_DELAY = 140;
  * episodes, genres, studio, original creator and synopsis. Extra details are
  * fetched once per title (cached) only when a preview actually opens.
  */
-export function HoverPreview({ media, children, watchTo }: { media: MediaCard; children: ReactNode; watchTo?: string }) {
+export function HoverPreview({ media, children, watchTo, ...audio }: HoverAudioProps&{ media: MediaCard; children: ReactNode; watchTo?: string }) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const openTimer = useRef(0);
   const closeTimer = useRef(0);
@@ -66,7 +67,7 @@ export function HoverPreview({ media, children, watchTo }: { media: MediaCard; c
       {children}
       {anchor &&
         createPortal(
-          <PreviewCard media={media} anchor={anchor} watchTo={watchTo} onEnter={() => window.clearTimeout(closeTimer.current)} onLeave={scheduleClose} onNavigate={() => setAnchor(null)} />,
+          <PreviewCard {...audio} media={media} anchor={anchor} watchTo={watchTo} onEnter={() => window.clearTimeout(closeTimer.current)} onLeave={scheduleClose} onNavigate={() => setAnchor(null)} />,
           document.body,
         )}
     </div>
@@ -80,7 +81,8 @@ function PreviewCard({
   onEnter,
   onLeave,
   onNavigate,
-}: {
+  ...audio
+}: HoverAudioProps&{
   media: MediaCard;
   anchor: DOMRect;
   watchTo?: string;
@@ -92,11 +94,13 @@ function PreviewCard({
   const settings = useSettings();
   const lang = settings.appearance.titleLanguage;
   const { data: extra, isLoading } = useQuery({ queryKey: ['hover', media.id], queryFn: () => call('meta.hover', { id: media.id }), staleTime: Infinity, retry: false });
+  const panel=useRef<HTMLDivElement>(null),[height,setHeight]=useState(440);
+  useLayoutEffect(()=>{if(!panel.current)return;const observer=new ResizeObserver(()=>setHeight(panel.current?.getBoundingClientRect().height??440));observer.observe(panel.current);return ()=>observer.disconnect();},[]);
   const width = 320;
   const gap = 12;
   const fitsRight = anchor.right + gap + width < window.innerWidth - 8;
   const left = fitsRight ? anchor.right + gap : Math.max(8, anchor.left - gap - width);
-  const top = Math.max(64, Math.min(anchor.top - 10, window.innerHeight - 440));
+  const top = Math.max(64, Math.min(anchor.top - 10, window.innerHeight - height - 8));
   const aired = availableEpisodes(media);
   const pending = pendingRelease(media);
   const release = pending?.title ? pending : null;
@@ -106,7 +110,7 @@ function PreviewCard({
   };
 
   return (
-    <div className="hovercard" style={{ left, top }} onMouseEnter={onEnter} onMouseLeave={onLeave} role="dialog" aria-label={`${titleOf(media, lang)} preview`}>
+    <div ref={panel} className="hovercard" style={{ left, top, maxHeight:'calc(100dvh - 80px)', overflowY:'auto' }} onMouseEnter={onEnter} onMouseLeave={onLeave} role="dialog" aria-label={`${titleOf(media, lang)} preview`}>
       <div className="hovercard-head" style={{ backgroundImage: `url("${media.banner ?? media.cover}")` }} />
       <div className="hovercard-body">
         <div className="hovercard-title clamp-2">{titleOf(media, lang)}</div>
@@ -120,6 +124,7 @@ function PreviewCard({
           <span className={media.status === 'RELEASING' ? 'chip ok' : 'chip'}>{statusLabel(media.status)}</span>
           {media.isAdult && <span className="chip err">18+</span>}
         </div>
+        <AudioTags media={media} {...audio}/>
         <dl>
           <dt>Episodes</dt>
           <dd>

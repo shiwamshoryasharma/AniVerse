@@ -37,3 +37,12 @@ it('resolves public catalogue IDs in one bounded official metadata query with ex
   expect(body.query).toContain('id_in: $id_in');
  }finally{store.close();}
 });
+
+it('hover badges never treat missing source confirmation as an unavailable dub',async()=>{
+ const {audioBadgeState}=await import('../../app/shared/audioAvailability');
+ expect(audioBadgeState(undefined)).toBe('unknown');
+ expect(audioBadgeState(null)).toBe('unknown');
+ expect(audioBadgeState(0,true)).toBe('unavailable');
+ expect(audioBadgeState(11)).toBe('available');
+ expect(audioBadgeState(null,true)).toBe('available');
+});

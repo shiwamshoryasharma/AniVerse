@@ -2,6 +2,15 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.1.1 — 2026-10-31
+
+- 🔊 **Explore audio selector:** All audio, DUB + SUB and inclusive SUB inside the main filter panel, synchronized with the button row, reload and Reset filters.
+- 🏷️ **Hover audio badges:** coloured SUB/DUB tags on shared anime previews, public-source confirmation for unviewed titles and distinct unavailable/unverified states.
+- 🎬 **Clear episode totals:** unverified AniList episode counts use an episode icon rather than implying dubbed availability.
+- 🔒 **Private lookups:** permanently private titles do not trigger automatic searches in persistent website sessions.
+
+[Full 2.1.1 release notes](docs/releases/2.1.1.md)
+
 ## 2.1.0 — 2026-10-31
 
 - 🔊 **Correct DUB/SUB rules:** DUB includes series with both options even when dubbed episodes lag; SUB includes mixed and sub-only series.

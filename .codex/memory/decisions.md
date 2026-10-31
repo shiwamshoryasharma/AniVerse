@@ -48,3 +48,5 @@ The 1.5.6 investigation also reproduced a separate WebGL 1 shader failure in the
 ## Catalogue audio contract, clarified 2026-10-31
 
 DUB includes a series with both SUB and DUB, including SUB 12 / DUB 11. SUB includes mixed and sub-only series. Home/Browse must work on a fresh profile from the selected source's public catalogue, without requiring watch history or session observation hints. Episode filters use individual episode availability. ALL retains AniList discovery. Source counts and paging remain source-specific; an unreadable layout is an actionable error, not an empty dub catalogue. The old 2.0.2 latest-episode/session-hint implementation does not meet this contract.
+
+2026-10-31 one-time release cleanup: while approving 2.1.1, the user explicitly requested removing all other GitHub releases. Publish and verify the new signed assets first, then remove the older release records/assets. This does not authorize rewriting Git history or deleting source tags, and is not an automatic retention policy for later releases.

@@ -1,4 +1,4 @@
-import { BookmarkPlus, CalendarClock, ChevronLeft, ChevronRight, Copy, ExternalLink, Heart, Info, Mic, Play, Star, Subtitles, X } from 'lucide-react';
+import { BookmarkPlus, CalendarClock, ChevronLeft, ChevronRight, Copy, ExternalLink, Heart, Info, ListVideo, Mic, Play, Star, Subtitles, X } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import type { MediaCard as Media } from '../../../app/shared/types';
@@ -8,20 +8,20 @@ import { useSetStatus, useSettings, useToggleFavourite } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { useContextMenu, type MenuItem } from './contextMenuContext';
 import { HoverPreview } from './HoverCard';
+import type {HoverAudioProps} from './AudioTags';
 
-interface Props {
+interface Props extends HoverAudioProps {
   media: Media;
   /** Overrides the destination (e.g. resume a specific episode). */
   to?: string;
   badge?: ReactNode;
   progress?: number;
-  audioCounts?:{sub:number|null;dub:number|null;total:number|null};
   subtitle?: ReactNode;
   /** Shows a remove (✕) button and menu item, e.g. "Remove from Continue watching". */
   onRemove?: { label: string; run: () => void };
 }
 
-export function MediaCard({ media, to, badge, progress, subtitle, onRemove, audioCounts }: Props) {
+export function MediaCard({ media, to, badge, progress, subtitle, onRemove, audioCounts, audioCategory, audioSource }: Props) {
   const navigate = useNavigate();
   const lang = useSettings().appearance.titleLanguage;
   const title = titleOf(media, lang);
@@ -53,7 +53,7 @@ export function MediaCard({ media, to, badge, progress, subtitle, onRemove, audi
   };
 
   return (
-    <HoverPreview media={media} watchTo={to?.startsWith('/watch/') ? to : undefined}>
+    <HoverPreview media={media} audioCounts={audioCounts} audioCategory={audioCategory} audioSource={audioSource} watchTo={to?.startsWith('/watch/') ? to : undefined}>
     <div className="mcard" role="link" tabIndex={0} onClick={open} onKeyDown={(e) => e.key === 'Enter' && open()} onContextMenu={(e) => menu.open(e, items(), { title, subtitle: [formatLabel(media.format), media.seasonYear, media.episodes ? `${media.episodes} eps` : null].filter(Boolean).join(' · '), image: media.cover })}>
       <div className="mcard-poster" style={{ backgroundColor: media.coverColor ?? undefined }}>
         {onRemove && (
@@ -81,16 +81,11 @@ export function MediaCard({ media, to, badge, progress, subtitle, onRemove, audi
           {badge ?? (release ? <span className="chip accent">{release.reason === 'cinema' ? 'In cinemas' : 'Upcoming'}</span> : media.isAdult && <span className="chip err">18+</span>)}
         </div>
         <div className="bottom">
-          {audioCounts?<span className="chip glass" title="Source episode counts"><Subtitles size={11}/> {audioCounts.sub??'?'} <Mic size={11}/> {audioCounts.dub??'?'} / {audioCounts.total??'?'}</span>:aired > 0 && (
-            <span className="chip glass" title="Episodes available">
-              <Subtitles size={11} /> {aired}
+          {audioCounts?<span className="chip glass" title="Source episode counts"><Subtitles size={11}/> {audioCounts.sub??'?'} <Mic size={11}/> {audioCounts.dub??'?'} / {audioCounts.total??'?'}</span>:(aired>0||media.episodes) ? (
+            <span className="chip glass" title="Episodes available / total">
+              <ListVideo size={11}/> {aired||'?'}{media.episodes&&media.episodes!==aired?' / '+media.episodes:''}
             </span>
-          )}
-          {!audioCounts&&media.episodes && media.episodes !== aired && (
-            <span className="chip glass" title="Total episodes">
-              <Mic size={11} /> {media.episodes}
-            </span>
-          )}
+          ):null}
           {release ? (
             <span className="chip glass" title="Release">
               <CalendarClock size={11} /> {release.short}

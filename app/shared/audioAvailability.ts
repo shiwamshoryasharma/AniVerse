@@ -1,4 +1,6 @@
 export type AudioChoice='all'|'dub'|'sub';
+export interface AudioCounts {sub:number|null;dub:number|null;total:number|null}
+export function audioBadgeState(count:number|null|undefined,confirmed=false):'available'|'unavailable'|'unknown'{return count!==null&&count!==undefined?(count>0?'available':'unavailable'):confirmed?'available':'unknown';}
 export interface AudioAvailability {mediaId:number;audio:('sub'|'dub')[];episodes?:{episode:number;audio:('sub'|'dub')[]}[]}
 export function audioMatches(audio:('sub'|'dub')[]|undefined,value:AudioChoice){return value==='all'||!!audio?.includes('sub')&&(value==='sub'||audio.includes('dub'));}
 /** Catalogue eligibility is series-wide, independent of which episode aired most recently. */

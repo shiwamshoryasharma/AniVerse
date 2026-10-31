@@ -74,8 +74,8 @@ function readQuery(p: URLSearchParams): BrowseQuery {
 }
 
 export function BrowsePage() {
-  const [audio,setAudio]=useState<AudioChoice>('all');
   const [params, setParams] = useSearchParams();
+  const audio:AudioChoice=params.get('audio')==='dub'?'dub':params.get('audio')==='sub'?'sub':'all';
   const query = useMemo(() => readQuery(params), [params]);
   const [text, setText] = useState(query.search ?? '');
   const genres = useGenres();
@@ -90,6 +90,8 @@ export function BrowsePage() {
     else next.set(key, String(value));
     setParams(next, { replace: true });
   };
+
+  const setAudio=(value:AudioChoice)=>set('audio',value==='all'?null:value);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -204,6 +206,7 @@ export function BrowsePage() {
               <Select ariaLabel="Year" value={query.year ? String(query.year) : ''} onChange={(v) => set('year', v)} options={[ANY('Any year'), ...YEARS.map((y) => ({ value: String(y), label: String(y) }))]} />
               <Select ariaLabel="Format" value={query.formats?.length === 1 ? query.formats[0] : ''} onChange={(v) => set('formats', v)} options={[ANY('Any format'), ...FORMATS.map((f) => ({ value: f, label: formatLabel(f) }))]} />
               <Select ariaLabel="Status" value={query.status ?? ''} onChange={(v) => set('status', v)} options={[ANY('Any status'), ...STATUSES.map(([v, l]) => ({ value: v, label: l }))]} />
+              <Select<AudioChoice> ariaLabel="Audio" value={audio} onChange={setAudio} options={[{value:'all',label:'All audio'},{value:'dub',label:'DUB + SUB'},{value:'sub',label:'SUB (including DUB)'}]}/>
               <Select ariaLabel="Country" value={query.country ?? ''} onChange={(v) => set('country', v)} options={[ANY('Any country'), ...COUNTRIES.map(([v, l]) => ({ value: v, label: l }))]} />
               <Select ariaLabel="Source material" value={query.sourceMaterial ?? ''} onChange={(v) => set('source', v)} options={[ANY('Any source'), ...SOURCES.map(([v, l]) => ({ value: v, label: l }))]} />
               <Select ariaLabel="Minimum score" value={query.minScore ? String(query.minScore) : ''} onChange={(v) => set('score', v)} options={[ANY('Any score'), ...[90, 80, 70, 60, 50].map((s) => ({ value: String(s), label: `${(s / 10).toFixed(1)}+` }))]} />

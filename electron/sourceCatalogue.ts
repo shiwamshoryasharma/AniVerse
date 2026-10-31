@@ -10,6 +10,7 @@ import {isChallengeTitle} from '../app/core/net/cloudflare';
 import type {SessionManager} from './sessions';
 import type {EpisodeArtwork} from './episodeArtwork';
 import {catalogueScript,type CatalogueSnapshot} from './cataloguePage';
+import {pageScript,type PageOp} from './sitePage';
 interface Context {window:BrowserWindow;key:string;page:number;loaded:number}
 /** One bounded source browser; public catalogue DOM only, never private APIs or media URLs. */
 export class SourceCatalogue {
@@ -48,12 +49,20 @@ export class SourceCatalogue {
    catch(error){if(!wc.isDestroyed())window.destroy();this.current=null;throw error;}
    finally{clearTimeout(timer);}
    await sleep(700);
+   if(search&&!source.searchTemplate){
+    const operate=(op:PageOp)=>wc.executeJavaScriptInIsolatedWorld(1017,[{code:pageScript(op)}]);
+    let input=await operate({op:'openSearch',attempt:-1});
+    for(let attempt=0;!input?.input&&attempt<4;attempt++){await operate({op:'openSearch',attempt});await sleep(400);input=await operate({op:'openSearch',attempt:-1});}
+    if(!input?.input||!(await operate({op:'fillSearch',query:search}))?.ok)throw new AppError('not-found','Open the source to search this title.');
+    for(const type of ['keyDown','char','keyUp'] as const)wc.sendInputEvent({type,keyCode:type==='char'?'\r':'Enter'});
+    await sleep(1200);await operate({op:'viewAll'});await sleep(400);
+   }
   }
   const context=this.current!,alive=()=>epoch===this.epoch&&this.current===context&&!context.window.isDestroyed()&&Date.now()<deadline;
   const page=async(kind:'read'|'filter'|'next')=>{
    if(!alive())throw new AppError('network','Catalogue request cancelled.');
    if(isChallengeTitle(context.window.webContents.getTitle()))throw new AppError('cloudflare','Open this source to complete its security check, then retry the catalogue.');
-   return context.window.webContents.executeJavaScriptInIsolatedWorld(1017,[{code:catalogueScript({kind,audio:request.audio})}]);
+   return context.window.webContents.executeJavaScriptInIsolatedWorld(1017,[{code:catalogueScript({kind,audio:request.audio,search:!!search})}]);
   };
   const settle=async(previous?:string)=>{
    const limit=Math.min(deadline,Date.now()+15000);let last:CatalogueSnapshot|undefined,stable='',since=0;

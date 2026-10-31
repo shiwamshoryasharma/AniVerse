@@ -66,9 +66,9 @@ try{
  assert.ok(page,'App renderer available');page.on('pageerror',error=>errors.push(error.message));await page.setViewportSize({width:1440,height:1000});await page.waitForSelector('.app');
  await page.getByRole('button',{name:'Got it',exact:true}).click();
  const rpc=(method,input)=>page.evaluate(({method,input})=>window.aniverse.invoke(method,input),{method,input});
- const info=await rpc('app.info');assert.equal(info.security.ready,true);assert.equal(info.security.engine,'rust-wasm');assert.match(info.security.sha256,/^[a-f0-9]{64}$/);
+ const info=await rpc('app.info');assert.equal(info.version,JSON.parse(readFileSync(path.join(root,'package.json'),'utf8')).version);assert.equal(info.security.ready,true);assert.equal(info.security.engine,'rust-wasm');assert.match(info.security.sha256,/^[a-f0-9]{64}$/);
  if(packaged){assert.equal(existsSync(marker),false);assert.equal(/Debugger listening/.test(output),false);}
- check(packaged?'Production Rust active and Node environment/run-as-Node/inspector entry points ignored':'Embedded Rust active in development test',{packaged,security:info.security});
+ check(packaged?'Production Rust active and Node environment/run-as-Node/inspector entry points ignored':'Embedded Rust active in development test',{packaged,version:info.version,security:info.security});
  const csp=await page.evaluate(()=>{const script=document.createElement('script');script.textContent='window.__badInlineCsp=true';document.head.append(script);return !window.__badInlineCsp;});
  assert.equal(csp,true);check('App CSP blocks untrusted inline scripts');
  assert.equal(await page.locator('.seasonal-logo').count(),1);
@@ -76,6 +76,16 @@ try{
  const fresh=await rpc('sources.catalogue',{sourceId:source.id,audio:'dub',page:1});
  assert.equal(fresh.items.length,1);assert.equal(fresh.items[0].sub,12);assert.equal(fresh.items[0].dub,11);
  check('A fresh signed app reads source catalogue DUB eligibility independently of watched episodes');
+ await page.evaluate(()=>location.hash='#/browse?audio=dub');
+ await page.getByRole('combobox',{name:'Audio',exact:true}).waitFor();
+ assert.equal(await page.getByRole('combobox',{name:'Audio',exact:true}).innerText(),'DUB + SUB');
+ await page.waitForFunction(()=>document.querySelectorAll('.source-catalogue .mcard').length===1);
+ await page.locator('.source-catalogue .mcard').first().hover();await page.waitForSelector('.hovercard');
+ assert.equal(await page.locator('.hovercard [data-audio="sub"][data-state="available"]').count(),1);
+ assert.equal(await page.locator('.hovercard [data-audio="dub"][data-state="available"]').count(),1);
+ await page.screenshot({path:path.join(artifacts,'security-explore-hover-audio.png')});
+ await page.mouse.move(10,10);
+ check('Compiled Explore audio selector and source-confirmed SUB/DUB hover tags render together');
 
  await rpc('sources.pin',{sourceId:source.id,mediaId:7,url:origin+'/slow/episode-1'});
  await page.evaluate(id=>location.hash='#/watch/7/1?source='+id,source.id);

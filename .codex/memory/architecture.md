@@ -101,3 +101,9 @@ Home LatestGrid and Browse use SourceCatalogueResults for DUB/SUB, independently
 Public AniList IDs from card attributes/links/official cover filenames are resolved in one bounded official catalogueCards query with existing metadata filters. Alias scoring verifies the displayed identity. Unmapped cards open the public source page inside SourceBrowser with same-host validation and the authoritative main attach guard. No fabricated metadata IDs, watched hints or sync records are created.
 
 Catalogue work is serialized with a 16-request queue, per-read deadline and idle destruction. Do not cancel every earlier request on category changes: React Query can reuse an in-flight DUB query after a DUB→SUB→DUB toggle; cancelling that shared request breaks the final selection. Privacy/cache/main-window/app teardown closes the helper and invalidates its epoch. Renderer source results use the partition/privacy/category/query key and gcTime zero.
+
+### 2.1.1 shared hover audio and Explore selector (2026-10-31)
+
+AudioTags.tsx mounts only with an open HoverPreview; source catalogue cards supply audioCounts/audioCategory/audioSource through MediaCard. Otherwise a delayed source-catalogue query searches up to two metadata title aliases and accepts only a matching mapped metadata ID. Queries are session/privacy scoped with gcTime zero, retries disabled; permanent private titles do not search persistent sessions. Unknown numeric counts remain unknown unless a selected source category confirms them; explicit zero stays unavailable. SourceCatalogue falls back to the website's public search controls through existing pageScript operations and never starts an episode for a lookup.
+
+Browse's Audio Select and existing AudioFilter both update the audio route parameter; the metadata BrowseQuery intentionally excludes that parameter. Reset and reload now handle it consistently.
