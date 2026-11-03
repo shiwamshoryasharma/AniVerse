@@ -41,9 +41,10 @@ export const useSchedule = (from: number, to: number) =>
 
 export const useGenres = () => useQuery({ queryKey: keys.genres, queryFn: () => call('meta.genres'), staleTime: Infinity });
 
-export const useBrowse = (q: BrowseQuery) =>
+export const useBrowse = (q: BrowseQuery, enabled = true) =>
   useInfiniteQuery({
     queryKey: keys.browse(q),
+    enabled,
     queryFn: ({ pageParam }) => call('meta.browse', { ...q, page: pageParam, perPage: 30 }),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.hasNext ? last.page + 1 : undefined),

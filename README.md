@@ -8,7 +8,7 @@
 
 A desktop browser with anime discovery, isolated website sessions, a native media player, and a local workspace.
 
-[Download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Getting started](#getting-started) · [Features](#version-211-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
+[Download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Getting started](#getting-started) · [Features](#version-220-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
 
 Windows 10 / 11 · Electron · React · TypeScript · GPL-3.0-or-later
 
@@ -26,11 +26,13 @@ AniVerse brings the websites **you choose** and the media **you provide** into o
 
 The project does not operate a public episode-hosting service or internet stream relay. Official signed installers contain no streaming-site list. Adding a website does not establish that its content is licensed, and AniVerse does not grant permission to access or redistribute anyone else's work. Read the [disclaimer](DISCLAIMER.md) and [privacy notice](PRIVACY.md).
 
-## Version 2.1.1 features
+## Version 2.2.0 features
 
 | Menu | What you can do |
 | --- | --- |
 | 🧭 **Home & Browse** | Discover titles with AniList in ALL; browse a selected website’s live catalogue in DUB/SUB. DUB includes mixed SUB/DUB series, including lagging dubs; SUB includes mixed and sub-only series. See source counts and turn pages without prior viewing. Explore includes an in-panel Audio selector, and shared hover cards show confirmed SUB/DUB tags with distinct unverified states. |
+| ⚡ **Learned source navigation** | Reuse successful source search/episode-list methods across series and restarts; recover when layouts change. Private viewing is excluded. |
+| ☑️ **Browse filters** | Search and combine genres, themes/tags such as Isekai/harem categories, and formats using checkbox menus. Clear selections or reload saved filters. |
 | 📅 **Schedule** | View episode air dates in your timezone and countdowns for unavailable releases. |
 | 🛡️ **Source protection** | Embedded, bounded Rust/WebAssembly URL policy plus software/packaging safeguards. Normal player traffic remains direct. See [security boundaries and limits](docs/SECURITY-ARCHITECTURE.md). |
 | 🌐 **Sources** | Configure websites or supported official YouTube channels. Each website has its own cookie/login session. |

@@ -180,9 +180,8 @@ export class OAuthBroker {
       this.complete(cb.provider, { provider: 'mal', code: cb.code, verifier: tx.verifier });
       return 'accepted';
     }
-    // AniList echoes `state` in the fragment; a link carrying a different state is rejected.
-    // (Should it ever be dropped, the token is still only accepted while this sign-in is pending.)
-    if (!cb.token || (cb.state !== null && !stateOk)) return 'ignored';
+    // Every grant must belong to the exact browser transaction that AniVerse initiated.
+    if (!cb.token || !stateOk) return 'ignored';
     this.complete(cb.provider, { provider: 'anilist', token: cb.token, expiresIn: cb.expiresIn });
     return 'accepted';
   }

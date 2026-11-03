@@ -25,8 +25,28 @@ interface SelectProps<T extends string | number> {
   className?: string;
 }
 
+type MultiSelectProps<T extends string | number> = Omit<SelectProps<T>, 'value' | 'onChange'> & {
+  value: T[];
+  onChange: (value: T[]) => void;
+  maxSelections?: number;
+};
+
+/** Checkbox selection keeps the menu open so filters can be combined. */
+export function MultiSelect<T extends string | number>({ value, onChange, searchable = true, ...props }: MultiSelectProps<T>) {
+  return <SelectMenu {...props} selectedValues={value} onChange={onChange} searchable={searchable} multiple />;
+}
+
 /** Fully custom select: themed trigger, popover listbox, hover, keyboard and type-ahead. */
-export function Select<T extends string | number>({ value, options, onChange, ariaLabel, placeholder = 'Select…', size = 'md', width, icon, disabled, searchable, className }: SelectProps<T>) {
+export function Select<T extends string | number>({ value, onChange, ...props }: SelectProps<T>) {
+  return <SelectMenu {...props} selectedValues={value === null ? [] : [value]} onChange={(values) => { if (values[0] !== undefined) onChange(values[0]); }} multiple={false} />;
+}
+
+function SelectMenu<T extends string | number>({ selectedValues, options, onChange, multiple, maxSelections = 20, ariaLabel, placeholder = 'Select…', size = 'md', width, icon, disabled, searchable, className }: Omit<SelectProps<T>, 'value' | 'onChange'> & {
+  selectedValues: T[];
+  onChange: (values: T[]) => void;
+  multiple: boolean;
+  maxSelections?: number;
+}) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -35,7 +55,9 @@ export function Select<T extends string | number>({ value, options, onChange, ar
   const [filter, setFilter] = useState('');
   const [pos, setPos] = useState<CSSProperties>({});
   const typed = useRef({ text: '', at: 0 });
-  const current = options.find((o) => o.value === value) ?? null;
+  const selected = useMemo(() => new Set(selectedValues), [selectedValues]);
+  const current = options.find((o) => selected.has(o.value)) ?? null;
+  const label = multiple && selectedValues.length > 1 ? `${selectedValues.length} selected` : current?.label ?? placeholder;
   const withSearch = searchable ?? options.length > 12;
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -60,7 +82,7 @@ export function Select<T extends string | number>({ value, options, onChange, ar
     if (disabled) return;
     place();
     setFilter('');
-    setActive(Math.max(0, options.findIndex((o) => o.value === value)));
+    setActive(Math.max(0, options.findIndex((o) => selected.has(o.value))));
     setOpen(true);
   };
   const close = (refocus = true) => {
@@ -69,8 +91,13 @@ export function Select<T extends string | number>({ value, options, onChange, ar
   };
   const choose = (o: SelectOption<T> | undefined) => {
     if (!o || o.disabled) return;
-    onChange(o.value);
-    close();
+    if (multiple) {
+      if (!selected.has(o.value) && selectedValues.length >= maxSelections) return;
+      onChange(selected.has(o.value) ? selectedValues.filter((value) => value !== o.value) : [...selectedValues, o.value]);
+    } else {
+      onChange([o.value]);
+      close();
+    }
   };
 
   useLayoutEffect(() => {
@@ -143,12 +170,12 @@ export function Select<T extends string | number>({ value, options, onChange, ar
         onKeyDown={onKey}
       >
         {icon}
-        <span className="select-value">{current?.label ?? placeholder}</span>
+        <span className="select-value">{label}</span>
         <ChevronDown size={14} className="select-chevron" />
       </button>
       {open &&
         createPortal(
-          <div ref={list} id={`${id}-list`} className="select-pop" style={pos} role="listbox" aria-label={ariaLabel} onKeyDown={onKey}>
+          <div ref={list} id={`${id}-list`} className="select-pop" style={pos} role="listbox" aria-label={ariaLabel} aria-multiselectable={multiple || undefined} onKeyDown={onKey}>
             {withSearch && (
               <div className="select-filter">
                 <Search size={13} />
@@ -170,20 +197,22 @@ export function Select<T extends string | number>({ value, options, onChange, ar
                 <div
                   key={String(o.value)}
                   role="option"
-                  aria-selected={o.value === value}
-                  aria-disabled={o.disabled}
+                  aria-selected={selected.has(o.value)}
+                  aria-disabled={o.disabled || (multiple && !selected.has(o.value) && selectedValues.length >= maxSelections)}
                   data-active={i === active}
-                  className={cx('select-option', o.value === value && 'selected', i === active && 'active', o.disabled && 'disabled')}
+                  className={cx('select-option', selected.has(o.value) && 'selected', i === active && 'active', (o.disabled || (multiple && !selected.has(o.value) && selectedValues.length >= maxSelections)) && 'disabled')}
                   onMouseEnter={() => setActive(i)}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => choose(o)}
                 >
+                  {multiple && <span className={cx('select-check', selected.has(o.value) && 'checked')} aria-hidden="true"><Check size={12} strokeWidth={3} /></span>}
                   <span className="grow ellipsis">{o.label}</span>
                   {o.hint && <span className="select-hint">{o.hint}</span>}
-                  {o.value === value && <Check size={14} />}
+                  {!multiple && selected.has(o.value) && <Check size={14} />}
                 </div>
               ))}
             </div>
+            {multiple && <div className="select-footer"><span aria-live="polite">{selectedValues.length} selected{selectedValues.length >= maxSelections ? ` (maximum ${maxSelections})` : ''}</span><button type="button" className="btn ghost sm" disabled={!selectedValues.length} onMouseDown={(event) => event.preventDefault()} onClick={() => onChange([])}>Clear all</button></div>}
           </div>,
           document.body,
         )}

@@ -41,8 +41,9 @@ const {Store,AniListClient}=createRequire(import.meta.url)(path.join(run,'seed.c
 const store=new Store(path.join(profile,'aniverse.db'));
 const raw=JSON.parse(readFileSync(path.join(root,'test/fixtures/anilist-home.json'),'utf8')).data.trending.media[0];
 Object.assign(raw,{id:7,idMal:null,title:{english:'Fixture Series',romaji:'Fixture Series',native:null,userPreferred:'Fixture Series'},coverImage:{large:'',extraLarge:'',color:null},bannerImage:null,status:'FINISHED',episodes:3,synonyms:[],streamingEpisodes:[],externalLinks:[],relations:{edges:[]},recommendations:{nodes:[]},characters:{edges:[]},studios:{nodes:[]},tags:[]});
-const data={Media:raw,Page:{media:[raw]},trending:{media:[]},spotlight:{media:[]},popularSeason:{media:[]},upcoming:{media:[]},topRated:{media:[]},recent:{airingSchedules:[]}};
-const client=new AniListClient(async()=>new Response(JSON.stringify({data})),store,{showAdult:()=>false,token:()=>null});await client.details(7);await client.home();await client.catalogueCards([7]);
+const data={GenreCollection:['Action','Fantasy','Ecchi','Mecha','Sci-Fi'],MediaTagCollection:[{name:'Isekai',isAdult:false},{name:'Female Harem',isAdult:false}],Media:raw,Page:{media:[raw],pageInfo:{currentPage:1,total:1,hasNextPage:false}},trending:{media:[]},spotlight:{media:[]},popularSeason:{media:[]},upcoming:{media:[]},topRated:{media:[]},recent:{airingSchedules:[]}};
+const client=new AniListClient(async()=>new Response(JSON.stringify({data})),store,{showAdult:()=>false,token:()=>null});await client.details(7);await client.home();await client.catalogueCards([7]);await client.genres();await client.browse({page:1,perPage:30});
+for(const query of [{genres:['Action']},{genres:['Action','Fantasy']},{genres:['Action','Fantasy'],tags:['Isekai']},{genres:['Action','Fantasy'],tags:['Isekai'],formats:['TV']},{genres:['Action','Fantasy'],tags:['Isekai'],formats:['TV','MOVIE']}])await client.catalogueCards([7],query);
 store.setKv('settings',{updates:{autoCheck:false,autoDownload:false},accounts:{autoSync:false},privacy:{adblock:false},player:{autoplay:false,volume:0},appearance:{accent:'festival',reduceMotion:false,spoilerShield:false}});
 const localFile=path.join(run,'Fixture Series - 01.mp4');writeFileSync(localFile,clip);store.setKv('collection:roots',[run]);
 store.db.prepare('INSERT INTO local_media(path,name,bytes,query,episode,media_id,missing) VALUES(?,?,?,?,?,?,0)').run(localFile,path.basename(localFile),clip.length,'Fixture Series',1,7);
@@ -86,6 +87,36 @@ try{
  await page.screenshot({path:path.join(artifacts,'security-explore-hover-audio.png')});
  await page.mouse.move(10,10);
  check('Compiled Explore audio selector and source-confirmed SUB/DUB hover tags render together');
+ const selectMany=async(label,names)=>{
+  const trigger=page.getByRole('combobox',{name:label,exact:true});
+  await trigger.click();
+  for(const name of names){
+   const option=page.getByRole('listbox').getByRole('option',{name,exact:true});
+   await option.click();
+   await page.waitForFunction(element=>element?.getAttribute('aria-selected')==='true',await option.elementHandle());
+   assert.equal(await trigger.getAttribute('aria-expanded'),'true');
+   assert.equal(await option.locator('.select-check.checked').count(),1);
+  }
+  await page.keyboard.press('Escape');
+ };
+ await selectMany('Genre',['Action','Fantasy']);
+ await page.getByRole('combobox',{name:'Themes and tags',exact:true}).click();
+ const themeList=page.getByRole('listbox');
+ await themeList.getByRole('textbox').fill('Isekai');
+ await themeList.getByRole('option',{name:'Isekai',exact:true}).click();
+ await page.waitForFunction(()=>new URLSearchParams(location.hash.split('?')[1]).get('tags')==='Isekai');
+ assert.equal(await themeList.getByRole('textbox').inputValue(),'Isekai');
+ await page.keyboard.press('Escape');
+ await selectMany('Format',['TV','Movie']);
+ const selectedFilters=await page.evaluate(()=>Object.fromEntries(new URLSearchParams(location.hash.split('?')[1])));
+ assert.equal(selectedFilters.genres,'Action,Fantasy');assert.equal(selectedFilters.tags,'Isekai');assert.equal(selectedFilters.formats,'TV,MOVIE');
+ await page.screenshot({path:path.join(artifacts,'security-browse-checkboxes.png')});
+ check('Compiled checkbox genres themes and formats combine while keeping menus open',selectedFilters);
+ await page.getByRole('button',{name:'Reset filters',exact:true}).click();
+ await page.waitForFunction(()=>!location.hash.includes('?'));
+ check('Compiled checkbox filters reset without disturbing existing player routes');
+
+
 
  await rpc('sources.pin',{sourceId:source.id,mediaId:7,url:origin+'/slow/episode-1'});
  await page.evaluate(id=>location.hash='#/watch/7/1?source='+id,source.id);

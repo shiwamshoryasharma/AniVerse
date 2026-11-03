@@ -107,6 +107,18 @@ export function toSiteOptions(raw: RawSiteOption[] | null): SiteOptions {
   return { types, servers };
 }
 
+interface NavigationMethod {
+  version: 1;
+  origin: string;
+  at: number;
+  searchOpener?: string;
+  searchInput?: string;
+  titleLink?: string;
+  watchLink?: string;
+  episodeLink?: string;
+  episodeStage?: 'direct' | 'episodesTab' | 'watchLink';
+}
+
 interface SitePreference {
   type?: string;
   server?: string;
@@ -153,6 +165,21 @@ export class SiteNavigator {
       this.recipes = {};
     }
     return this.recipes;
+  }
+
+  private navigationMethod(source: SourceInfo, mediaId: number, recipe: SiteRecipe | null): NavigationMethod | null {
+    if (!source.partition.startsWith('persist:') || this.store.isPrivate(mediaId) || recipe?.cacheLinks === false) return null;
+    const origin = new URL(source.url).origin;
+    const saved = this.store.getKv<Partial<NavigationMethod> | null>(`site-method:${source.id}`, null);
+    const method: NavigationMethod = { version: 1, origin, at: Date.now() };
+    if (!saved || saved.version !== 1 || saved.origin !== origin || typeof saved.at !== 'number' ||
+      !Number.isFinite(saved.at) || saved.at > Date.now() || Date.now() - saved.at > 30 * 86400000) return method;
+    for (const key of ['searchOpener', 'searchInput', 'titleLink', 'watchLink', 'episodeLink'] as const) {
+      const selector = saved[key];
+      if (typeof selector === 'string' && selector.length > 0 && selector.length <= 300) method[key] = selector;
+    }
+    if (saved.episodeStage === 'direct' || saved.episodeStage === 'episodesTab' || saved.episodeStage === 'watchLink') method.episodeStage = saved.episodeStage;
+    return method;
   }
 
   /** Applies app scrollbars and re-applies focus mode after every page load. */
@@ -214,12 +241,12 @@ export class SiteNavigator {
       status?.('Waiting for the site’s security check…');
       await sleep(500);
     }
-    await sleep(extraMs);
+    if (extraMs > 0 && alive()) await sleep(extraMs);
   }
 
   private async load(wc: WebContents, url: string, alive: () => boolean, status?: (m: string) => void) {
     await wc.loadURL(url).catch(() => undefined);
-    await this.settle(wc, alive, 900, status);
+    await this.settle(wc, alive, 0, status);
   }
 
   private async poll<T>(fn: () => Promise<T | null>, alive: () => boolean, timeoutMs: number): Promise<T | null> {
@@ -251,6 +278,7 @@ export class SiteNavigator {
     const N = req.episode;
     const recipe = recipeFor(this.book(), source.host);
     const cache = recipe?.cacheLinks !== false;
+    const method = this.navigationMethod(source, req.mediaId, recipe);
     const links = cache ? this.store.getSiteLinks(source.id, req.mediaId) : {};
     const pinned = this.store.getPin(source.id, req.mediaId);
     let titlePage: string | null = pinned ?? links[0] ?? null;
@@ -272,6 +300,7 @@ export class SiteNavigator {
       if (ok && alive() && cache && this.onSite(source, url)) {
         this.store.setSiteLink(source.id, req.mediaId, N, url);
         if (!links[0] && !pinned && titlePage) this.store.setSiteLink(source.id, req.mediaId, 0, titlePage);
+        if (method && !this.store.isPrivate(req.mediaId) && source.partition.startsWith('persist:')) this.store.setKv(`site-method:${source.id}`, { ...method, at: Date.now() });
       }
       let focused = false;
       let options = EMPTY_OPTIONS;
@@ -327,7 +356,7 @@ export class SiteNavigator {
         status('Opening the series…');
         await this.load(wc, titlePage, alive, status);
       } else {
-        titlePage = await this.searchTitle(wc, source, recipe, req, alive, status);
+        titlePage = await this.searchTitle(wc, source, recipe, req, alive, status, method);
         if (!alive()) return fail(null);
         if (!titlePage) return fail(`Couldn’t find this title on ${source.name}.`, null, 'not-found');
       }
@@ -347,7 +376,7 @@ export class SiteNavigator {
       }
 
       // 4. Episode N on the title page (or its watch page).
-      const found = await this.openEpisodeOnPage(wc, recipe, N, slugOf(titlePage), alive, status);
+      const found = await this.openEpisodeOnPage(wc, recipe, N, slugOf(titlePage), alive, status, method);
       if (!alive()) return fail(null);
       if (!found) return fail(`Opened the series on ${source.name}, but couldn’t find episode ${N}.`, 'title', 'not-found');
       return finish(true, 'search', null);
@@ -369,7 +398,7 @@ export class SiteNavigator {
     return cards;
   }
 
-  private async searchTitle(wc: WebContents, source: SourceInfo, recipe: SiteRecipe | null, req: OpenEpisodeRequest, alive: () => boolean, status: (m: string | null) => void): Promise<string | null> {
+  private async searchTitle(wc: WebContents, source: SourceInfo, recipe: SiteRecipe | null, req: OpenEpisodeRequest, alive: () => boolean, status: (m: string | null) => void, method: NavigationMethod | null): Promise<string | null> {
     const season = Math.max(1, ...req.titles.map((t) => seriesMarkers(t).season ?? 1));
     const titleSelector = recipeSelector(recipe, 'titleLink');
     // Make sure discovery (OpenSearch / GET form / SearchAction) has had a chance first.
@@ -380,10 +409,14 @@ export class SiteNavigator {
       status('Searching for the series…');
       const template = this.registry.get(source.id).searchTemplate;
       if (template) await this.load(wc, buildSearchUrl(template, query), alive, status);
-      else if (!(await this.searchWithSiteBox(wc, source, query, alive, status))) continue;
+      else if (!(await this.searchWithSiteBox(wc, source, query, alive, status, method))) continue;
 
       const findHits = () => this.page<PickResult[]>(wc, { op: 'findTitle', titles: req.titles, season, selector: titleSelector });
-      let hits = await this.poll(findHits, alive, 7000);
+      let hits = !titleSelector && method?.titleLink ? await this.poll(() => this.page<PickResult[]>(wc, { op: 'findTitle', titles: req.titles, season, selector: method.titleLink }), alive, 1200) : null;
+      if (!hits) {
+        if (method) delete method.titleLink;
+        hits = await this.poll(findHits, alive, 7000);
+      }
       if (!hits && (await this.page<{ clicked: boolean }>(wc, { op: 'viewAll' }))?.clicked) {
         await this.settle(wc, alive, 1500, status);
         this.learnFromUrl(source, wc.getURL(), query);
@@ -402,7 +435,10 @@ export class SiteNavigator {
           await this.settle(wc, alive, 1800, status);
         }
         const check = await this.page<{ score: number; checked: number }>(wc, { op: 'titleCheck', titles: req.titles, season });
-        if (!check || check.checked === 0 || check.score >= 0.6) return wc.getURL();
+        if (!check || check.checked === 0 || check.score >= 0.6) {
+          if (method && hit.selector) method.titleLink = hit.selector;
+          return wc.getURL();
+        }
         if (hit !== hits[hits.length - 1]) await this.load(wc, results, alive, status);
       }
     }
@@ -410,15 +446,22 @@ export class SiteNavigator {
   }
 
   /** Uses the site's own search box (SPA sites without a search URL), learning the URL it produces. */
-  private async searchWithSiteBox(wc: WebContents, source: SourceInfo, query: string, alive: () => boolean, status: (m: string | null) => void): Promise<boolean> {
+  private async searchWithSiteBox(wc: WebContents, source: SourceInfo, query: string, alive: () => boolean, status: (m: string | null) => void, method: NavigationMethod | null): Promise<boolean> {
     if (!this.onSite(source, wc.getURL())) await this.load(wc, source.url, alive, status);
-    type Opened = { input: boolean; clicked: boolean; more: boolean };
+    type Opened = { input: boolean; clicked: boolean; more: boolean; selector?: string };
     const hasInput = async () => (await this.page<Opened>(wc, { op: 'openSearch', attempt: -1 }))?.input ?? false;
     // Single-page apps render their header after load: give the search box a moment to appear.
-    let ready = !!(await this.poll(async () => ((await hasInput()) ? true : null), alive, 3500));
+    let ready = await hasInput();
+    if (!ready && method?.searchOpener) {
+      const opened = await this.page<Opened>(wc, { op: 'openSearch', attempt: 0, selector: method.searchOpener });
+      if (opened?.clicked) ready = !!(await this.poll(async () => (await hasInput()) || null, alive, 1200));
+      if (!ready) delete method.searchOpener;
+    }
+    if (!ready) ready = !!(await this.poll(async () => ((await hasInput()) ? true : null), alive, 3500));
     for (let attempt = 0; !ready && attempt < 4 && alive(); attempt++) {
       const r = await this.page<Opened>(wc, { op: 'openSearch', attempt });
       if (!r?.clicked) break;
+      if (method && r.selector) method.searchOpener = r.selector;
       await sleep(900);
       ready = await hasInput();
       if (!ready && !r.more) break;
@@ -434,8 +477,9 @@ export class SiteNavigator {
       ready = await hasInput();
     }
     if (!ready) return false;
-    const filled = await this.page<{ ok: boolean }>(wc, { op: 'fillSearch', query });
+    const filled = await this.page<{ ok: boolean; selector?: string }>(wc, { op: 'fillSearch', query, selector: method?.searchInput });
     if (!filled?.ok) return false;
+    if (method && filled.selector) method.searchInput = filled.selector;
     await sleep(700);
     const before = wc.getURL();
     for (const type of ['keyDown', 'char', 'keyUp'] as const) wc.sendInputEvent({ type, keyCode: type === 'char' ? '\r' : 'Enter' });
@@ -456,24 +500,46 @@ export class SiteNavigator {
     }
   }
 
-  private async openEpisodeOnPage(wc: WebContents, recipe: SiteRecipe | null, n: number, slug: string | null, alive: () => boolean, status: (m: string | null) => void): Promise<boolean> {
-    const find = () => this.page<PickResult>(wc, { op: 'findEpisode', episode: n, slug, selector: recipeSelector(recipe, 'episodeLink', n) });
+  private async openEpisodeOnPage(wc: WebContents, recipe: SiteRecipe | null, n: number, slug: string | null, alive: () => boolean, status: (m: string | null) => void, method: NavigationMethod | null): Promise<boolean> {
+    const selector = () => recipeSelector(recipe, 'episodeLink', n) ?? method?.episodeLink?.replace(/\{n\}/g, String(n));
+    const find = () => this.page<PickResult>(wc, { op: 'findEpisode', episode: n, slug, selector: selector() });
     status(`Finding episode ${n}…`);
-    let ep = await this.poll(find, alive, 6000);
+    let ep: PickResult | null = null;
+    if (method?.episodeStage === 'episodesTab') {
+      const opened = await this.page<{ clicked: boolean }>(wc, { op: 'episodesTab' });
+      if (opened?.clicked) ep = await this.poll(find, alive, 5000);
+      if (!ep) { delete method.episodeStage; delete method.episodeLink; }
+    } else if (method?.episodeStage === 'watchLink') {
+      const watch = await this.page<PickResult>(wc, { op: 'watchLink', slug, selector: recipeSelector(recipe, 'watchLink') ?? method.watchLink });
+      if (watch?.href) {
+        await this.load(wc, watch.href, alive, status);
+        if (episodeFromUrl(wc.getURL()) === n) return true;
+        ep = await this.poll(find, alive, 5000);
+      }
+      if (!ep) { delete method.episodeStage; delete method.episodeLink; delete method.watchLink; }
+    }
+    if (!ep && method?.episodeLink && !recipe?.episodeLink) {
+      ep = await this.poll(find, alive, 1200);
+      if (!ep) delete method.episodeLink;
+    }
+    if (!ep) ep = await this.poll(find, alive, 6000);
     if (!ep && (await this.page<{ clicked: boolean }>(wc, { op: 'episodesTab' }))?.clicked) {
-      await this.settle(wc, alive, 1200, status);
+      await this.settle(wc, alive, 0, status);
       ep = await this.poll(find, alive, 5000);
+      if (ep && method) method.episodeStage = 'episodesTab';
     }
     if (!ep) {
       // Info pages often link to a separate watch page that lists the episodes.
       const watch = await this.page<PickResult>(wc, { op: 'watchLink', slug, selector: recipeSelector(recipe, 'watchLink') });
       if (watch?.href) {
         await this.load(wc, watch.href, alive, status);
+        if (method) { method.episodeStage = 'watchLink'; if (watch.selector) method.watchLink = watch.selector; }
         if (episodeFromUrl(wc.getURL()) === n) return true;
         ep = await this.poll(find, alive, 8000);
       }
     }
     if (!ep) return false;
+    if (method) { method.episodeStage ??= 'direct'; if (ep.selector) method.episodeLink = ep.selector; }
     status(`Loading episode ${n}…`);
     if (ep.href) {
       if (ep.href !== wc.getURL()) await this.load(wc, ep.href, alive, status);
@@ -526,7 +592,8 @@ export class SiteNavigator {
   /** Re-applies the user's preferred audio type and server for this site. */
   private async applyPreferences(wc: WebContents, source: SourceInfo, alive: () => boolean): Promise<SiteOptions> {
     const pref = this.store.getKv<SitePreference>(`site-pref:${source.id}`, {});
-    // Many sites load their server list a moment after the page: wait for it to appear.
+    // Watch already retries late control reads. Wait here only to apply an actual preference.
+    if (!pref.type && !pref.server) return toSiteOptions(await this.page<RawSiteOption[]>(wc, { op: 'siteOptions' }));
     let raw: RawSiteOption[] = [];
     for (const end = Date.now() + 5000; alive() && Date.now() < end; await sleep(400)) {
       raw = (await this.page<RawSiteOption[]>(wc, { op: 'siteOptions' })) ?? [];
@@ -549,6 +616,8 @@ export class SiteNavigator {
   /** Some site players wait for a click ("tap to load server"); give one if nothing is playing. */
   private async kickPlayback(wc: WebContents, alive: () => boolean) {
     if (!this.autoplay()) return;
+    const playing = await this.probe(wc).catch(() => null);
+    if (playing && !playing.paused) return;
     await sleep(2500);
     if (!alive()) return;
     const p = await this.probe(wc).catch(() => null);

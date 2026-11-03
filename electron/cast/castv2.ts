@@ -59,33 +59,38 @@ export function encodeMessage(m: CastMessage): Buffer {
 export function decodeMessage(buf: Buffer): CastMessage {
   const msg: CastMessage = { sourceId: '', destinationId: '', namespace: '', payload: '' };
   let i = 0;
-  const readVarint = () => {
-    let shift = 0;
-    let result = 0;
-    for (;;) {
-      const b = buf[i++];
-      result += (b & 0x7f) * 2 ** shift;
-      if (b < 0x80) return result;
-      shift += 7;
+  const readVarint = (): bigint => {
+    let result = 0n;
+    for (let byte = 0; byte < 10; byte++) {
+      if (i >= buf.length) throw new Error('Truncated Cast varint.');
+      const value = buf[i++];
+      if (byte === 9 && value > 1) throw new Error('Oversized Cast varint.');
+      result |= BigInt(value & 0x7f) << BigInt(byte * 7);
+      if (value < 0x80) return result;
     }
+    throw new Error('Unterminated Cast varint.');
+  };
+  const skip = (length: number) => {
+    if (length > buf.length - i) throw new Error('Truncated Cast field.');
+    i += length;
   };
   while (i < buf.length) {
-    const key = readVarint();
-    const field = key >>> 3;
-    const wire = key & 7;
-    if (wire === 0) {
-      readVarint();
-    } else if (wire === 2) {
-      const len = readVarint();
-      const value = buf.subarray(i, i + len).toString('utf8');
+    const tag = readVarint();
+    if (tag > 0xffffffffn || tag < 8n) throw new Error('Invalid Cast field key.');
+    const key = Number(tag), field = key >>> 3, wire = key & 7;
+    if (wire === 0) readVarint(); // Unknown uint64 values can be skipped without losing precision.
+    else if (wire === 1) skip(8);
+    else if (wire === 5) skip(4);
+    else if (wire === 2) {
+      const length = readVarint();
+      if (length > BigInt(buf.length - i)) throw new Error('Truncated Cast string.');
+      const len = Number(length);
+      if (field === 2) msg.sourceId = buf.toString('utf8', i, i + len);
+      else if (field === 3) msg.destinationId = buf.toString('utf8', i, i + len);
+      else if (field === 4) msg.namespace = buf.toString('utf8', i, i + len);
+      else if (field === 6) msg.payload = buf.toString('utf8', i, i + len);
       i += len;
-      if (field === 2) msg.sourceId = value;
-      else if (field === 3) msg.destinationId = value;
-      else if (field === 4) msg.namespace = value;
-      else if (field === 6) msg.payload = value;
-    } else {
-      break; // unsupported wire type — not used by CastMessage
-    }
+    } else throw new Error('Unsupported Cast wire type.');
   }
   return msg;
 }
@@ -109,7 +114,10 @@ export interface MediaStatus {
 
 export class CastClient extends EventEmitter {
   private socket: tls.TLSSocket | null = null;
-  private buffer = Buffer.alloc(0);
+  private buffer = Buffer.alloc(4);
+  private received = 0;
+  private readingHeader = true;
+  private frameTimer: NodeJS.Timeout | null = null;
   private nextId = 1;
   private pending = new Map<number, { resolve: (v: Record<string, unknown>) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   private heartbeat: NodeJS.Timeout | null = null;
@@ -151,13 +159,38 @@ export class CastClient extends EventEmitter {
 
   private onData(chunk: Buffer) {
     this.lastSeen = Date.now();
-    this.buffer = Buffer.concat([this.buffer, chunk]);
-    while (this.buffer.length >= 4) {
-      const len = this.buffer.readUInt32BE(0);
-      if (this.buffer.length < 4 + len) return;
-      const msg = decodeMessage(this.buffer.subarray(4, 4 + len));
-      this.buffer = this.buffer.subarray(4 + len);
-      this.onMessage(msg);
+    let offset = 0;
+    try {
+      // Fill at most one bounded frame at a time, including when TLS coalesces many messages.
+      while (offset < chunk.length && this.socket) {
+        if (!this.frameTimer) {
+          this.frameTimer = setTimeout(() => this.close(new Error('The Cast device sent an incomplete message.')), 10000);
+          this.frameTimer.unref();
+        }
+        const count = Math.min(this.buffer.length - this.received, chunk.length - offset);
+        chunk.copy(this.buffer, this.received, offset, offset + count);
+        offset += count;
+        this.received += count;
+        if (this.received < this.buffer.length) return;
+        if (this.readingHeader) {
+          const length = this.buffer.readUInt32BE(0);
+          // Application budget, not a claimed CASTV2 protocol maximum.
+          if (length === 0 || length > 1024 * 1024) throw new Error('The Cast message exceeds the allowed size.');
+          this.buffer = Buffer.allocUnsafe(length);
+          this.received = 0;
+          this.readingHeader = false;
+        } else {
+          const message = decodeMessage(this.buffer);
+          this.buffer = Buffer.alloc(4);
+          this.received = 0;
+          this.readingHeader = true;
+          clearTimeout(this.frameTimer);
+          this.frameTimer = null;
+          this.onMessage(message);
+        }
+      }
+    } catch (error) {
+      this.close(error instanceof Error ? error : new Error('Invalid Cast message.'));
     }
   }
 
@@ -168,6 +201,7 @@ export class CastClient extends EventEmitter {
     } catch {
       return;
     }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
     if (msg.namespace === NS.heartbeat && payload.type === 'PING') this.send(NS.heartbeat, msg.sourceId, { type: 'PONG' });
     if (msg.namespace === NS.connection && payload.type === 'CLOSE' && msg.sourceId === this.app?.transportId) {
       this.app = null;
@@ -246,6 +280,12 @@ export class CastClient extends EventEmitter {
   }
 
   close(err?: Error) {
+    if (this.frameTimer) clearTimeout(this.frameTimer);
+    this.frameTimer = null;
+    this.buffer = Buffer.alloc(4);
+    this.received = 0;
+    this.readingHeader = true;
+    this.connected.clear();
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = null;
     for (const w of this.pending.values()) {

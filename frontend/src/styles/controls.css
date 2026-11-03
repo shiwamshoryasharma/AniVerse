@@ -1215,3 +1215,10 @@
 .hover-audio { display: grid; gap: 5px; }
 .audio-tag[data-state="unavailable"] { opacity: .6; }
 .audio-tag[data-state="unknown"] { border: 1px dashed var(--line-2); }
+
+/* Checkbox menus share the existing select animation and keyboard behavior. */
+.select-check { display: grid; place-items: center; flex: none; width: 16px; height: 16px; border: 1px solid var(--line-2); border-radius: 4px; color: var(--bg); }
+.select-check svg { opacity: 0; }
+.select-check.checked { border-color: var(--accent); background: var(--accent); }
+.select-check.checked svg { opacity: 1; }
+.select-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; padding: 5px 7px 0; margin-top: 4px; border-top: 1px solid var(--line-2); color: var(--text-3); font-size: var(--fs-xs); }

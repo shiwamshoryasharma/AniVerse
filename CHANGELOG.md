@@ -2,6 +2,15 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.2.0 — 2026-11-03
+
+- **Learned source navigation:** reuse successful source controls and episode-list steps across series/restarts, with changed-layout fallback and private-mode exclusions.
+- **Checkbox filters:** searchable multi-select genres, themes/tags and formats, including Isekai and harem themes; selected counts, Clear all, route persistence and reset.
+- **Less redundant work:** remove unused ALL-grid requests during DUB/SUB browsing and measured navigation waits while retaining animations and playback features.
+- **Safer input handling:** require matching OAuth state, bound source metadata bodies, and validate/limit direct Cast parsing, framing and incomplete-message time.
+
+[Full 2.2.0 release notes](docs/releases/2.2.0.md)
+
 ## 2.1.1 — 2026-10-31
 
 - 🔊 **Explore audio selector:** All audio, DUB + SUB and inclusive SUB inside the main filter panel, synchronized with the button row, reload and Reset filters.

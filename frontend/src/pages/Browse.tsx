@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import type { BrowseQuery, BrowseSort, MediaFormat, MediaSeason, MediaStatus } from '../../../app/shared/types';
 import { Empty, ErrorState, Spinner } from '../components/common';
-import { Checkbox, Select, type SelectOption } from '../components/controls';
+import { Checkbox, MultiSelect, Select, type SelectOption } from '../components/controls';
 import { MediaCard, SkeletonCards } from '../components/MediaCard';
 import { cx, formatLabel } from '../lib/format';
 import {SourceCatalogueResults} from '../components/SourceCatalogueResults';
@@ -59,6 +59,7 @@ function readQuery(p: URLSearchParams): BrowseQuery {
     search: p.get('search') ?? undefined,
     genres: list('genres'),
     excludedGenres: list('exclude'),
+    tags: list('tags'),
     formats: list('formats') as MediaFormat[] | undefined,
     season: (p.get('season') as MediaSeason) ?? undefined,
     year: num('year'),
@@ -79,16 +80,20 @@ export function BrowsePage() {
   const query = useMemo(() => readQuery(params), [params]);
   const [text, setText] = useState(query.search ?? '');
   const genres = useGenres();
-  const result = useBrowse(query);
+  const result = useBrowse(query, audio === 'all');
+  const genreOptions = useMemo(() => [...new Set(genres.data?.genres ?? [])].sort().map((value) => ({ value, label: value })), [genres.data]);
+  const tagOptions = useMemo(() => [...new Set(genres.data?.tags ?? [])].sort().map((value) => ({ value, label: value })), [genres.data]);
   const sentinel = useRef<HTMLDivElement>(null);
 
   useEffect(() => setText(query.search ?? ''), [query.search]);
 
   const set = (key: string, value: string | number | undefined | null) => {
-    const next = new URLSearchParams(params);
-    if (value === undefined || value === null || value === '') next.delete(key);
-    else next.set(key, String(value));
-    setParams(next, { replace: true });
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value === undefined || value === null || value === '') next.delete(key);
+      else next.set(key, String(value));
+      return next;
+    }, { replace: true });
   };
 
   const setAudio=(value:AudioChoice)=>set('audio',value==='all'?null:value);
@@ -201,10 +206,19 @@ export function BrowsePage() {
                 <Search size={15} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--text-3)' }} />
                 <input className="input" style={{ paddingLeft: 32 }} placeholder="Search titles…" value={text} onChange={(e) => setText(e.target.value)} aria-label="Search titles" />
               </div>
-              <Select ariaLabel="Genre" value={query.genres?.[0] ?? ''} onChange={(v) => set('genres', v)} options={[ANY('Any genre'), ...(genres.data?.genres ?? []).map((g) => ({ value: g, label: g }))]} />
+              <MultiSelect ariaLabel="Genre" value={query.genres ?? []} placeholder="Any genre" options={genreOptions} onChange={(values) => {
+                setParams((current) => {
+                  const next = new URLSearchParams(current);
+                  if (values.length) next.set('genres', values.join(',')); else next.delete('genres');
+                  const excluded = (next.get('exclude') ?? '').split(',').filter((genre) => genre && !values.includes(genre));
+                  if (excluded.length) next.set('exclude', excluded.join(',')); else next.delete('exclude');
+                  return next;
+                }, { replace: true });
+              }} />
+              <MultiSelect ariaLabel="Themes and tags" value={query.tags ?? []} placeholder="Any theme / tag" options={tagOptions} onChange={(values) => set('tags', values.join(','))} />
               <Select ariaLabel="Season" value={query.season ?? ''} onChange={(v) => set('season', v)} options={[ANY('Any season'), ...SEASONS.map((s) => ({ value: s, label: s[0] + s.slice(1).toLowerCase() }))]} />
               <Select ariaLabel="Year" value={query.year ? String(query.year) : ''} onChange={(v) => set('year', v)} options={[ANY('Any year'), ...YEARS.map((y) => ({ value: String(y), label: String(y) }))]} />
-              <Select ariaLabel="Format" value={query.formats?.length === 1 ? query.formats[0] : ''} onChange={(v) => set('formats', v)} options={[ANY('Any format'), ...FORMATS.map((f) => ({ value: f, label: formatLabel(f) }))]} />
+              <MultiSelect ariaLabel="Format" value={query.formats ?? []} placeholder="Any format" onChange={(values) => set('formats', values.join(','))} options={FORMATS.map((value) => ({ value, label: formatLabel(value) }))} maxSelections={7} />
               <Select ariaLabel="Status" value={query.status ?? ''} onChange={(v) => set('status', v)} options={[ANY('Any status'), ...STATUSES.map(([v, l]) => ({ value: v, label: l }))]} />
               <Select<AudioChoice> ariaLabel="Audio" value={audio} onChange={setAudio} options={[{value:'all',label:'All audio'},{value:'dub',label:'DUB + SUB'},{value:'sub',label:'SUB (including DUB)'}]}/>
               <Select ariaLabel="Country" value={query.country ?? ''} onChange={(v) => set('country', v)} options={[ANY('Any country'), ...COUNTRIES.map(([v, l]) => ({ value: v, label: l }))]} />
@@ -245,6 +259,8 @@ export function BrowsePage() {
                   − {g}
                 </button>
               ))}
+              {query.tags?.map((tag) => <button key={'tag:' + tag} className="chip on" title="Remove theme filter" onClick={() => set('tags', query.tags?.filter((value) => value !== tag).join(','))}>{tag} ×</button>)}
+              {query.formats?.map((format) => <button key={format} className="chip on" title="Remove format filter" onClick={() => toggleFormat(format)}>{formatLabel(format)} ×</button>)}
               <div className="grow" />
               {activeFilters > 0 && (
                 <button className="btn ghost sm" onClick={() => setParams(new URLSearchParams(), { replace: true })}>

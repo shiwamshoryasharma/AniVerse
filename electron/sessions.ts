@@ -243,6 +243,34 @@ export class SessionManager implements SiteFetcher {
     return res;
   }
 
+  /** Only text metadata uses this path; player/media responses stay in Chromium. */
+  private async responseText(response: Response): Promise<string> {
+    const limit = 8 * 1024 * 1024;
+    if (Number(response.headers.get('content-length')) > limit) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error('Source response exceeds the allowed size.');
+    }
+    const reader = response.body?.getReader();
+    if (!reader) return '';
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > limit) throw new Error('Source response exceeds the allowed size.');
+        chunks.push(value);
+      }
+      return Buffer.concat(chunks, bytes).toString('utf8');
+    } catch (error) {
+      await reader.cancel().catch(() => undefined);
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   private async fetchOnce(ses: Session, url: string, opts: { accept?: string; timeoutMs?: number }): Promise<SiteResponse> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 20000);
@@ -256,7 +284,7 @@ export class SessionManager implements SiteFetcher {
       res.headers.forEach((value, key) => {
         headers[key] = value;
       });
-      return { status: res.status, url: res.url || url, text: await res.text(), headers };
+      return { status: res.status, url: res.url || url, text: await this.responseText(res), headers };
     } catch (err) {
       throw new AppError('network', `Could not reach ${safeHost(url)}: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

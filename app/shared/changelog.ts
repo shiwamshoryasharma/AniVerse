@@ -5,6 +5,15 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  { version: '2.2.0', date: '2026-11-03', title: 'Learn the source. Find your next series faster.',
+    summary: 'Reusable source navigation, checkbox filters and safer source/device handling.',
+    items: [
+      { kind: 'added', icon: 'history', title: 'Remember how each source works', description: 'Successful searches teach AniVerse the source’s search controls, result links and episode-list steps. Other series reuse that method; changed layouts fall back to normal discovery. Learning stays on this device and is excluded from private viewing.' },
+      { kind: 'added', icon: 'layout', title: 'Combine filters with checkboxes', description: 'Select multiple genres, themes/tags and formats without closing the menu. Search themes such as Isekai and harem categories, clear selections, reload saved filters or reset everything.', action: { label: 'Browse anime', path: '/browse' } },
+      { kind: 'improved', icon: 'sparkles', title: 'Less waiting, same watching features', description: 'Skip unnecessary navigation delays and unused ALL-catalogue requests while browsing DUB/SUB. Existing animations, source players, late controls and normal/4K playback remain available.' },
+      { kind: 'fixed', icon: 'shield', title: 'Stronger account and input boundaries', description: 'Sign-in callbacks require their transaction state. Source metadata and direct Cast messages have explicit work, size and completion limits, with controlled failure instead of unbounded processing.' },
+    ] },
+
   {version:'2.1.1',date:'2026-10-31',title:'Audio filters where you expect them.',
    summary:'Explore audio controls and clear SUB/DUB tags on anime previews.',
    items:[

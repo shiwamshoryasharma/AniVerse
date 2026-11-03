@@ -13,8 +13,8 @@ export type PageOp =
   | { op: 'episodeCards'; slug:string|null }
   | { op: 'findEpisode'; episode: number; slug: string | null; selector?: string }
   | { op: 'watchLink'; slug: string | null; selector?: string }
-  | { op: 'openSearch'; attempt: number }
-  | { op: 'fillSearch'; query: string }
+  | { op: 'openSearch'; attempt: number; selector?: string }
+  | { op: 'fillSearch'; query: string; selector?: string }
   | { op: 'viewAll' }
   | { op: 'episodesTab' }
   | { op: 'click'; pick: string }
@@ -38,6 +38,7 @@ export interface PickResult {
   href: string | null;
   pick: string | null;
   score: number;
+  selector?: string;
 }
 
 export function pageScript(args: PageOp): string {
@@ -108,6 +109,18 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     const id = 'av' + Date.now().toString(36) + picks++;
     el.setAttribute('data-aniverse-pick', id);
     return id;
+  };
+  // Store only structural selectors, never titles, typed queries or element text.
+  const structuralSelector = (el: Element): string | undefined => {
+    const tag = el.tagName.toLowerCase();
+    if (el.id && /^[a-z][a-z0-9_-]{1,79}$/i.test(el.id) && !/\d{5}/.test(el.id)) return '#' + CSS.escape(el.id);
+    const classes = [...el.classList].filter(value => /^[a-z][a-z0-9_-]{1,59}$/i.test(value) && !/\d{5}/.test(value) && !/^(active|selected|current|on|hover|focus|hidden|open)$/i.test(value)).slice(0, 2);
+    if (classes.length) return tag + classes.map(value => '.' + CSS.escape(value)).join('');
+    if (el instanceof HTMLInputElement) {
+      if (el.type === 'search') return 'input[type="search"]';
+      if (/^[a-z][a-z0-9_-]{1,39}$/i.test(el.name)) return 'input[name="' + el.name + '"]';
+    }
+    return undefined;
   };
   const SECTION = /^(episodes?|details?|info(rmation)?|overview|synopsis|description|summary|comments?|reviews?|recommend(ed|ations?)|related|characters?|staff|trailers?|more like this|you (may|might) also like|seasons?|servers?|share|genres?)\b/i;
   const NOT_TITLE = /\/(genres?|filter|search|browse|community|users?|profile|tags?|studios?|producers?|types?|status|seasons?|years?|login|register|signup|news|blog|discuss|forum|az-list|schedule|contact|faq|dmca|terms|privacy|random|requests?)(\/|$)/i;
@@ -277,7 +290,7 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     // Best candidates first; the navigator verifies the page and falls back to the next one.
     const ranked = [...found.values()].sort((a, b) => b.s - a.s).slice(0, 3);
     if (!ranked.length) return null;
-    return ranked.map((c) => ({ href: c.href, pick: c.href ? null : mark(c.el), score: c.s }));
+    return ranked.map((c) => ({ href: c.href, pick: c.href ? null : mark(c.el), score: c.s, selector: structuralSelector(c.el) }));
   }
 
   if(A.op==='episodeCards'){
@@ -364,7 +377,9 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     });
     const b = best as { s: number; el: Element; u: URL | null } | null;
     if (!b || b.s < 3) return null;
-    return { href: b.u && onSite(b.u) && b.el.tagName === 'A' ? b.u.href : null, pick: b.u && b.el.tagName === 'A' ? null : mark(b.el), score: b.s };
+    const marker = ['data-episode', 'data-num', 'data-number', 'data-ep', 'data-episode-number'].find(name => b.el.getAttribute(name) === String(N));
+    return { href: b.u && onSite(b.u) && b.el.tagName === 'A' ? b.u.href : null, pick: b.u && b.el.tagName === 'A' ? null : mark(b.el), score: b.s,
+      selector: marker ? b.el.tagName.toLowerCase() + '[' + marker + '="{n}"]' : undefined };
   }
 
   if (A.op === 'watchLink') {
@@ -374,7 +389,7 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
       if (!u || !onSite(u) || !vis(a)) continue;
       const t = text(a);
       if (A.selector || (/^(watch( now)?|play( now)?|start watching|watch episode 1|watch ep 1)$/i.test(t) && (!A.slug || u.pathname.includes(A.slug) || /\/watch/i.test(u.pathname)))) {
-        return { href: u.href, pick: null, score: 1 };
+        return { href: u.href, pick: null, score: 1, selector: structuralSelector(a) };
       }
     }
     return null;
@@ -384,7 +399,16 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     vis(i) && !i.disabled && !i.readOnly && /^(search|text|)$/i.test(i.type) && (i.type === 'search' || /search|keyword|query|find|tìm|検索/i.test([i.name, i.placeholder, i.getAttribute('aria-label'), i.id, String(i.className)].join(' ')));
 
   if (A.op === 'openSearch') {
-    if ([...document.querySelectorAll('input')].some((i) => isSearchInput(i as HTMLInputElement))) return { input: true, clicked: false, more: false };
+    const input = [...document.querySelectorAll('input')].find((i) => isSearchInput(i as HTMLInputElement));
+    if (input) return { input: true, clicked: false, more: false, selector: structuralSelector(input) };
+    if (A.selector && A.attempt >= 0) {
+      const opener = document.querySelector(A.selector);
+      if (opener && vis(opener) && opener.matches('button, a, [role="button"], [class*="search" i]') && !opener.closest('form')) {
+        (opener as HTMLElement).click();
+        return { input: false, clicked: true, more: false, selector: structuralSelector(opener) };
+      }
+      return { input: false, clicked: false, more: false };
+    }
     if (A.attempt < 0) return { input: false, clicked: false, more: false };
     // Rank likely search openers: real buttons labelled "search" first, decorative icons last.
     const rank = (el: Element) => {
@@ -404,18 +428,19 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     const pick = openers[A.attempt];
     if (!pick) return { input: false, clicked: false, more: false };
     (pick.el as HTMLElement).click();
-    return { input: false, clicked: true, more: A.attempt + 1 < openers.length };
+    return { input: false, clicked: true, more: A.attempt + 1 < openers.length, selector: structuralSelector(pick.el) };
   }
 
   if (A.op === 'fillSearch') {
-    const input = [...document.querySelectorAll('input')].find((i) => isSearchInput(i as HTMLInputElement)) as HTMLInputElement | undefined;
+    const preferred = A.selector ? document.querySelector(A.selector) : null;
+    const input = (preferred instanceof HTMLInputElement && isSearchInput(preferred) ? preferred : [...document.querySelectorAll('input')].find((i) => isSearchInput(i as HTMLInputElement))) as HTMLInputElement | undefined;
     if (!input) return { ok: false };
     input.focus();
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
     setter.call(input, A.query);
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    return { ok: true, form: !!input.form };
+    return { ok: true, form: !!input.form, selector: structuralSelector(input) };
   }
 
   if (A.op === 'episodesTab') {
