@@ -10,6 +10,10 @@
 import builder from 'electron-builder';
 import { root, writeReleaseConfig } from './releaseConfig.mjs';
 
+// The executable cache can reuse a stale ASAR integrity resource on repeated Windows builds.
+// Re-sign the current executable; keep ASAR integrity validation enabled.
+process.env.ELECTRON_BUILDER_DISABLE_BUILD_CACHE = 'true';
+
 const { file, sha1 } = writeReleaseConfig();
 await builder.build({
   projectDir: root,
