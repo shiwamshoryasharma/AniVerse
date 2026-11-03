@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { parseSitesConfig } from '../../app/core/config/sitesConfig';
+import { DEFAULT_SITES_FILE, parseSitesConfig } from '../../app/core/config/sitesConfig';
 import { isCloudflareChallenge, isChallengeTitle } from '../../app/core/net/cloudflare';
 import { cleanVideoTitle, episodeFromUrl, normalizeTitle, parseEpisodeNumber, seasonOf, titleScore, videoScore } from '../../app/core/sources/text';
 import { isEpisodeThread } from '../../app/core/comments';
@@ -8,6 +8,9 @@ import { anilistToMarkdown, bbcodeToMarkdown, htmlToMarkdown } from '../../app/c
 import { deepMerge, stripHtml } from '../../app/core/util';
 
 describe('parseSitesConfig', () => {
+  it('starts without configured source URLs in the default seed', () => {
+    expect(parseSitesConfig(DEFAULT_SITES_FILE)).toEqual({ entries: [], warnings: [] });
+  });
   it('reads one URL per line, skipping comments, numbering and duplicates', () => {
     const text = [
       '# comment',
@@ -29,11 +32,11 @@ describe('parseSitesConfig', () => {
     expect(warnings[1]).toMatch(/Line 7: no http/);
   });
 
-  it('parses the shipped config file', () => {
-    const text = readFileSync(new URL('../../config/streaming-sites.txt', import.meta.url), 'utf8');
+  it('parses the maintained neutral source-list fixture', () => {
+    const text = readFileSync(new URL('../fixtures/streaming-sites.txt', import.meta.url), 'utf8');
     const { entries, warnings } = parseSitesConfig(text);
     expect(warnings).toEqual([]);
-    expect(entries.length).toBeGreaterThanOrEqual(15);
+    expect(entries).toHaveLength(15);
     expect(new Set(entries.map((e) => e.id)).size).toBe(entries.length);
   });
 });

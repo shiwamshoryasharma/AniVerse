@@ -1,0 +1,16 @@
+# Neutral source-list parser fixture; never contact these hosts.
+https://source-01.test/
+https://source-02.test/
+https://source-03.test/
+https://source-04.test/
+https://source-05.test/
+https://source-06.test/
+https://source-07.test/
+https://source-08.test/
+https://source-09.test/
+https://source-10.test/
+https://source-11.test/
+https://source-12.test/
+https://source-13.test/
+https://source-14.test/
+https://source-15.test/
