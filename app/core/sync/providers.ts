@@ -2,7 +2,7 @@ import type { ListStatus, MediaSnapshot } from '../../shared/types';
 import type { AniListClient } from '../metadata/anilist';
 import { type FetchFn, requestJson } from '../net/http';
 import { AppError } from '../util';
-import type { SyncPayload } from '../db/store';
+import type { SyncPayload } from '../db/contracts';
 import type { EntryState } from './reconcile';
 
 export interface RemoteEntry {

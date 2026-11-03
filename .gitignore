@@ -36,3 +36,12 @@ build/installer/
 
 # Embedded Rust development outputs; the maintained builder uses test/cache/.
 native/**/target/
+
+# Android production signing material and local IDE state
+config/android-signing.json
+config/*.jks
+android/local.properties
+android/.gradle/
+android/.kotlin/
+
+config/android-signing/

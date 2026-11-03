@@ -5,6 +5,15 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.2.1',date:'2026-11-03',title:'Your watch history, with room to breathe.',
+   summary:'A clearer Windows watch history with comfortable Grid and List layouts.',
+   items:[
+    {kind:'improved',icon:'history',title:'Find where you left off',description:'Watch history has new poster cards, date groups, source names, watched progress and exact-episode Resume actions.',action:{label:'Open history',path:'/history'}},
+    {kind:'added',icon:'layout',title:'Grid or List, your choice',description:'Switch between a visual grid and a comfortable list. Search anime titles or sources; your layout is remembered on this device.'},
+    {kind:'fixed',icon:'fix',title:'Use the visible website search',description:'Ignore hidden or offscreen search widgets when finding a series. Episode controls and the original player remain available.'},
+    {kind:'improved',icon:'shield',title:'Clear records with confidence',description:'Remove one history item or confirm clearing history. Your library, favourites and episode progress remain available.'},
+   ]},
+
   { version: '2.2.0', date: '2026-11-03', title: 'Learn the source. Find your next series faster.',
     summary: 'Reusable source navigation, checkbox filters and safer source/device handling.',
     items: [

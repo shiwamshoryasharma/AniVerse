@@ -8,6 +8,7 @@ import { MediaCard, SkeletonCards } from '../components/MediaCard';
 import { cx, formatLabel } from '../lib/format';
 import {SourceCatalogueResults} from '../components/SourceCatalogueResults';
 import {AudioFilter,type AudioChoice} from '../components/AudioFilter';
+import { platform } from '../lib/bridge';
 import { useBrowse, useGenres } from '../lib/queries';
 
 
@@ -76,7 +77,7 @@ function readQuery(p: URLSearchParams): BrowseQuery {
 
 export function BrowsePage() {
   const [params, setParams] = useSearchParams();
-  const audio:AudioChoice=params.get('audio')==='dub'?'dub':params.get('audio')==='sub'?'sub':'all';
+  const audio:AudioChoice=platform==='android'?'all':params.get('audio')==='dub'?'dub':params.get('audio')==='sub'?'sub':'all';
   const query = useMemo(() => readQuery(params), [params]);
   const [text, setText] = useState(query.search ?? '');
   const genres = useGenres();
@@ -220,7 +221,7 @@ export function BrowsePage() {
               <Select ariaLabel="Year" value={query.year ? String(query.year) : ''} onChange={(v) => set('year', v)} options={[ANY('Any year'), ...YEARS.map((y) => ({ value: String(y), label: String(y) }))]} />
               <MultiSelect ariaLabel="Format" value={query.formats ?? []} placeholder="Any format" onChange={(values) => set('formats', values.join(','))} options={FORMATS.map((value) => ({ value, label: formatLabel(value) }))} maxSelections={7} />
               <Select ariaLabel="Status" value={query.status ?? ''} onChange={(v) => set('status', v)} options={[ANY('Any status'), ...STATUSES.map(([v, l]) => ({ value: v, label: l }))]} />
-              <Select<AudioChoice> ariaLabel="Audio" value={audio} onChange={setAudio} options={[{value:'all',label:'All audio'},{value:'dub',label:'DUB + SUB'},{value:'sub',label:'SUB (including DUB)'}]}/>
+              {platform!=='android'&&<Select<AudioChoice> ariaLabel="Audio" value={audio} onChange={setAudio} options={[{value:'all',label:'All audio'},{value:'dub',label:'DUB + SUB'},{value:'sub',label:'SUB (including DUB)'}]}/>}
               <Select ariaLabel="Country" value={query.country ?? ''} onChange={(v) => set('country', v)} options={[ANY('Any country'), ...COUNTRIES.map(([v, l]) => ({ value: v, label: l }))]} />
               <Select ariaLabel="Source material" value={query.sourceMaterial ?? ''} onChange={(v) => set('source', v)} options={[ANY('Any source'), ...SOURCES.map(([v, l]) => ({ value: v, label: l }))]} />
               <Select ariaLabel="Minimum score" value={query.minScore ? String(query.minScore) : ''} onChange={(v) => set('score', v)} options={[ANY('Any score'), ...[90, 80, 70, 60, 50].map((s) => ({ value: String(s), label: `${(s / 10).toFixed(1)}+` }))]} />
@@ -270,7 +271,7 @@ export function BrowsePage() {
             </div>
           </div>
 
-          <AudioFilter value={audio} onChange={setAudio} label="Browse audio availability"/>
+          {platform!=='android'&&<AudioFilter value={audio} onChange={setAudio} label="Browse audio availability"/>}
           {audio!=='all'?<SourceCatalogueResults audio={audio} query={query}/>:result.error && !items.length ? (
             <ErrorState error={result.error} onRetry={() => void result.refetch()} />
           ) : !result.isLoading && !items.length ? (

@@ -33,3 +33,13 @@ RPC budgets begin after Electron has cloned the input and do not make a compromi
 The precise dependency versions are in Cargo.lock. The bundled security-LICENSES.txt contains dependency notices, including build-time dependencies conservatively. Build and download caches belong in test/cache.
 
 [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security/) · [Rust target characteristics](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html)
+
+## Android tablet 0.1.0 boundary
+
+Android uses its own Kotlin policy and Android WebView/UID/Keystore controls; the desktop Rust/Electron runtime is not shipped in the APK. The fixed appassets main frame alone can send bounded native messages. Source WebViews receive no native listener, file/device grants or token access, and use separate browser profiles. TLS failures are rejected; release cleartext, debugging, backup and component exports are restricted. Native file names are opaque canonical children of private storage. Credential replacement verifies a real provider account before encrypted commit; downloads validate redirects/ranges/state and keep byte/storage reserves.
+
+Selected document providers are untrusted. Imports run in two process-wide dedicated workers with independent native inactivity/absolute deadlines and exactly-once replies, cancellation-aware query/open, nonblocking polled descriptor reads and publication guarded by cancellation state. Late work cannot install a video or replace a prior subtitle. Permanently uncooperative provider calls can retain those two import-only workers until restart; ordinary native controls and their admission slots remain available. Video parsing occurs before the brief publication/store lock.
+
+Android's shared DOM script executes in the source page world using evaluateJavascript. Its observations are untrusted and grant no native capability; the desktop isolated-world comment is not an Android isolation guarantee. Private browser profiles are named disposable profiles deleted on close/startup, not guaranteed RAM-only sessions. Saved files requested by the user persist. DNS validation is separate from socket resolution; every WebView redirect/WebSocket request class has not been proven covered. No claim is made that app-level checks repair an unpatched OS, firmware, codec or WebView.
+
+See [Android operation, build and limits](ANDROID.md). Pre-release static review and controlled-emulator regressions are scoped evidence, not certification of physical Samsung hardware or arbitrary websites. No source websites received vulnerability probes.

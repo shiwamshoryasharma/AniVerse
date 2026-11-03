@@ -1,0 +1,1 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"><application android:usesCleartextTraffic="true" tools:replace="android:usesCleartextTraffic"><provider android:name="app.aniverse.tablet.fixture.FixtureProvider" android:authorities="${applicationId}.fixtures" android:exported="false" /></application></manifest>

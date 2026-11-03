@@ -87,7 +87,11 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
   const onSite = (u: URL) => host(u.hostname) === host(location.hostname);
   const vis = (el: Element) => {
     const r = el.getBoundingClientRect();
-    return r.width > 2 && r.height > 2;
+    if (r.width <= 2 || r.height <= 2 || el.closest('[hidden],[inert]')) return false;
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility !== 'visible') return false;
+    // A hidden ancestor can leave a non-zero box. Keep offscreen episode controls valid.
+    return typeof el.checkVisibility !== 'function' || el.checkVisibility({ checkVisibilityCSS: true });
   };
   const area = (el: Element) => {
     const r = el.getBoundingClientRect();
@@ -395,15 +399,19 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     return null;
   }
 
+  const searchVisible = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return vis(el) && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth && Number(getComputedStyle(el).opacity) > 0 && (typeof el.checkVisibility !== 'function' || el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }));
+  };
   const isSearchInput = (i: HTMLInputElement) =>
-    vis(i) && !i.disabled && !i.readOnly && /^(search|text|)$/i.test(i.type) && (i.type === 'search' || /search|keyword|query|find|tìm|検索/i.test([i.name, i.placeholder, i.getAttribute('aria-label'), i.id, String(i.className)].join(' ')));
+    searchVisible(i) && !i.disabled && !i.readOnly && /^(search|text|)$/i.test(i.type) && (i.type === 'search' || /search|keyword|query|find|tìm|検索/i.test([i.name, i.placeholder, i.getAttribute('aria-label'), i.id, String(i.className)].join(' ')));
 
   if (A.op === 'openSearch') {
     const input = [...document.querySelectorAll('input')].find((i) => isSearchInput(i as HTMLInputElement));
     if (input) return { input: true, clicked: false, more: false, selector: structuralSelector(input) };
     if (A.selector && A.attempt >= 0) {
       const opener = document.querySelector(A.selector);
-      if (opener && vis(opener) && opener.matches('button, a, [role="button"], [class*="search" i]') && !opener.closest('form')) {
+      if (opener && searchVisible(opener) && opener.matches('button, a, [role="button"], [class*="search" i]') && !opener.closest('form')) {
         (opener as HTMLElement).click();
         return { input: false, clicked: true, more: false, selector: structuralSelector(opener) };
       }
@@ -422,7 +430,7 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
       return r;
     };
     const openers = [...document.querySelectorAll('button, [role="button"], a[href^="#"], a:not([href]), [class*="search" i]')]
-      .filter((el) => vis(el) && !el.closest('form') && /search/i.test([el.getAttribute('aria-label'), el.getAttribute('title'), text(el).slice(0, 40), String((el as HTMLElement).className)].join(' ')))
+      .filter((el) => searchVisible(el) && !el.closest('form') && /search/i.test([el.getAttribute('aria-label'), el.getAttribute('title'), text(el).slice(0, 40), String((el as HTMLElement).className)].join(' ')))
       .map((el) => ({ el, r: rank(el) }))
       .sort((a, b) => b.r - a.r);
     const pick = openers[A.attempt];
@@ -487,7 +495,7 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
         const r = el.getBoundingClientRect();
         // Challenge/ad frames can be larger than the episode, even while hidden.
         const challenge = el.tagName === 'IFRAME' && /recaptcha|hcaptcha|turnstile|challenges\.cloudflare\.com/i.test(el.getAttribute('src') || '');
-        return !challenge && el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) && r.width >= 240 && r.height >= 135 && ratioOk(el);
+        return !challenge && el.checkVisibility({ checkVisibilityCSS: true }) && r.width >= 240 && r.height >= 135 && ratioOk(el);
       });
       target = media.sort((a, b) => area(b) - area(a))[0];
       if (target && target.tagName === 'VIDEO') {
@@ -500,7 +508,7 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
       target = [...document.querySelectorAll('[id*="player" i], [class*="player" i]')]
         .filter((el) => {
           const r = el.getBoundingClientRect();
-          return el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) && r.width >= 320 && r.height >= 180 && ratioOk(el, 1.2, 2.4);
+          return el.checkVisibility({ checkVisibilityCSS: true }) && r.width >= 320 && r.height >= 180 && ratioOk(el, 1.2, 2.4);
         })
         .sort((a, b) => area(b) - area(a))[0];
     }

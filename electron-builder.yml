@@ -25,6 +25,7 @@ directories:
 files:
   - dist/**
   - '!dist/**/*.map'
+  - '!dist/android/**'
   - package.json
   - build/icon.png
   - build/seasonal-icon.png

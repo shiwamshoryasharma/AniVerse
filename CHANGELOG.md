@@ -2,6 +2,26 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.2.1 Windows — 2026-11-03
+
+- Comfortable Watch History with persisted Grid/List layouts, date groups, title/source search, progress and exact-episode Resume.
+- Individual removal and confirmed Clear history preserve list entries, favourites and episode progress.
+- Source navigation ignores hidden/offscreen search widgets while retaining rendered episode controls and original media.
+- Android is a separate tablet edition with independent versioning; Windows features and 4K enhancement remain intact.
+
+[Windows release notes](docs/releases/2.2.1.md)
+
+## Android 0.1.0 — 2026-11-03
+
+- Kotlin host and shared React design, with touch navigation and landscape-only Android 15+ tablet support.
+- Isolated URL Sources table, discovery/library/history, native encrypted AniList/MAL token verification and manual sync.
+- App-private Local watch, SRT/WebVTT, resume, touch gestures, touch lock and supported picture in picture.
+- Direct-file Downloads queue with progress/speed/ETA, pause/resume, safe restart, retry/cancel and saved-file management.
+- Origin-restricted native messages, no website native bridge, restricted permissions/TLS and cancellable bounded imports.
+- Desktop 4K enhancement, casting, source-backed DUB/SUB catalogues and Windows Workspace tools are outside Android 0.1.0.
+
+[Android release notes](docs/releases/android-0.1.0.md) · [Android setup and limits](docs/ANDROID.md)
+
 ## 2.2.0 — 2026-11-03
 
 - **Learned source navigation:** reuse successful source controls and episode-list steps across series/restarts, with changed-layout fallback and private-mode exclusions.

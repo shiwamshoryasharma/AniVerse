@@ -1,5 +1,8 @@
 # Privacy and local data
 
+This document's desktop-specific player, secure-storage, OAuth, backup and memory-session descriptions apply to **Windows**. Android 0.1.0 has the separate storage/session behavior below and in [Android documentation](docs/ANDROID.md).
+
+
 _Last updated: 30 October 2026 · AniVerse 1.5.8_
 
 AniVerse has no account system or developer-operated usage-analytics endpoint of its own. Most personal records stay on the device. Websites and external services receive requests when their features are used.
@@ -85,3 +88,13 @@ This is app privacy, not anonymous networking. Websites, metadata providers, the
 The 2026 festive palette is an automatic local rollout through December 31, 2026. Its device-local marker remembers the prior accent for restoration on January 1, 2027 and records an early opt-out. The palette remains selectable after the automatic period. It changes appearance rather than sending activity to any service.
 
 Portable v1 app-data backups use the prior standard accent (or Ember) while the festive palette is active. Saved festive presets use Ember in the backup. This keeps established portable colour values compatible; the automatic seasonal rollout marker is not exported. Standalone theme JSON can retain the festive palette for current AniVerse versions.
+
+## Android tablet edition 0.1.0
+
+Android stores library/settings/history/source configuration in app-private SQLite. Selected video/subtitle imports are copied to private storage; SRT is normalized to WebVTT. Completed direct-file downloads, thumbnails and transfer/resume metadata persist until removed. Removing a saved item deletes the app copy and its subtitle/thumbnail, not the selected original. Android uninstallation removes app-private data; Windows retention behavior above does not describe Android uninstall.
+
+AniList/MAL access tokens are pasted in a native password dialog, verified against official endpoints in release, and stored with Android Keystore AES-GCM encryption. The shared interface and source websites receive no bearer token. Sync is manual and expired tokens require reconnecting. No desktop Google Drive backup or Windows profile transfer is included.
+
+Source cookies, DOM storage and service workers use distinct named WebView profiles. Android private sessions use fresh disposable named profiles; close/next-startup cleanup is attempted, and a process crash may leave storage until that cleanup. These profiles are not proved memory-only. Private viewing suppresses new watch records/method learning/provider writes while active. Pending edits are skipped while private rather than deleted; already saved imported/downloaded files remain until explicitly removed. Private mode does not hide traffic from websites or networks.
+
+Release has no camera/microphone/location or broad filesystem grant, no website native bridge, and disables Android cloud backup/device transfer for app state. The system file picker grants only selected input. Public-address preflight/TLS and native input/work budgets reduce specific risks; they are not a firewall or protection against unpatched Android/WebView/media-codec flaws. Debug builds redirect AniList to a trusted local emulator fixture and must use test credentials only.

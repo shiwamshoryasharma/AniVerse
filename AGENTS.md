@@ -12,6 +12,8 @@ This is an existing Electron/React desktop anime application. Preserve the layer
 - These skills intentionally live under the user's requested `.codex/skills/`. This entrypoint routes to them; do not assume that this custom location appears in the native skill selector.
 - Existing Claude context remains in [.claude/CLAUDE.md](.claude/CLAUDE.md), [.claude/memory/MEMORY.md](.claude/memory/MEMORY.md), and `.claude/skills/`. Keep it intact. Resolve dated contradictions using current code and the provenance notes in [.codex/memory/status.md](.codex/memory/status.md).
 
+- For Android tablet/native bridge, Local watch, transfers or APK changes, read [.codex/skills/aniverse-android/SKILL.md](.codex/skills/aniverse-android/SKILL.md).
+
 ## User requirements
 
 - Use `E:\14-OCT-2026\aniverse\test\images` for image inputs to model generation or validation. It contained only `.gitkeep` at the 2026-10-29 inspection; inspect it again before image-dependent work. Do not substitute unrelated images or generate images without an explicit request.

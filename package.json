@@ -1,7 +1,7 @@
 {
   "name": "aniverse",
   "productName": "AniVerse",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "description": "Desktop anime hub: AniList-powered browsing, isolated source sessions, custom HLS/DASH/MP4 player and AniList/MAL sync.",
   "author": {
@@ -36,7 +36,11 @@
     "release": "node scripts/release.mjs",
     "test:update": "node test/e2e/updater.mjs",
     "dist:dir": "npm run build && electron-builder --win --dir --config electron-builder.yml",
-    "media:prepare": "node scripts/prepare-media.mjs"
+    "media:prepare": "node scripts/prepare-media.mjs",
+    "android:ui": "node scripts/build-android.mjs",
+    "android:debug": "node scripts/android.mjs debug",
+    "android:release": "node scripts/android.mjs release",
+    "android:fixture": "node test/android/build-fixture.mjs"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.20.1",

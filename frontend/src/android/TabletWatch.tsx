@@ -1,0 +1,17 @@
+import { ArrowLeft, ExternalLink, Globe, Play } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Empty, ErrorState, Loading } from '../components/common';
+import { Select } from '../components/controls';
+import { useDetails, useLibraryState, useSources, useSettings } from '../lib/queries';
+import { searchTitles, titleOf } from '../lib/format';
+import { seriesMarkers } from '../../../app/core/sources/text';
+import { nativeCall } from './native';
+export function TabletWatch(){
+  const params=useParams(),[query]=useSearchParams(),navigate=useNavigate();const id=Number(params.id),episode=Math.max(1,Number(params.episode)||1);const details=useDetails(id),sources=useSources(),state=useLibraryState(id),settings=useSettings();const [busy,setBusy]=useState(false),[error,setError]=useState<Error|null>(null);
+  const available=sources.data?.filter(source=>source.enabled)??[];const selected=query.get('source')??'';const sourceId=selected||available[0]?.id;
+  if(details.isLoading)return <div className="page"><Loading/></div>;if(details.error)return <div className="page"><ErrorState error={details.error} onRetry={()=>void details.refetch()}/></div>;if(!details.data)return null;
+  const media=details.data,title=titleOf(media,settings.appearance.titleLanguage),titles=searchTitles(media),markers=seriesMarkers(titles.join(' '));
+  const open=async()=>{setBusy(true);setError(null);try{await nativeCall('sources.open',{id:sourceId,episode,media:{id:media.id,idMal:media.idMal,title,cover:media.cover,banner:media.banner,format:media.format,episodes:media.episodes,titles,season:markers.season??1}});}catch(error){setError(error as Error);}finally{setBusy(false);}};
+  return <div className="page tablet-watch"><Link className="btn ghost" to={'/anime/'+id}><ArrowLeft size={18}/> Anime details</Link><section className="tablet-watch-hero card"><img src={media.cover} alt=""/><div><span className="history-eyebrow">YOUR SOURCE · ITS ORIGINAL PLAYER</span><h1>{title}</h1><p className="page-sub">Episode {episode}{state.data?.progress.find(row=>row.episode===episode)?.position?' · Previous progress available':''}</p><p>Open your selected website in its separate, sandboxed browser. Use the website’s own audio, quality and subtitle controls. Challenges and sign-in remain on the website.</p>{available.length?<><Select ariaLabel="Playback source" value={sourceId??null} onChange={value=>navigate(`/watch/${id}/${episode}?source=${encodeURIComponent(value)}`,{replace:true})} options={available.map(source=>({value:source.id,label:source.name}))}/><button className="btn primary" disabled={busy} onClick={()=>void open()}><Play size={18}/>{busy?'Opening…':'Open episode'}</button></>:<Empty title="Add your first source"><Link className="btn primary" to="/sources"><Globe size={17}/> Add source URL</Link></Empty>}{error&&<p className="tablet-error" role="alert">{error.message}</p>}<Link className="btn ghost" to="/local"><ExternalLink size={16}/> Watch saved episodes offline</Link></div></section><div className="section"><h2 className="section-title">Episodes</h2><div className="tablet-episode-grid">{Array.from({length:Math.min(media.episodes??Math.max(episode,24),300)},(_,index)=>index+1).map(value=><button key={value} className={'btn '+(value===episode?'primary':'')} onClick={()=>navigate(`/watch/${id}/${value}${sourceId?'?source='+encodeURIComponent(sourceId):''}`)}>Episode {value}</button>)}</div></div></div>;
+}

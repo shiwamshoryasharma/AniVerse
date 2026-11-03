@@ -31,3 +31,5 @@ The user-selected 2.0.2 follow-up (2026-10-31) fixes generic named-arc/season id
 Version 2.1.0 replaces the incorrect session-hint catalogue filter with source-backed Home/Browse DUB/SUB pages. DUB is series-wide SUB + DUB even if dubbing lags; SUB includes mixed and sub-only. See current architecture/decisions/status before reusing historical 2.0.2 filtering rules.
 
 Version 2.1.1 (2026-10-31) is the user-approved Explore/hover follow-up after 2.1.0 was already published. It adds an in-panel Audio selector and shared SUB/DUB hover badges. See status for final package/runtime evidence; keep the immutable 2.1.0 tag intact.
+
+Android tablet0.1.0 and Windows History2.2.1: use [Android memory](android.md) and [Android skill](../skills/aniverse-android/SKILL.md). These versions are independent; consult final validation/publication evidence.

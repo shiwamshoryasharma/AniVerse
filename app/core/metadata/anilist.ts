@@ -10,7 +10,7 @@ import type {
 } from '../../shared/types';
 import { broaderSearch, discoveryScore } from './search';
 import { pendingRelease } from '../../shared/release';
-import type { Store } from '../db/store';
+import type { MetadataCache } from '../db/contracts';
 import { type FetchFn, RateGate, requestJson } from '../net/http';
 import { AppError, nowSec, stripHtml } from '../util';
 
@@ -283,7 +283,7 @@ export class AniListClient {
 
   constructor(
     private fetchFn: FetchFn,
-    private store: Store,
+    private store: MetadataCache,
     private options: { showAdult: () => boolean; token: () => string | null },
   ) {}
 

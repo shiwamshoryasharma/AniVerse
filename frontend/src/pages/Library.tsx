@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router';
 import type { ListStatus, MediaSnapshot } from '../../../app/shared/types';
 import { Empty, Loading } from '../components/common';
 import { cx, formatLabel, LIST_STATUSES, timeAgo } from '../lib/format';
-import { useContinue, useEntries, useFavourites, useHistory, useSetStatus } from '../lib/queries';
+import { useContinue, useEntries, useFavourites, useSetStatus } from '../lib/queries';
 import { call, errorText } from '../lib/bridge';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../lib/useToast';
@@ -148,58 +148,4 @@ function FavouriteList() {
   );
 }
 
-export function HistoryPage() {
-  const { data, isLoading } = useHistory();
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const toast = useToast();
-  const clear = async (id: number | null) => {
-    try {
-      await call('library.clearHistory', { id });
-      void qc.invalidateQueries({ queryKey: ['library'] });
-    } catch (err) {
-      toast.push({ level: 'error', message: errorText(err) });
-    }
-  };
-  return (
-    <div className="page">
-      <div className="row between">
-        <div>
-          <h1 className="page-title">Watch history</h1>
-          <p className="page-sub">Every episode you opened, newest first.</p>
-        </div>
-        {!!data?.length && (
-          <button className="btn danger sm" onClick={() => void clear(null)}>
-            <Trash2 size={14} /> Clear history
-          </button>
-        )}
-      </div>
-      {isLoading ? (
-        <Loading />
-      ) : !data?.length ? (
-        <Empty title="No history yet">Episodes you watch are recorded here.</Empty>
-      ) : (
-        <div className="card">
-          {data.map((h) => (
-            <Poster
-              key={h.id}
-              media={h.media}
-              to={`/watch/${h.media.id}/${h.episode}${h.sourceId ? `?source=${h.sourceId}` : ''}`}
-              sub={`Episode ${h.episode}${h.duration ? ` · ${Math.min(100, Math.round((h.position / h.duration) * 100))}% watched` : ''} · ${timeAgo(h.watchedAt)}${h.sourceId ? ` · ${h.sourceId}` : ''}`}
-              right={
-                <>
-                  <button className="btn sm" onClick={() => navigate(`/watch/${h.media.id}/${h.episode}${h.sourceId ? `?source=${h.sourceId}` : ''}`)}>
-                    <Play size={13} /> Play
-                  </button>
-                  <button className="icon-btn" aria-label="Remove from history" onClick={() => void clear(h.id)}>
-                    <Trash2 size={15} />
-                  </button>
-                </>
-              }
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+export { HistoryPage } from './History';

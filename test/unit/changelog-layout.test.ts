@@ -12,7 +12,7 @@ describe('bundled release announcements', () => {
     expect(new Set(RELEASES.map((r) => r.version)).size).toBe(RELEASES.length);
     for (const release of RELEASES) for (const item of release.items) {
       expect(['added', 'improved', 'fixed']).toContain(item.kind);
-      if (item.action) expect(item.action.path).toMatch(/^\/(?:settings|library|workspace|player|browse)(?:\/|$)/);
+      if (item.action) expect(item.action.path).toMatch(/^\/(?:settings|library|workspace|player|browse|history)(?:\/|$)/);
     }
   });
   it('announces a new version once per profile and retains acknowledgement after restart', () => {

@@ -1,5 +1,5 @@
 import type { AccentName, DeepPartial, Settings } from '../shared/types';
-import type { Store } from './db/store';
+import type { SettingsStore } from './db/contracts';
 import { clamp, deepMerge } from './util';
 import { DEFAULT_UPSCALE, upscaleSchema } from '../shared/upscale';
 
@@ -53,7 +53,7 @@ export class SettingsService {
   private cache: Settings;
   private listeners = new Set<(s: Settings) => void>();
 
-  constructor(private store: Store) {
+  constructor(private store: SettingsStore) {
     this.cache = sanitize(deepMerge(DEFAULT_SETTINGS, store.getKv<unknown>(KEY, {})));
   }
 

@@ -21,7 +21,7 @@ export function Disclaimer() {
             <Globe size={18} />
           </span>
           <div>
-            <strong>A desktop browser with anime features.</strong> You choose the websites. AniVerse navigates rendered pages, blocks selected distractions,
+            <strong>A browser with anime features.</strong> You choose the websites. AniVerse navigates rendered pages, blocks selected distractions,
             and focuses the site's existing player. Official signed releases contain no streaming-site list. The project does not operate a public
             episode-hosting service.
           </div>

@@ -6,11 +6,11 @@
 
 **Your sites. Your collection. A calmer place to watch.**
 
-A desktop browser with anime discovery, isolated website sessions, a native media player, and a local workspace.
+A browser with anime discovery and isolated website sessions. Windows includes a local workspace; Android tablets have a touch interface and offline travel library.
 
-[Download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Getting started](#getting-started) · [Features](#version-220-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
+[Windows download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Android tablet APK](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/android-v0.1.0) · [Getting started](#getting-started) · [Features](#version-221-windows-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
 
-Windows 10 / 11 · Electron · React · TypeScript · GPL-3.0-or-later
+Windows 10 / 11 · Android 15+ tablets · React · Kotlin / Electron · GPL-3.0-or-later
 
 </div>
 
@@ -20,17 +20,26 @@ Windows 10 / 11 · Electron · React · TypeScript · GPL-3.0-or-later
 
 AniVerse does not provide, endorse or control the sources users configure. Users are responsible for the sources they choose, the content they watch and ensuring they have permission to access it. The project does not grant content rights or permission to bypass a source’s restrictions. See [DISCLAIMER.md](DISCLAIMER.md).
 
+## Android tablet edition 0.1.0
+
+A **Kotlin host with the shared React design**, landscape touch navigation, Android 15+, and a 600 dp minimum tablet width. Galaxy Tab S10+ is the primary target; compatible Tab S8/S9 and other tablets qualify when they meet the OS/screen requirements. Phones and other device categories are unsupported; future device/OS support is not guaranteed for this personal comfort project.
+
+Paste source URLs into a table, import or save permitted direct video files for **Local watch**, attach SRT/WebVTT, resume offline, then remove the saved app copies. Downloads provide queue/progress/speed/ETA, pause/resume, safe restart and cancel. Touch controls include double-tap seek, brightness/volume swipes, touch lock and supported picture in picture. AniList/MAL use verified native OAuth access-token entry and Android Keystore encryption.
+
+**4K enhancement stays desktop-only.** Android 0.1.0 does not include Windows Workspace/casting/Drive tools or source-backed DUB/SUB catalogue scans. Use the original website's audio controls. Profiles are independent of Windows. App isolation cannot repair an unpatched OS, firmware or WebView. [Android setup, security, build and limits](docs/ANDROID.md) · [Android release notes](docs/releases/android-0.1.0.md).
+
 ## What AniVerse does
 
 AniVerse brings the websites **you choose** and the media **you provide** into one desktop interface. Find a title through AniList, open a configured website in its own browser session, focus the site's existing player, and keep your progress alongside local scene notes and a watch plan.
 
 The project does not operate a public episode-hosting service or internet stream relay. Official signed installers contain no streaming-site list. Adding a website does not establish that its content is licensed, and AniVerse does not grant permission to access or redistribute anyone else's work. Read the [disclaimer](DISCLAIMER.md) and [privacy notice](PRIVACY.md).
 
-## Version 2.2.0 features
+## Version 2.2.1 Windows features
 
 | Menu | What you can do |
 | --- | --- |
 | 🧭 **Home & Browse** | Discover titles with AniList in ALL; browse a selected website’s live catalogue in DUB/SUB. DUB includes mixed SUB/DUB series, including lagging dubs; SUB includes mixed and sub-only series. See source counts and turn pages without prior viewing. Explore includes an in-panel Audio selector, and shared hover cards show confirmed SUB/DUB tags with distinct unverified states. |
+| 🕘 **Watch history** | Comfortable Grid/List layouts, date groups, title/source search, progress, exact-episode Resume and confirmed clearing. |
 | ⚡ **Learned source navigation** | Reuse successful source search/episode-list methods across series and restarts; recover when layouts change. Private viewing is excluded. |
 | ☑️ **Browse filters** | Search and combine genres, themes/tags such as Isekai/harem categories, and formats using checkbox menus. Clear selections or reload saved filters. |
 | 📅 **Schedule** | View episode air dates in your timezone and countdowns for unavailable releases. |

@@ -101,3 +101,7 @@ npm run test:update
 5. Uninstalls.
 
 The report is written to `test/artifacts/updater.json`. `UPDATE_KEEP=1` keeps the two builds for a faster re-run. The unit tests (`test/unit/updates.test.ts`) cover the signature decision: intact and pinned, tampered, other signer, unsigned.
+
+## Android releases beside Windows
+
+Android0.1.0 uses the separate android-v0.1.0 tag/APK and manual installation. Its GitHub release must use make_latest=false; Windows v2.2.1 remains the latest desktop update feed. Keep all prior tags/releases/assets. Android signing identity is independent of the Windows certificate; retain the existing Android key for later APK updates. See [Android build/signing](ANDROID.md).

@@ -3,7 +3,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { AiringItem } from '../../../app/shared/types';
-import { call } from '../lib/bridge';
+import { call, platform } from '../lib/bridge';
 import { cx, timeAgo, titleOf } from '../lib/format';
 import {SourceCatalogueResults} from './SourceCatalogueResults';
 import {AudioFilter,type AudioChoice} from './AudioFilter';
@@ -120,7 +120,7 @@ export function LatestGrid() {
             </button>
           ))}
         </div>
-        <AudioFilter value={audio} onChange={setAudio} label="Latest episode audio availability"/>
+        {platform!=='android'&&<AudioFilter value={audio} onChange={setAudio} label="Latest episode audio availability"/>}
         {audio==='all'&&<div className="rail-arrows">
           <button className="icon-btn bordered" aria-label="Newer" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             <ChevronLeft size={16} />
