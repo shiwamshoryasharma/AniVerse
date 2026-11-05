@@ -63,7 +63,8 @@ internal class SourceBrowser(
     private var reportWindow=0L
     private var reportCount=0
     private val playbackObserver by lazy { activity.assets.open("playback-observer.js").bufferedReader().use{it.readText()}
-        .replace("__ANIVERSE_TELEMETRY_PREFIX__",JSONObject.quote(telemetryPrefix)) }
+        .replace("__ANIVERSE_TELEMETRY_PREFIX__",JSONObject.quote(telemetryPrefix))
+        .replace("__ANIVERSE_FOCUS_CSS__",JSONObject.quote(focusCss)) }
     private var selectedUrl:String?=null
     private var focused=false
     private var searchBusy=false
@@ -91,7 +92,7 @@ internal class SourceBrowser(
     private val app get()=activity.application as TabletApplication
     private val preferences by lazy{activity.getSharedPreferences("source-methods",Activity.MODE_PRIVATE)}
     private var method=JSONObject()
-    private val probe=object:Runnable{override fun run(){captureProgress();handler.postDelayed(this,2500)}}
+    private val probe=object:Runnable{override fun run(){captureProgress();checkPlayerFocus();handler.postDelayed(this,2500)}}
     init {
         require(sourceId.matches(Regex("[A-Za-z0-9_-]{1,200}")))
         if (!privatePlayback) {
@@ -403,10 +404,7 @@ internal class SourceBrowser(
         fun finish(value:JSONObject?,error:Exception?){
             if(done)return
             done=true;downloadBusy=false;downloadCancel=null;handler.removeCallbacks(timeout)
-            val safeError=error?.let{
-                IllegalStateException((it.message ?: "The source download could not be prepared.")
-                    .replace(Regex("https?://[^\\s]+"),"[private media URL]").take(300))
-            }
+            val safeError=error?.let{IllegalStateException(DownloadPreparationError.message(it))}
             callback(value,safeError)
         }
         fun fail(error:Exception){if(publication.cancel())finish(null,error)}
@@ -693,38 +691,44 @@ internal class SourceBrowser(
                 return
             }
             fun mark() {
-                operation(JSONObject().put("op", "markPlayer").put("keep", true)) { result ->
+                // The shared operation identifies only the outer owned player. Android's
+                // document-start observer follows that player's opaque media ID through
+                // nested cross-origin documents; parent CSS cannot style their internals.
+                operation(JSONObject().put("op", "markPlayer")) { result ->
                     if (ticket != focusTicket) return@operation
-                    if (result?.optBoolean("found") != true) {
-                        retry()
-                        return@operation
-                    }
-                    // CSSOM creates the presentation rules without an inline <style> tag.
-                    // Confirm the rules changed layout before showing the website surface.
+                    if (result?.optBoolean("found") != true) { retry();return@operation }
                     web.evaluateJavascript("""
                         (() => {
-                          const old = window.__aniverseTabletFocus;
-                          if (!old || !document.adoptedStyleSheets.includes(old)) {
+                          if (!window.__aniverseTabletFocus) {
                             const sheet = new CSSStyleSheet();
                             sheet.replaceSync(${JSONObject.quote(focusCss)});
-                            document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
                             window.__aniverseTabletFocus = sheet;
                           }
-                          const player = document.querySelector('[data-aniverse-player]');
-                          if (!player || getComputedStyle(player).position !== 'fixed') return false;
-                          const rect = player.getBoundingClientRect();
-                          return Math.abs(rect.left) < 2 && Math.abs(rect.top) < 2 &&
-                            Math.abs(rect.width - innerWidth) < 3 && Math.abs(rect.height - innerHeight) < 3;
+                          const sheet=window.__aniverseTabletFocus;
+                          if(!document.adoptedStyleSheets.includes(sheet))document.adoptedStyleSheets=[...document.adoptedStyleSheets,sheet];
+                          return window.__aniversePlayingMediaV1 ? window.__aniversePlayingMediaV1.read() : [];
                         })()
-                    """.trimIndent()) { applied ->
-                        if (ticket != focusTicket || isDestroyed) return@evaluateJavascript
-                        if (applied == "true") {
-                            focused = true
-                            focusPending = false
-                            if (!manual) saveMethod()
-                            status(if (media == null) "Player only" else "Episode $episode", "ready")
-                        } else {
-                            retry()
+                    """.trimIndent()) ids@{ raw ->
+                        if (ticket != focusTicket || isDestroyed) return@ids
+                        val ids=runCatching{JSONArray(raw)}.getOrNull()
+                        val now=android.os.SystemClock.uptimeMillis()
+                        val candidates=(0 until minOf(ids?.length() ?: 0,16)).mapNotNull{index->
+                            mediaReports[ids!!.optString(index)]?.takeIf{now-it.first<=2500}?.second
+                        }.filter{it.visible&&it.width>=64&&it.height>=36}.sortedByDescending{it.width.toLong()*it.height}
+                        val candidate=candidates.firstOrNull()
+                        // Never turn an ambiguous collection of ad/preview frames into a
+                        // ready player. A dominant visible media owner is required.
+                        if(candidate==null || (candidates.size>1 && candidate.width.toLong()*candidate.height < candidates[1].width.toLong()*candidates[1].height*1.4)){
+                            retry();return@ids
+                        }
+                        web.evaluateJavascript("window.__aniversePlayingMediaV1.focus(${JSONObject.quote(candidate.id)})") applied@{ applied ->
+                            if (ticket != focusTicket || isDestroyed) return@applied
+                            if (applied == "true") {
+                                focused = true
+                                focusPending = false
+                                if (!manual) saveMethod()
+                                status(if (media == null) "Player only" else "Episode $episode", "ready")
+                            } else retry()
                         }
                     }
                 }
@@ -744,8 +748,8 @@ internal class SourceBrowser(
         focused = false
         focusTicket++
         focusPending = false
-        operation(JSONObject().put("op", "releasePlayer")) {}
         web.evaluateJavascript("""
+            if(window.__aniversePlayingMediaV1)window.__aniversePlayingMediaV1.release();
             document.adoptedStyleSheets = document.adoptedStyleSheets.filter(sheet => sheet !== window.__aniverseTabletFocus);
             delete window.__aniverseTabletFocus;
         """.trimIndent()) {
@@ -762,6 +766,19 @@ internal class SourceBrowser(
 
     fun toggleFocus() {
         if (focused) showWebsite() else showPlayer()
+    }
+
+    private fun checkPlayerFocus(){
+        if(isDestroyed||navigationFailed||browserMode||!focused)return
+        val token=generation;val ticket=focusTicket
+        web.evaluateJavascript("window.__aniversePlayingMediaV1 ? window.__aniversePlayingMediaV1.focused() : false"){ready->
+            if(token!=generation||ticket!=focusTicket||isDestroyed||browserMode||!focused)return@evaluateJavascript
+            if(ready!="true"){
+                focused=false
+                status("Finding the player…","loading")
+                focusWhenReady(manual=media==null)
+            }
+        }
     }
 
     private fun captureProgress(){

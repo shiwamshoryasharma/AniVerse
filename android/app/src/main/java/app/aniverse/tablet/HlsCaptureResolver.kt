@@ -44,12 +44,16 @@ internal object HlsCaptureResolver {
         val deadline=SystemClock.elapsedRealtime()+8000;var remaining=HlsChecks.MAX_PLAYLIST_BYTES
         val graph=linkedMapOf<String,Set<String>>()
         fun checkTime(){check(SystemClock.elapsedRealtime()<deadline){"Source media selection timed out. Keep the episode playing and retry."}}
+        fun remainingTimeout():Int{
+            checkTime()
+            return (deadline-SystemClock.elapsedRealtime()).coerceIn(1,8000).toInt()
+        }
         for(request in unique){
             checkTime();var target=request.url;var complete=false
             repeat(6){
                 if(complete)return@repeat
                 checkTime();require(!adBlocked(target)&&policy.allow(target)){"The source manifest address is blocked."};checkTime()
-                val timeout=(deadline-SystemClock.elapsedRealtime()).coerceAtMost(1500).coerceAtLeast(1).toInt()
+                val timeout=remainingTimeout()
                 val connection=URL(target).openConnection() as HttpURLConnection
                 try {
                     connection.instanceFollowRedirects=false;connection.connectTimeout=timeout;connection.readTimeout=timeout
@@ -64,7 +68,13 @@ internal object HlsCaptureResolver {
                         require(connection.contentLengthLong<=remaining){"Source manifests exceed the selection budget."}
                         val bytes=connection.inputStream.use{input->
                             val output=java.io.ByteArrayOutputStream();val buffer=ByteArray(8192)
-                            while(true){checkTime();val size=input.read(buffer);if(size<0)break;remaining-=size;require(remaining>=0){"Source manifests exceed the selection budget."};output.write(buffer,0,size)}
+                            while(true){
+                                connection.readTimeout=remainingTimeout()
+                                val size=input.read(buffer);checkTime()
+                                if(size<0)break
+                                remaining-=size;require(remaining>=0){"Source manifests exceed the selection budget."}
+                                output.write(buffer,0,size)
+                            }
                             output.toByteArray()
                         }
                         HlsChecks.validate(bytes)
@@ -76,10 +86,12 @@ internal object HlsCaptureResolver {
             }
             check(complete){"Too many source manifest redirects."}
         }
+        checkTime()
         val selected=HlsCaptureGraph.choose(unique.map{it.url},graph)
         val root=unique.first{it.url==selected}
         // Only the verified observed tree can retain independent CDN contexts.
         // Each companion still supplies credentials solely to its own captured origin.
+        checkTime()
         return root.copy(relatedContexts=unique.filter{it!==root})
     }
 }

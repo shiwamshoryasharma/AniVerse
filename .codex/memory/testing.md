@@ -151,3 +151,21 @@ Latest0.4.6 user cap supersedes broad rerun guidance for this delivery: EXACTLY2
 
 
 The authorized final2cases both passed fixtureSHA2569b06cc4752b6348eede598abf9dc5b1da9bcba1cad666cec619e5a22433f078c: Watch/audio/header/download/rail/nativeclip and Hero/swipe/reducedmotion/fullcanvas. They ran separately on the same app APK, with earlier harness-only failures retained; this does not expand the cap or create a full-suite pass. Package validation/publication status must come from the one authorized signedAPKvalidation and release artifacts. No additional validator, matrix, source probe or signed-runtime suite is authorized for this delivery.
+
+
+### Android 0.4.7 player/download correction — 2026-11-05
+
+The user reported source header/chat/navigation inside the native player pane and a literal download “timeout”. This follow-up is based on published0.4.6 commit08cedabd89b17663286304d71ff037f097db0d5d in isolated test/cache/android-0.4.7/release-source. Preserve0.4.6 and Windows. Android version is0.4.7/code407.
+
+Diagnosis: top-document CSS could style only a broad wrapper/outeriframe; readiness proved that rectangle filled the viewport but did not isolate media inside nested documents. The Android observer now focuses the owned opaque-ID branch with fixed native-injected CSS and real media acknowledgment; no CSS/selectors/URLs/credentials enter parent messages. Website release must restore the branch without reloading the player; dynamic player replacement must clear stale focus. Windows electron/sitePage.ts remains unchanged.
+
+The frontend native deadline is35s, not12s. HLS selection has an8s aggregate budget but previously capped individual connect/read timeouts at1.5s; slow valid manifests could produce a raw SocketTimeoutException “timeout”. The fix retains the bounded total and uses remaining time, with actionable private-safe error mapping.
+
+The user authorized exactly two focused runtime cases and one final signedAPKvalidation, followed by publication. No full suite/matrix/live-source rerun is authorized for this bounded correction. Record actual results and APK/source hashes under test/artifacts/android-0.4.7-*; do not treat0.4.6 or build-only results as current runtime proof.
+
+
+### Final 0.4.7 runtime evidence — 2026-11-05
+
+Exactly two focused runtime cases passed on unchanged fixture APK SHA-256 bc4a0f1f3f722c93253c44de9be5b1452d249e19b1e341e036d5f2c5e9b5ad35. Case1 proves nested player-only chrome removal, full-viewport ownership, original controls/decoded media, website restoration and SPA focus recovery. Case2 proves delayed authenticated HLS DUB download using origin-scoped observed context and native cache-only offline decoding. The final raw/composed provenance is test/artifacts/android-0.4.7-runtime.json in the original project root; earlier failed fixture/timing/reconnection runs are retained in test/cache/android-0.4.7/runtime-evidence-final with their original source-worktree paths recorded. No production changes were made between those runtime attempts.
+
+These are owned emulator5584 fixture checks, not physical Samsung/DeX/BlueStacks or universal provider certification. The single final signed-APK package/update/launch validation is recorded separately as test/artifacts/android-0.4.7-package.json; publication identity must come from android-0.4.7-publication.json. Keep Windows latest v2.2.1 and all previous Android releases/tags/assets unchanged.

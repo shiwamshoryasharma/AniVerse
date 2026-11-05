@@ -41,3 +41,6 @@ Latest0.4.6 preparation adds smaller floating full-canvas chrome, a hideable ove
 
 
 The two authorized final0.4.6 runtime flows now pass the same current fixture APK; Android memory records their full hash and separate-run provenance. The one signedAPKvalidation and actual release artifact determine package/publication status.
+
+
+Current0.4.7 player/download correction (2026-11-05): read latest Android memory. Published0.4.6 is immutable; use the isolated0.4.7 checkout. Final scope is two focused runtime cases plus one signedAPKvalidation and authorized release, with Windows/history preserved. Verify results/publication from fresh0.4.7 artifacts.

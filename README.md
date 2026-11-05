@@ -8,7 +8,7 @@
 
 A browser with anime discovery and isolated website sessions. Windows includes a local workspace; Android tablets have a touch interface and offline travel library.
 
-[Windows download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Android tablet APK](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/android-v0.4.6) · [Getting started](#getting-started) · [Features](#version-221-windows-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
+[Windows download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Android tablet APK](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/android-v0.4.7) · [Getting started](#getting-started) · [Features](#version-221-windows-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
 
 Windows 10 / 11 · Android 15+ tablets · React · Kotlin / Electron · GPL-3.0-or-later
 
@@ -28,7 +28,7 @@ Add source websites as cards, then use **Download** below a playing episode to s
 
 Smaller floating glass controls overlay a full-width canvas, with bottom navigation/search or a vertical rail with a show/hide button. The hero uses a smooth poster-card strip. Pull down at the top to refresh, use Android wallpaper colours or a custom accent, and reduce animation in Settings. Android updates are delivered through signed GitHub releases inside the app.
 
-**4K enhancement stays desktop-only.** Android 0.4.6 does not include Windows Workspace/casting/Drive tools or source-backed DUB/SUB catalogue scans. Player audio options come from the source; global catalogue audio scans remain desktop-only. Profiles are independent of Windows. App isolation cannot repair an unpatched OS, firmware or WebView. [Android setup, security, build and limits](docs/ANDROID.md) · [Android release notes](docs/releases/android-0.4.6.md).
+**4K enhancement stays desktop-only.** Android 0.4.7 does not include Windows Workspace/casting/Drive tools or source-backed DUB/SUB catalogue scans. Player audio options come from the source; global catalogue audio scans remain desktop-only. Profiles are independent of Windows. App isolation cannot repair an unpatched OS, firmware or WebView. [Android setup, security, build and limits](docs/ANDROID.md) · [Android release notes](docs/releases/android-0.4.7.md).
 
 ## What AniVerse does
 
