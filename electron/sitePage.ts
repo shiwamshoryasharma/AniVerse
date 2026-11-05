@@ -8,7 +8,7 @@ import {seriesMarkers} from '../app/core/sources/text';
  * world, so the page cannot tamper with them). They only read the page's own
  * links/controls and click or follow them, exactly like a user would.
  */
-export type PageOp =
+export type PageOp = (
   | { op: 'findTitle'; titles: string[]; season: number; selector?: string }
   | { op: 'episodeCards'; slug:string|null }
   | { op: 'findEpisode'; episode: number; slug: string | null; selector?: string }
@@ -23,7 +23,8 @@ export type PageOp =
   | { op: 'titleCheck'; titles: string[]; season: number }
   | { op: 'siteOptions' }
   | { op: 'pageInfo' }
-  | { op: 'availability' };
+  | { op: 'episodeCheck'; episode: number }
+  | { op: 'availability' }) & { platform?: 'android' };
 
 export interface RawSiteOption {
   pick: string;
@@ -136,6 +137,21 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
   }
   if (A.op === 'pageInfo') {
     return { url: location.href, title: document.title, ready: document.readyState, width: innerWidth, height: innerHeight };
+  }
+
+  if (A.op === 'episodeCheck') {
+    const fromUrl = epFromUrl(new URL(location.href));
+    if (fromUrl !== null) return { matches: fromUrl === A.episode };
+    const label = new RegExp('^(?:ep(?:isode)?\\.?\\s*#?\\s*)0*' + A.episode + '(?!\\d)', 'i');
+    const selected = document.querySelectorAll(
+      '[aria-current="page"],[aria-selected="true"],[data-state="active"],' +
+      '[data-episode].active,[data-episode].selected,[class*="episode" i] .active,[class*="episode" i] .selected',
+    );
+    return {
+      matches: [...selected].some(el => vis(el) && (
+        el.getAttribute('data-episode') === String(A.episode) || label.test(text(el))
+      )),
+    };
   }
 
   if (A.op === 'siteOptions') {
@@ -281,7 +297,10 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
       const img = a.querySelector('img');
       const heading = a.querySelector('h1,h2,h3,h4,h5,h6,[class*="title" i],[class*="name" i]');
       const ds = (a as HTMLElement).dataset || {};
-      consider(a, u, [img?.getAttribute('alt'), a.getAttribute('title'), a.getAttribute('aria-label'), ds.en, ds.jp, ds.title, text(heading), text(a).length < 160 ? text(a) : null]);
+      // Android quick-search options often put title and metadata in adjacent opaque spans.
+      const leaves = A.platform === 'android' && (a.getAttribute('role') === 'option' || a.closest('[role="listbox"]'))
+        ? [...a.querySelectorAll('span')].filter(el => el.childElementCount === 0 && text(el).length <= 160).slice(0, 12).map(text) : [];
+      consider(a, u, [img?.getAttribute('alt'), a.getAttribute('title'), a.getAttribute('aria-label'), ds.en, ds.jp, ds.title, text(heading), text(a).length < 160 ? text(a) : null, ...leaves]);
     });
     if (!A.selector) {
       // Instant-search dropdowns often render results as clickable items without links.
@@ -387,12 +406,14 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
   }
 
   if (A.op === 'watchLink') {
-    const nodes = A.selector ? [...document.querySelectorAll(A.selector)] : [...document.querySelectorAll('a[href]')];
+    const links = A.platform === 'android' ? 'a[href],[role="link"][data-href],button[data-href]' : 'a[href]';
+    const nodes = A.selector ? [...document.querySelectorAll(A.selector)] : [...document.querySelectorAll(links)];
     for (const a of nodes) {
-      const u = abs(a.getAttribute('href'));
+      const u = abs(a.getAttribute('href') || (A.platform === 'android' ? a.getAttribute('data-href') : null));
       if (!u || !onSite(u) || !vis(a)) continue;
       const t = text(a);
-      if (A.selector || (/^(watch( now)?|play( now)?|start watching|watch episode 1|watch ep 1)$/i.test(t) && (!A.slug || u.pathname.includes(A.slug) || /\/watch/i.test(u.pathname)))) {
+      const androidWatch = A.platform === 'android' && /^(?:watch(?:\s+(?:now|episode\s*1|ep\.?\s*1))?|play(?:\s+now)?|start watching)(?:\s*[·|–-]\s*(?:sub|dub|raw))?$/i.test(t);
+      if (A.selector || ((/^(watch( now)?|play( now)?|start watching|watch episode 1|watch ep 1)$/i.test(t) || androidWatch) && (!A.slug || u.pathname.includes(A.slug) || /\/watch/i.test(u.pathname)))) {
         return { href: u.href, pick: null, score: 1, selector: structuralSelector(a) };
       }
     }
@@ -406,12 +427,20 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
   const isSearchInput = (i: HTMLInputElement) =>
     searchVisible(i) && !i.disabled && !i.readOnly && /^(search|text|)$/i.test(i.type) && (i.type === 'search' || /search|keyword|query|find|tìm|検索/i.test([i.name, i.placeholder, i.getAttribute('aria-label'), i.id, String(i.className)].join(' ')));
 
+  // Android may see an SSR catalogue skeleton before the actual search button hydrates.
+  // A class containing "search" alone does not make a large content container a control.
+  const searchControl = (el: Element) => {
+    if (A.platform !== 'android' || el.matches('button,a,[role="button"]')) return true;
+    const label = (el.getAttribute('aria-label') || el.getAttribute('title') || text(el)).trim();
+    return label.length > 0 && label.length <= 80 && /search/i.test(label);
+  };
+
   if (A.op === 'openSearch') {
     const input = [...document.querySelectorAll('input')].find((i) => isSearchInput(i as HTMLInputElement));
     if (input) return { input: true, clicked: false, more: false, selector: structuralSelector(input) };
     if (A.selector && A.attempt >= 0) {
       const opener = document.querySelector(A.selector);
-      if (opener && searchVisible(opener) && opener.matches('button, a, [role="button"], [class*="search" i]') && !opener.closest('form')) {
+      if (opener && searchControl(opener) && searchVisible(opener) && opener.matches('button, a, [role="button"], [class*="search" i]') && !opener.closest('form')) {
         (opener as HTMLElement).click();
         return { input: false, clicked: true, more: false, selector: structuralSelector(opener) };
       }
@@ -429,7 +458,15 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
       if (area(el) < 120) r -= 2;
       return r;
     };
-    const openers = [...document.querySelectorAll('button, [role="button"], a[href^="#"], a:not([href]), [class*="search" i]')]
+    const openerNodes = 'button, [role="button"], a[href^="#"], a:not([href]), [class*="search" i]';
+    const openers = [...document.querySelectorAll(A.platform === 'android' ? openerNodes + ', a[href]' : openerNodes)]
+      .filter(searchControl)
+      .filter(el => {
+        if (A.platform !== 'android' || !el.matches('a[href]:not([href^="#"])')) return true;
+        const u = abs(el.getAttribute('href'));
+        return !!u && onSite(u) && /\/(?:search|browse)(?:\/|$)/i.test(u.pathname) &&
+          /^search(?:\s+(?:anime|titles?))?(?:…|\.{3})?$/i.test(text(el) || el.getAttribute('aria-label') || '');
+      })
       .filter((el) => searchVisible(el) && !el.closest('form') && /search/i.test([el.getAttribute('aria-label'), el.getAttribute('title'), text(el).slice(0, 40), String((el as HTMLElement).className)].join(' ')))
       .map((el) => ({ el, r: rank(el) }))
       .sort((a, b) => b.r - a.r);

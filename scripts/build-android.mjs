@@ -14,5 +14,8 @@ const {pageScript,FOCUS_CSS}=createRequire(import.meta.url)(runtime);
 const placeholder=JSON.stringify({op:'pageInfo'}),script=pageScript({op:'pageInfo'}),at=script.lastIndexOf(placeholder);
 if(at<0)throw new Error('Source operation placeholder missing.');
 writeFileSync(path.join(dist,'site-script.template'),script.slice(0,at)+'__ANIVERSE_PAGE_ARGS__'+script.slice(at+placeholder.length));
-writeFileSync(path.join(dist,'source-focus.css'),FOCUS_CSS);
+// Keep the browser chrome hidden during a player replacement. Opacity leaves the
+// site's layout measurable so the shared observer can find the replacement.
+writeFileSync(path.join(dist,'source-focus.css'),FOCUS_CSS +
+  '\nhtml:not(:has([data-aniverse-player])) body { opacity: 0 !important; pointer-events: none !important; }\n');
 console.log('Android UI and shared browser navigation built → dist/android');

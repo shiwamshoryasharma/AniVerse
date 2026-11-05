@@ -10,7 +10,7 @@ import { connectNative, nativeCall, type NativeAccount, type NativeInfo } from '
 
 type CacheEntry={value:unknown;expires:number;at:number};
 type Edit={media:MediaSnapshot;kind:'entry'|'favourite';at:number;providers:Provider[]};
-interface SavedState { metadataMode?:string;settings?:Settings;library?:unknown;sources?:SourceInfo[];privateMediaIds?:number[];metadata?:Record<string,CacheEntry>;kv?:Record<string,unknown>;edits?:Edit[];noticeAccepted?:boolean }
+interface SavedState { surface?:'light'|'dark';navigation?:'rail'|'tabs';metadataMode?:string;settings?:Settings;library?:unknown;sources?:SourceInfo[];privateMediaIds?:number[];metadata?:Record<string,CacheEntry>;kv?:Record<string,unknown>;edits?:Edit[];noticeAccepted?:boolean }
 const listeners=new Map<string,Set<(payload:unknown)=>void>>();
 const emit=<E extends EventName>(event:E,payload:EventContract[E])=>listeners.get(event)?.forEach(listener=>listener(payload));
 let saved:SavedState={},library=new TabletLibrary(),privacy:PrivacyState={incognito:false,privateMediaIds:[]};
@@ -46,7 +46,7 @@ const fetchOfficial:typeof fetch=async(url,init)=>{
   if(typeof url!=='string')throw new Error('Expected an official API URL.');
   if(init?.signal?.aborted)throw new DOMException('Request cancelled','AbortError');
   const headers=new Headers(init?.headers);
-  const result=await nativeCall<{status:number;body:string;retryAfter:string}>('api.request',{url,method:init?.method??'GET',body:typeof init?.body==='string'?init.body:'',contentType:headers.get('Content-Type')?.split(';')[0]??'application/json',authenticated:headers.has('Authorization')});
+  const result=await nativeCall<{status:number;body:string;retryAfter:string}>('api.request',{url,method:init?.method??'GET',body:typeof init?.body==='string'?init.body:'',contentType:headers.get('Content-Type')?.split(';')[0]??'application/json',authenticated:headers.has('Authorization')},init?.signal??undefined);
   if(init?.signal?.aborted)throw new DOMException('Request cancelled','AbortError');
   return new Response(result.status===204?null:result.body,{status:result.status,headers:{'Content-Type':'application/json',...(result.retryAfter?{'Retry-After':result.retryAfter}:{})}});
 };
@@ -56,6 +56,16 @@ function sourceInfo(url:string,name?:string):SourceInfo {
 }
 export const tablet={
   info:()=>device,
+  surface:():'light'|'dark'=>saved.surface==='dark'?'dark':'light',
+  async setSurface(mode:'light'|'dark'){
+    if(mode!=='light'&&mode!=='dark')throw new Error('Choose a supported glass theme.');
+    saved.surface=mode;await persist();document.documentElement.dataset.tabletSurface=mode;window.dispatchEvent(new CustomEvent('tablet-surface-changed',{detail:mode}));
+  },
+  navigation:():'rail'|'tabs'=>saved.navigation==='rail'?'rail':'tabs',
+  async setNavigation(mode:'rail'|'tabs'){
+    if(mode!=='rail'&&mode!=='tabs')throw new Error('Choose a supported navigation layout.');
+    saved.navigation=mode;await persist();window.dispatchEvent(new CustomEvent('tablet-navigation-changed',{detail:mode}));
+  },
   accepted:()=>saved.noticeAccepted===true,
   acceptNotice:async()=>{saved.noticeAccepted=true;await persist();},
   sources:()=>saved.sources??[],
@@ -65,7 +75,7 @@ export const tablet={
   },
   async refresh(){
     await tablet.reloadSources();epoch++;temporary.clear();
-    if(!privacy.incognito){saved.metadata={};await persist();}
+    if(!privacy.incognito){for(const entry of Object.values(saved.metadata??{}))entry.expires=0;await persist();}
   },
   async saveSource(value:{id?:string;url:string;name:string;enabled:boolean}){
     const url=new URL(/^https?:\/\//i.test(value.url.trim())?value.url.trim():'https://'+value.url.trim()).href;
@@ -128,7 +138,7 @@ async function dispatch(method:RpcMethod,input:unknown):Promise<unknown>{
     case 'sources.list':return saved.sources??[];
     case 'sources.reload':return tablet.reloadSources();
     case 'sources.audio':return [];
-    case 'sources.catalogue':throw new AppError('config','Use Open source to browse this website’s own catalogue in Android 0.1.0. Metadata discovery remains available in ALL.');
+    case 'sources.catalogue':throw new AppError('config','Use Open source to browse this website’s own catalogue in Android. Metadata discovery remains available in ALL.');
     case 'library.state':return library.state((input as {mediaId:number}).mediaId);
     case 'library.history':{const value=input as {limit:number;offset:number};return library.history(value.limit,value.offset);}
     case 'library.continue':return library.continueWatching();
@@ -153,13 +163,14 @@ async function dispatch(method:RpcMethod,input:unknown):Promise<unknown>{
   await persist();return undefined;
 }
 export async function installTabletBridge(){
-  connectNative();saved=await nativeCall<SavedState>('storage.load');device=await nativeCall<NativeInfo>('native.info');
-  library=new TabletLibrary(saved.library);privacy={incognito:(await nativeCall<{incognito:boolean}>('privacy.state')).incognito,privateMediaIds:saved.privateMediaIds??[]};library.setPrivacy(privacy);
+  connectNative();const [state,info,privateState]=await Promise.all([nativeCall<SavedState>('storage.load'),nativeCall<NativeInfo>('native.info'),nativeCall<{incognito:boolean}>('privacy.state')]);saved=state;device=info;
+  library=new TabletLibrary(saved.library);privacy={incognito:privateState.incognito,privateMediaIds:saved.privateMediaIds??[]};library.setPrivacy(privacy);
   settings=new SettingsService(browserStore);
   metadata=new AniListClient(fetchOfficial,browserStore,{showAdult:()=>settings.get().appearance.showAdult,token:()=>null});
   const metadataMode=device.fixture?'fixture':'official';
   if(saved.metadataMode!==metadataMode){saved.metadata={};saved.metadataMode=metadataMode;await persist();}
   window.aniverse={platform:'android',invoke:async<M extends RpcMethod>(method:M,input:RpcInput<M>)=>dispatch(method,input) as Promise<RpcOutput<M>>,on:<E extends EventName>(event:E,listener:(payload:EventContract[E])=>void)=>{const set=listeners.get(event)??new Set();listeners.set(event,set);set.add(listener as (payload:unknown)=>void);return()=>set.delete(listener as (payload:unknown)=>void);}} satisfies AniverseBridge;
   document.documentElement.dataset.platform='android';
+  document.documentElement.dataset.tabletSurface=tablet.surface();
   window.addEventListener('tablet-progress',event=>{const value=(event as CustomEvent<ProgressSave>).detail;try{const completed=library.saveProgress(value);if(completed.completedNow)edited(value.media,'entry');persistLater();}catch{/* Invalid page observations never grant native access. */}});
 }

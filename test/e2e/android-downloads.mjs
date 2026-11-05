@@ -9,6 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {androidClient} from './helpers/android-cdp.mjs';
 if(!process.argv.includes('--run')){console.log('Prepared only. Run with --run after the latest owned Android debug APK is installed.');process.exit(0);}
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),cache=path.join(root,'test/cache/android-downloads'),artifacts=path.join(root,'test/artifacts');mkdirSync(cache,{recursive:true});mkdirSync(artifacts,{recursive:true});
+const expectedVersion=readFileSync(path.join(root,'android/app/build.gradle.kts'),'utf8').match(/versionName\s*=\s*"([^"]+)"/)?.[1];
 const run=mkdtempSync(path.join(cache,'run-')),client=androidClient({root,run}),origin='http://10.0.2.2:18765';
 const clip=readFileSync(path.join(root,'test/cache/release-1.5.2-ui/sintel-trailer.mp4')),sha256=createHash('sha256').update(clip).digest('hex'),etag='"aniverse-controlled-video-v1"';
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -56,7 +57,7 @@ async function cleanup(id){const record=await current(id);if(record){await clien
 try{
  await Promise.all([new Promise(resolve=>server.listen(18765,'127.0.0.1',resolve)),new Promise(resolve=>forbidden.listen(0,'127.0.0.1',resolve))]);
  client.adb('shell','pm','grant',client.appId,'android.permission.POST_NOTIFICATIONS');
- const attached=await client.connect();page=attached.page;page.on('pageerror',error=>pageErrors.push(error.message));nativeInfo=await client.native('native.info');assert.equal(nativeInfo.version,'0.1.0');
+ const attached=await client.connect();page=attached.page;page.on('pageerror',error=>pageErrors.push(error.message));nativeInfo=await client.native('native.info');assert.equal(nativeInfo.version,expectedVersion);
  const notice=page.getByRole('button',{name:'I understand · Start browsing',exact:true});if(await notice.count())await client.touch(notice);
  baseline=await client.native('offline.list');client.adb('shell','run-as',client.appId,'id');await client.nav('Downloads');await page.getByRole('heading',{name:'Downloads',exact:true}).waitFor();
  const title='Range fixture · episode 1 ['+path.basename(run)+']';plannedTitles.add(title);

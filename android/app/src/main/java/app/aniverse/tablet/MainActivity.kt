@@ -16,6 +16,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebViewAssetLoader
@@ -32,7 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity:Activity() {
     private lateinit var web:WebView
+    private var sourcePane: SourcePane? = null
     private lateinit var accounts:NativeAccounts
+    private lateinit var updater:AndroidUpdater
+    private val updateExecutor=ThreadPoolExecutor(1,1,30,TimeUnit.SECONDS,ArrayBlockingQueue(1))
     private lateinit var requests:NativeRequests
     private lateinit var policy:NetworkPolicy
     private val app get()=application as TabletApplication
@@ -49,16 +53,23 @@ class MainActivity:Activity() {
             notice("Update Android System WebView", "AniVerse requires origin-restricted messages and separate browser profiles. Update Android System WebView before opening sources.");return
         }
         policy=NetworkPolicy(if(BuildConfig.DEBUG)BuildConfig.TEST_ORIGIN else "")
-        accounts=NativeAccounts(this);requests=NativeRequests(policy,accounts)
+        accounts=NativeAccounts(this);requests=NativeRequests(policy,accounts);updater=AndroidUpdater(this)
                 WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         for(name in ProfileStore.getInstance().allProfileNames.filter{it.startsWith("private-")})runCatching{ProfileStore.getInstance().deleteProfile(name)}
         web=WebView(this)
-        setContentView(android.widget.FrameLayout(this).apply{setBackgroundColor(Color.rgb(12,9,16));keepSystemInsets();addView(web,android.widget.FrameLayout.LayoutParams(-1,-1))})
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.rgb(12,9,16))
+            keepSystemInsets()
+            addView(web, FrameLayout.LayoutParams(-1, -1))
+        }
+        sourcePane = SourcePane(this, root, web)
+        setContentView(root)
         web.setBackgroundColor(Color.rgb(12,9,16))
         web.settings.apply{javaScriptEnabled=true;domStorageEnabled=true;allowFileAccess=false;allowContentAccess=false;javaScriptCanOpenWindowsAutomatically=false;setSupportMultipleWindows(false);mixedContentMode=android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW;safeBrowsingEnabled=true;mediaPlaybackRequiresUserGesture=true}
         val loader=WebViewAssetLoader.Builder().addPathHandler("/assets/",WebViewAssetLoader.AssetsPathHandler(this)).addPathHandler("/thumbs/"){value->runCatching{val file=app.offline.thumbnail(value);if(file.exists())WebResourceResponse("image/jpeg","UTF-8",200,"OK",mapOf("Cache-Control" to "no-store"),file.inputStream()) else blocked()}.getOrElse{blocked()}}.build()
         web.webViewClient=object:WebViewClient(){
             override fun shouldOverrideUrlLoading(view:WebView,request:WebResourceRequest)=request.url.toString().substringBefore('#')!=APP_URL
+            override fun onPageStarted(view: WebView, url: String, icon: android.graphics.Bitmap?) { sourcePane?.close() }
             override fun shouldInterceptRequest(view:WebView,request:WebResourceRequest):WebResourceResponse? {
                 if(request.method !in setOf("GET","HEAD"))return blocked()
                 loader.shouldInterceptRequest(request.url)?.let{return it}
@@ -84,7 +95,7 @@ class MainActivity:Activity() {
                 dispatch(method,input,id,proxy)
             }catch(error:Exception){send(proxy,id,null,error,counted)}
         }
-        onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT){if(::web.isInitialized)web.evaluateJavascript("window.history.back()",null) else finish()}
+        onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT){if (sourcePane?.hideFullscreen() != true) { if (::web.isInitialized) web.evaluateJavascript("window.history.back()", null) else finish() }}
         web.loadUrl(APP_URL)
         onNewIntent(intent)
     }
@@ -103,7 +114,17 @@ class MainActivity:Activity() {
             "offline.import"->{val store=app.offline;choose("video/*",arrayOf("video/*")){uri->if(uri==null)reply(null) else importFile(reply,fail){operation->store.importVideo(uri,operation)}}}
             "offline.subtitle"->{val item=input.getString("id");val store=app.offline;choose("*/*",arrayOf("application/x-subrip","text/vtt","text/plain","application/octet-stream")){uri->if(uri==null)reply(null) else importFile(reply,fail){operation->store.importSubtitle(item,uri,operation)}}}
             "accounts.configure"->configure(input.optString("provider"),reply,fail)
-            else->try{(if(method=="api.request")networkExecutor else executor).execute{try{val result=handle(method,input);reply(result)}catch(error:Exception){fail(error)}}}catch(error:Exception){fail(error)}
+            "playback.open" -> openPlayback(input, reply, fail)
+            "playback.place" -> { sourcePane?.place(playbackSession(input), input); reply(true) }
+            "playback.close" -> { sourcePane?.close(playbackSession(input)); reply(true) }
+            "playback.action" -> { sourcePane?.action(playbackSession(input), input.getString("action")); reply(true) }
+            "privacy.set" -> {
+                val incognito = input.getBoolean("incognito")
+                if (app.incognito != incognito) sourcePane?.close()
+                app.incognito = incognito
+                reply(incognito)
+            }
+            else->try{(if(method.startsWith("updates."))updateExecutor else if(method=="api.request")networkExecutor else executor).execute{try{val result=handle(method,input);reply(result)}catch(error:Exception){fail(error)}}}catch(error:Exception){fail(error)}
         }
     }
     private fun importFile(reply:(Any?)->Unit,fail:(Exception)->Unit,work:(ImportOperation)->Any?){
@@ -134,15 +155,17 @@ class MainActivity:Activity() {
         "storage.load"->app.store.load()
         "storage.save"->{app.store.save(input.getJSONObject("value"));true}
         "api.request"->requests.request(input)
+        "updates.check"->updater.check()
+        "updates.install"->updater.install(input.getString("tag"))
         "privacy.state"->JSONObject().put("incognito",app.incognito)
-        "privacy.set"->{app.incognito=input.getBoolean("incognito");app.incognito}
         "sources.validate"->{val url=input.getString("url");require(policy.allow(url)){"Use a public HTTPS source website. Private, local and unsafe addresses are blocked."};JSONObject().put("url",url)}
-        "sources.open"->{
-            val sourceId=input.getString("id");require(sourceId.matches(Regex("[A-Za-z0-9_-]{1,200}")));val all=app.store.load().optJSONArray("sources") ?: JSONArray()
-            val source=(0 until all.length()).map{all.getJSONObject(it)}.firstOrNull{it.optString("id")==sourceId&&it.optBoolean("enabled",true)} ?: error("Source not found or disabled.")
-            require(policy.allow(source.getString("url"))){"This source URL is blocked. Use a public HTTPS website."}
-            val media=input.optJSONObject("media");val privateIds=app.store.load().optJSONArray("privateMediaIds") ?: JSONArray();val privateTitle=media!=null&&(0 until privateIds.length()).any{privateIds.optLong(it)==media.optLong("id")}
-            runOnUiThread{startActivity(Intent(this,SourceActivity::class.java).putExtra("source",source.toString()).putExtra("media",media?.toString()).putExtra("episode",input.optInt("episode",1).coerceIn(1,100000)).putExtra("private",app.incognito||privateTitle))};true
+        "sources.open" -> {
+            val source = enabledSource(input, app.store.load())
+            runOnUiThread {
+                if (!isDestroyed) startActivity(Intent(this, SourceActivity::class.java)
+                    .putExtra("source", source.toString()).putExtra("private", app.incognito))
+            }
+            true
         }
         "sources.clear"->{val sourceId=input.getString("id");require(sourceId.matches(Regex("[A-Za-z0-9_-]{1,200}")));val task=java.util.concurrent.FutureTask<Boolean>{val profiles=ProfileStore.getInstance();val name="source-"+sourceId;check(name !in profiles.allProfileNames||profiles.deleteProfile(name)){"Close this source browser before clearing its data."};getSharedPreferences("source-methods",MODE_PRIVATE).edit().remove(sourceId).apply();true};runOnUiThread(task);task.get(5,TimeUnit.SECONDS)}
         "offline.list"->app.offline.list()
@@ -163,10 +186,55 @@ class MainActivity:Activity() {
         "external.open"->{val url=input.getString("url");require(policy.allow(url));runOnUiThread{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))};true}
         else->error("Unknown native method.")
     }
+    private fun enabledSource(input: JSONObject, state: JSONObject): JSONObject {
+        val id = input.getString("id")
+        require(id.matches(Regex("[A-Za-z0-9_-]{1,200}")))
+        val sources = state.optJSONArray("sources") ?: JSONArray()
+        val source = (0 until sources.length()).asSequence().mapNotNull(sources::optJSONObject)
+            .firstOrNull { it.optString("id") == id && it.optBoolean("enabled", true) }
+            ?: error("Source not found or disabled.")
+        require(policy.allow(source.getString("url"))) { "This source URL is blocked. Use a public HTTPS website." }
+        return source
+    }
+
+    private fun playbackSession(input: JSONObject): String = input.getString("session").also {
+        require(it.matches(Regex("[A-Za-z0-9-]{1,64}")))
+    }
+
+    private fun openPlayback(input: JSONObject, reply: (Any?) -> Unit, fail: (Exception) -> Unit) {
+        val id = playbackSession(input)
+        val media = input.getJSONObject("media")
+        require(media.getLong("id") > 0)
+        val episode = input.getInt("episode").coerceIn(1, 100000)
+        val pane = checkNotNull(sourcePane)
+        pane.begin(id)
+        executor.execute {
+            try {
+                val state = app.store.load()
+                val source = enabledSource(input, state)
+                val privateIds = state.optJSONArray("privateMediaIds") ?: JSONArray()
+                val privateTitle = (0 until privateIds.length()).any { privateIds.optLong(it) == media.getLong("id") }
+                runOnUiThread {
+                    try {
+                        reply(pane.attach(id, source, media, episode, app.incognito || privateTitle))
+                    } catch (error: Exception) {
+                        pane.close(id)
+                        fail(error)
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread { pane.close(id); fail(error) }
+            }
+        }
+    }
+
+    override fun onPause() { sourcePane?.pause(); super.onPause() }
+    override fun onResume() { super.onResume(); sourcePane?.resume() }
+
     private fun notificationPermission(){if(checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),611)}
     override fun onNewIntent(intent:Intent){super.onNewIntent(intent);val route=intent.getStringExtra("route");if(route in setOf("/downloads","/local")&&::web.isInitialized)web.evaluateJavascript("location.hash="+JSONObject.quote("#"+route),null)}
     override fun onConfigurationChanged(configuration:Configuration){super.onConfigurationChanged(configuration)}
-    override fun onDestroy(){picker?.invoke(null);picker=null;for(operation in imports)operation.cancel();imports.clear();if(::web.isInitialized){web.stopLoading();web.destroy()};if(::policy.isInitialized)policy.close();executor.shutdownNow();networkExecutor.shutdownNow();super.onDestroy()}
+    override fun onDestroy(){sourcePane?.close();picker?.invoke(null);picker=null;for(operation in imports)operation.cancel();imports.clear();if(::web.isInitialized){web.stopLoading();web.destroy()};if(::policy.isInitialized)policy.close();if(::updater.isInitialized)updater.close();executor.shutdownNow();networkExecutor.shutdownNow();updateExecutor.shutdownNow();super.onDestroy()}
     companion object {
         private var current=java.lang.ref.WeakReference<MainActivity>(null)
         fun progress(media:JSONObject,episode:Int,sourceId:String,position:Double,duration:Double){

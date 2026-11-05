@@ -7,9 +7,14 @@ import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
 /** Metadata-only network guard; original website/media requests remain WebView-owned. */
-class NetworkPolicy(private val debugOrigin: String = "") {
-    private val dns = ThreadPoolExecutor(2, 4, 30, TimeUnit.SECONDS, ArrayBlockingQueue(32), ThreadPoolExecutor.AbortPolicy())
+class NetworkPolicy(
+    private val debugOrigin:String="",
+    private val resolve:(String)->Array<InetAddress> = InetAddress::getAllByName,
+    private val dns:java.util.concurrent.ExecutorService = ThreadPoolExecutor(2,4,30,TimeUnit.SECONDS,ArrayBlockingQueue(32),ThreadPoolExecutor.AbortPolicy()),
+    private val dnsTimeoutMillis:Long=3000
+) {
     private val cache = object : LinkedHashMap<String, Pair<Long,Boolean>>(128,.75f,true) { override fun removeEldestEntry(entry: MutableMap.MutableEntry<String,Pair<Long,Boolean>>) = size > 256 }
+    private val inFlight=HashMap<String,java.util.concurrent.Future<Boolean>>()
     fun validUrl(value: String): URI? = try {
         require(value.length <= 8192 && value.none { it.code < 32 })
         val uri=URI(value); val host=uri.host ?: error("Missing host")
@@ -22,11 +27,44 @@ class NetworkPolicy(private val debugOrigin: String = "") {
         val uri=validUrl(value) ?: return false
         if(debugOrigin.isNotEmpty() && origin(uri)==debugOrigin) return true
         val host=uri.host.removePrefix("[").removeSuffix("]").lowercase()
-        synchronized(cache){cache[host]?.let { if(System.currentTimeMillis()-it.first<60000) return it.second }}
-        val allowed=try { dns.submit<Boolean> { val addresses=InetAddress.getAllByName(host);addresses.isNotEmpty()&&addresses.all(::publicAddress) }.get(3,TimeUnit.SECONDS) } catch (_: Exception) { false }
-        synchronized(cache){cache[host]=System.currentTimeMillis() to allowed};return allowed
+        val lookup=synchronized(cache) {
+            cache[host]?.let { if(System.currentTimeMillis()-it.first<60000)return it.second }
+            // A cold page can request many resources from one host at once. Share the
+            // decision instead of filling the bounded resolver queue with duplicates.
+            inFlight[host] ?: try {
+                dns.submit<Boolean> {
+                    val addresses=resolve(host)
+                    addresses.isNotEmpty()&&addresses.all(::publicAddress)
+                }.also{inFlight[host]=it}
+            } catch(_:java.util.concurrent.RejectedExecutionException) {return false}
+        }
+        return try {
+            val allowed=lookup.get(dnsTimeoutMillis,TimeUnit.MILLISECONDS)
+            synchronized(cache) {
+                if(inFlight[host]===lookup) {
+                    cache[host]=System.currentTimeMillis() to allowed
+                    inFlight.remove(host)
+                }
+            }
+            allowed
+        } catch(error:Exception) {
+            synchronized(cache) {
+                if(inFlight[host]===lookup) {
+                    inFlight.remove(host)
+                    lookup.cancel(true)
+                    if(dns is ThreadPoolExecutor)(lookup as? Runnable)?.let{dns.remove(it)}
+                }
+            }
+            if(error is InterruptedException)Thread.currentThread().interrupt()
+            // Unresolved requests remain blocked. A timeout/admission/network failure
+            // is not a completed private-address classification and must be retryable.
+            false
+        }
     }
-    fun close() { dns.shutdownNow() }
+    fun close() {
+        synchronized(cache){inFlight.values.forEach{it.cancel(true)};inFlight.clear();cache.clear()}
+        dns.shutdownNow()
+    }
     companion object {
         fun origin(uri: URI): String = "${uri.scheme}://${uri.host}" + if(uri.port!=-1) ":${uri.port}" else ""
         fun publicAddress(address: InetAddress): Boolean {

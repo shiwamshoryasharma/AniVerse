@@ -22,7 +22,7 @@ class NativeRequests(private val policy: NetworkPolicy, private val accounts: Na
         val connection=URL(target).openConnection() as HttpURLConnection
         try {
             connection.instanceFollowRedirects=false;connection.connectTimeout=10000;connection.readTimeout=20000;connection.requestMethod=method
-            connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("Accept-Encoding","identity");connection.setRequestProperty("User-Agent","AniVerse-Android/0.1.0")
+            connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("Accept-Encoding","identity");connection.setRequestProperty("User-Agent","AniVerse-Android/"+BuildConfig.VERSION_NAME)
             if(authenticated)connection.setRequestProperty("Authorization","Bearer "+(accessTokenOverride ?: accounts.token(provider)))
             val contentType=input.optString("contentType","application/json");require(contentType in listOf("application/json","application/x-www-form-urlencoded"));connection.setRequestProperty("Content-Type",contentType)
             if(body.isNotEmpty()){connection.doOutput=true;connection.outputStream.use{it.write(body.toByteArray(Charsets.UTF_8))}}

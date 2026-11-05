@@ -43,7 +43,7 @@ class DownloadService:Service() {
             require(policy.allow(target)){"This download address is blocked by source protection."}
             val connection=URL(target).openConnection() as HttpURLConnection
             connection.instanceFollowRedirects=false;connection.connectTimeout=15000;connection.readTimeout=15000
-            connection.setRequestProperty("Accept-Encoding","identity");connection.setRequestProperty("User-Agent","AniVerse-Android/0.1.0")
+            connection.setRequestProperty("Accept-Encoding","identity");connection.setRequestProperty("User-Agent","AniVerse-Android/"+BuildConfig.VERSION_NAME)
             if(offset>0){connection.setRequestProperty("Range","bytes=$offset-");connection.setRequestProperty("If-Range",validator)}
             val status=connection.responseCode
             if(status in listOf(301,302,303,307,308)){

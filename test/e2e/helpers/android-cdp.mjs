@@ -27,7 +27,14 @@ export function androidClient({root,run,serial='emulator-5584',appId='app.aniver
   assert.ok(page,'Trusted application WebView is available');page.setDefaultTimeout(10000);await page.waitForFunction(()=>!!window.aniverse&&!!window.AniVerseNative);return {page,pid,socket,port};
  }
  async function touch(locator){await locator.scrollIntoViewIfNeeded();const box=await locator.boundingBox();assert.ok(box,'Tap target has visible geometry');const session=await locator.page().context().newCDPSession(locator.page());try{await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2,radiusX:1,radiusY:1,force:1}]});await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}finally{await session.detach();}}
- async function nav(name){const action=page.getByRole('navigation',{name:'Main',exact:true}).getByRole('link',{name,exact:true});assert.equal(await action.count(),1);await touch(action);}
+ async function nav(name){
+  let action=page.getByRole('navigation',{name:'Main',exact:true}).getByRole('link',{name,exact:true});
+  if(!await action.count()){
+    await touch(page.getByRole('navigation',{name:'Main',exact:true}).getByRole('button',{name:'More',exact:true}));
+    action=page.getByRole('dialog',{name:'More',exact:true}).getByRole('link',{name:new RegExp('^'+name+'(?:\\s|$)')});
+  }
+  assert.equal(await action.count(),1);await touch(action);
+ }
  const itemPath=(id,extension)=>{assert.match(id,/^[a-f0-9-]{36}$/);assert.ok(['part','video'].includes(extension));return 'files/offline/'+id+'.'+extension;};
  const fileSize=(id,extension)=>{try{return Number(adb('shell','run-as',appId,'stat','-c','%s',itemPath(id,extension)));}catch(error){if(error.status===1&&String(error.stdout??'').concat(String(error.stderr??'')).includes('No such file or directory'))return null;throw error;}};
  const fileHash=(id,extension)=>{const hash=adb('shell','run-as',appId,'sha256sum',itemPath(id,extension)).split(/\s+/)[0];assert.match(hash,/^[a-f0-9]{64}$/);return hash;};
