@@ -33,3 +33,11 @@ Version 2.1.0 replaces the incorrect session-hint catalogue filter with source-b
 Version 2.1.1 (2026-10-31) is the user-approved Explore/hover follow-up after 2.1.0 was already published. It adds an in-panel Audio selector and shared SUB/DUB hover badges. See status for final package/runtime evidence; keep the immutable 2.1.0 tag intact.
 
 Android tablet0.1.0 and Windows History2.2.1: use [Android memory](android.md) and [Android skill](../skills/aniverse-android/SKILL.md). These versions are independent; consult final validation/publication evidence.
+
+Current continuation: Android0.4.5 was published on2026-11-05 after explicit approval; android-v0.4.5 points to db8208d94b176bd817f7a5cc5abc6db6def9b0d6. Publication evidence: test/artifacts/android-0.4.5-publication.json in the original root. The user's subsequent requested fixes are being prepared as0.4.6 in test/cache/android-0.4.6/release-source; do not overwrite the already-published0.4.5 tag/assets. Verify0.4.6 signed-package and publication status from current release artifacts; dated fixture results alone do not establish deployment. New BlueStacks/DeX steering supersedes earlier600dp/tablet-only rejection policy; read latest Android memory.
+
+
+Latest0.4.6 preparation adds smaller floating full-canvas chrome, a hideable overlay rail, smooth hero cards, source-confirmed audio and native observed source/CDN request context. The user capped final execution at two focused runtime cases plus one signedAPKvalidation; earlier broad passes are pre-latest-feature baseline. Read Android memory and final release artifacts for current results/publication identity.
+
+
+The two authorized final0.4.6 runtime flows now pass the same current fixture APK; Android memory records their full hash and separate-run provenance. The one signedAPKvalidation and actual release artifact determine package/publication status.

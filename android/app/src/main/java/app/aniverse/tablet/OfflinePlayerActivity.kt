@@ -40,6 +40,7 @@ class OfflinePlayerActivity:Activity() {
     private lateinit var message:TextView
     private lateinit var itemId:String
     private lateinit var offline:OfflineStore
+    private var hls:OfflineHls?=null
     private var locked=false
     private var privatePlayback=false
     private val handler=Handler(Looper.getMainLooper())
@@ -66,8 +67,21 @@ class OfflinePlayerActivity:Activity() {
         root.keepSystemInsets();setContentView(root)
         try{
             val subtitles=offline.subtitle(itemId)?.let{file->listOf(MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file)).setMimeType(if(file.extension=="vtt")MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP).setLabel(file.name.substringAfterLast('.').uppercase()+" subtitles").setLanguage("und").setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build())} ?: emptyList()
-            val media=MediaItem.Builder().setUri(Uri.fromFile(offline.video(itemId))).setSubtitleConfigurations(subtitles).build()
-            player=ExoPlayer.Builder(this).setSeekBackIncrementMs(10000).setSeekForwardIncrementMs(10000).build().apply{
+            val manifest=offline.hlsMetadata(itemId)
+            val media=MediaItem.Builder().setSubtitleConfigurations(subtitles).apply{
+                if(manifest==null)setUri(Uri.fromFile(offline.video(itemId)))
+                else{
+                    hls=OfflineHls(this@OfflinePlayerActivity,offline.hlsDirectory(itemId))
+                    setUri(manifest.getString("url"));setMimeType(MimeTypes.APPLICATION_M3U8)
+                    val rows=manifest.optJSONArray("keys")
+                    setStreamKeys((0 until (rows?.length() ?: 0)).map{index->
+                        val key=rows!!.getJSONArray(index);androidx.media3.common.StreamKey(key.getInt(0),key.getInt(1))
+                    })
+                }
+            }.build()
+            val builder=ExoPlayer.Builder(this).setSeekBackIncrementMs(10000).setSeekForwardIncrementMs(10000)
+            hls?.let{builder.setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this).setDataSourceFactory(it.playback(offline.subtitle(itemId))))}
+            player=builder.build().apply{
                 setAudioAttributes(AudioAttributes.DEFAULT,true);setHandleAudioBecomingNoisy(true);setMediaItem(media)
                 addListener(object:Player.Listener{
                     override fun onPlayerError(error:androidx.media3.common.PlaybackException){show("This device could not play this file. Try another supported video or audio format.",false)}
@@ -110,5 +124,5 @@ class OfflinePlayerActivity:Activity() {
     private fun save(){if(!privatePlayback)player?.let{offline.savePosition(itemId,it.currentPosition,it.duration.coerceAtLeast(0))}}
     override fun onPictureInPictureModeChanged(inPictureInPictureMode:Boolean,newConfig:Configuration){super.onPictureInPictureModeChanged(inPictureInPictureMode,newConfig);header.visibility=if(inPictureInPictureMode)View.GONE else View.VISIBLE;lock.visibility=if(inPictureInPictureMode)View.GONE else View.VISIBLE;playerView.useController=!inPictureInPictureMode&&!locked}
     override fun onStop(){save();if(!isInPictureInPictureMode)player?.pause();super.onStop()}
-    override fun onDestroy(){handler.removeCallbacksAndMessages(null);save();player?.release();player=null;window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);super.onDestroy()}
+    override fun onDestroy(){handler.removeCallbacksAndMessages(null);save();player?.release();player=null;hls?.close();hls=null;window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);super.onDestroy()}
 }

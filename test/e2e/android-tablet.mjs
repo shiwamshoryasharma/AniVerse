@@ -10,7 +10,10 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {chromium} from 'playwright-core';
+import {touchAndroidTarget} from './helpers/android-touch.mjs';
 
+const uiCase=process.argv.find(value=>value.startsWith('--case='))?.slice(7);
+if(uiCase&&!['context','resize'].includes(uiCase))throw Error('Supported focused cases: --case=context or --case=resize');
 if(!process.argv.includes('--run')){console.log('Prepared only. Run with --run after the owned Android debug app is installed.');process.exit(0);}
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const expectedVersion=readFileSync(path.join(root,'android/app/build.gradle.kts'),'utf8').match(/versionName\s*=\s*"([^"]+)"/)?.[1];assert.ok(expectedVersion,'Android Gradle version is declared');
@@ -25,11 +28,11 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const clip=readFileSync(path.join(root,'test/cache/release-1.5.2-ui/sintel-trailer.mp4'));
 const poster='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="340"><rect width="240" height="340" fill="#302342"/><circle cx="120" cy="130" r="65" fill="#9b6a35"/><path d="M30 280L120 170L210 280Z" fill="#7355a3"/></svg>').toString('base64');
 const original=JSON.parse(readFileSync(path.join(root,'test/fixtures/anilist-home.json'),'utf8')).data.trending.media[0];
-const raw=(id,name)=>({...original,id,idMal:null,title:{english:name,romaji:name,native:null,userPreferred:name},synonyms:[],coverImage:{extraLarge:poster,large:poster,color:'#7c5faf'},bannerImage:null,status:'FINISHED',episodes:12,duration:24,genres:['Adventure','Fantasy'],isAdult:false,nextAiringEpisode:null,streamingEpisodes:[],externalLinks:[],relations:{edges:[]},recommendations:{nodes:[]},characters:{edges:[]},studios:{nodes:[]},tags:[]});
+const raw=(id,name)=>({...original,id,idMal:null,title:{english:name,romaji:name,native:null,userPreferred:name},synonyms:[],coverImage:{extraLarge:poster,large:poster,color:'#7c5faf'},bannerImage:poster,status:'FINISHED',episodes:12,duration:24,genres:['Adventure','Fantasy'],isAdult:false,nextAiringEpisode:null,streamingEpisodes:[],externalLinks:[],relations:{edges:[]},recommendations:{nodes:[]},characters:{edges:[]},studios:{nodes:[]},tags:[]});
 const rawTitles=[raw(7,'Arcadia Story'),raw(8,'Clockwork Road'),raw(9,'Local Journey')];
 const graphData=id=>({Media:rawTitles.find(row=>row.id===id)??rawTitles[0],GenreCollection:['Action','Adventure','Ecchi','Fantasy','Mecha','Sci-Fi'],MediaTagCollection:[{name:'Isekai',isAdult:false},{name:'Female Harem',isAdult:false}],Page:{media:rawTitles,pageInfo:{currentPage:1,total:3,hasNextPage:false},airingSchedules:[]},trending:{media:rawTitles},spotlight:{media:rawTitles},popularSeason:{media:rawTitles},upcoming:{media:[]},topRated:{media:rawTitles},recent:{airingSchedules:[]}});
 const requests=[],checks=[],errors=[],pageErrors=[],connections=[],forwarded=[];
-let forbiddenRequests=0,browser,page,sourcePage,nativeInfo,installedApkSHA256;
+let forbiddenRequests=0,browser,page,sourcePage,nativeInfo,installedApkSHA256,resizeContinuity,contextMenuEvidence;
 const forbidden=createServer((_req,res)=>{forbiddenRequests++;res.writeHead(200,{'Access-Control-Allow-Origin':'*'});res.end('Unexpected private-network transmission');});
 const sourceHTML=(current=1,clickEpisodes=false,delayedSearch=false)=>'<!doctype html><html><head><meta charset="utf-8"><title>Arcadia Story · Fixture browser</title><style nonce="fixture-player">body{margin:0;background:#14101c;color:#f7f1eb;font:18px sans-serif;padding:18px}video{display:block;width:min(75vw,960px);aspect-ratio:16/9;height:auto;background:black}button,a,input{font:18px sans-serif;padding:12px;margin:6px;color:inherit;background:#382747;border:1px solid #79559a;border-radius:8px}input{background:#22172d}a{display:inline-block}</style></head><body><h1>Arcadia Story</h1>'+(delayedSearch?'<button class="search-trigger" onclick="clearTimeout(window.pendingSearch);window.pendingSearch=setTimeout(()=>{document.querySelector(\'form\').hidden=false},650)">Search anime</button>':'')+'<form action="/search" '+(delayedSearch?'hidden':'')+'><input aria-label="Search source" name="q" type="search" placeholder="Search source"><button>Search</button></form><a href="/series/arcadia-story">Arcadia Story</a><div class="episodes">'+[1,2,3].map(n=>clickEpisodes?'<button data-episode="'+n+'" onclick="location.href=&quot;/watch/arcadia-story/'+n+'&quot;">Episode '+n+'</button>':'<a href="/watch/arcadia-story/'+n+'" data-episode="'+n+'">Episode '+n+'</a>').join('')+'</div><video id="fixture-video" controls muted playsinline loop preload="auto" src="/video.mp4"></video><button id="play-fixture">Play fixture</button><button id="quality">Switch quality</button><a id="next" href="/watch/arcadia-story/'+(current+1)+'">Next episode</a><script>const v=document.getElementById("fixture-video");window.fixtureOriginalVideo=v;document.getElementById("play-fixture").onclick=()=>v.play();document.getElementById("quality").onclick=()=>{v.src="/video.mp4?quality=low";v.play();};</script></body></html>';
 const server=createServer(async(req,res)=>{
@@ -59,12 +62,8 @@ const native=(target,method,input,timeout=12000)=>target.evaluate(({method,input
  bridge.onmessage=receive;try{bridge.postMessage(JSON.stringify({id,method,input}));}catch(error){clearTimeout(timer);restore();reject(error);}
 }),{method,input,timeout});
 const rpc=(method,input)=>page.evaluate(({method,input})=>window.aniverse.invoke(method,input),{method,input});
-const touch=async locator=>{
- await locator.scrollIntoViewIfNeeded();const box=await locator.boundingBox();assert.ok(box,'Tap target has a real visible rectangle');
- const session=await locator.page().context().newCDPSession(locator.page());
- try{await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2,radiusX:1,radiusY:1,force:1}]});await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}finally{await session.detach();}
-};
-const test=async(name,body)=>{try{const result=await body();checks.push({name,passed:true,...(result===undefined?{}:{actual:result})});console.log('[PASS] '+name);}catch(error){checks.push({name,passed:false,error:String(error.stack||error)});errors.push(name+': '+error.message);console.error('[FAIL] '+name+': '+error.message);await (sourcePage&&!sourcePage.isClosed()?sourcePage:page)?.screenshot({path:path.join(artifacts,'android-tablet-failure-'+checks.length+'.png')}).catch(()=>{});}};
+const touch=touchAndroidTarget;
+const test=async(name,body)=>{if(uiCase==='context'&&!name.startsWith('Touch context menu'))return;if(uiCase==='resize'&&!name.startsWith('Active playback survives'))return;if(!uiCase&&name.startsWith('Active playback survives')&&!process.argv.includes('--resize-continuity'))return;try{const result=await body();checks.push({name,passed:true,...(result===undefined?{}:{actual:result})});console.log('[PASS] '+name);}catch(error){if(name.startsWith('Touch context menu')&&contextMenuEvidence){Object.assign(contextMenuEvidence,{status:'failed',error:String(error.stack||error)});writeFileSync(path.join(artifacts,'android-context-progress.json'),JSON.stringify(contextMenuEvidence,null,2));}if(name.startsWith('Active playback survives')&&resizeContinuity){Object.assign(resizeContinuity,{status:'failed',error:String(error.stack||error)});writeFileSync(path.join(artifacts,'android-resize-progress.json'),JSON.stringify(resizeContinuity,null,2));}checks.push({name,passed:false,error:String(error.stack||error)});errors.push(name+': '+error.message);console.error('[FAIL] '+name+': '+error.message);await (sourcePage&&!sourcePage.isClosed()?sourcePage:page)?.screenshot({path:path.join(artifacts,'android-tablet-'+(uiCase?uiCase+'-':'')+'failure-'+checks.length+'.png')}).catch(()=>{});}};
 async function attach(){
  adb('shell','am','start','-n',appId+'/app.aniverse.tablet.MainActivity');
  let pid,socket;
@@ -121,7 +120,7 @@ try{
  const makeSource=id=>({id,name:id==='tablet-fixture'?'Fixture library':'Second fixture profile',url:fixtureOrigin+'/source?profile='+encodeURIComponent(id),host:'10.0.2.2',kind:'web',enabled:true,order:0,adblock:false,autoCloudflare:false,searchTemplate:fixtureOrigin+'/search?q={query}',searchTemplateSource:'user',searchCheckedAt:now,capabilities:{search:true,streams:false,episodes:false,session:true},partition:'tablet-source-'+id,line:1});
  const formSource={...makeSource('tablet-form-'+Date.now()),name:'Form search fixture',url:fixtureOrigin+'/source?profile=delayed&delayed=1',searchTemplate:null,searchTemplateSource:null};
  const saved={noticeAccepted:true,settings:{...DEFAULT_SETTINGS_FALLBACK,appearance:{...DEFAULT_SETTINGS_FALLBACK.appearance,spoilerShield:false},player:{...DEFAULT_SETTINGS_FALLBACK.player,autoplay:false},updates:{autoCheck:false,autoDownload:false}},library:library.exportData(),sources:[makeSource('tablet-fixture'),makeSource('tablet-fixture-two'),formSource],privateMediaIds:[]};
- await native(page,'storage.save',{value:saved});await page.reload();await page.waitForFunction(()=>!!window.aniverse);
+ await native(page,'storage.save',{value:saved});await page.reload({waitUntil:'domcontentloaded',timeout:25000});await page.waitForFunction(()=>!!window.aniverse&&!!document.querySelector('.tablet-app'),{},{timeout:25000});
 
  // UI checks are completed against the actual Android shell once its source/build is ready.
  await test('Android app opens a landscape tablet viewport with touch navigation',async()=>{
@@ -157,8 +156,21 @@ try{
    const choice=page.getByRole('combobox',{name:'Glass appearance',exact:true});await touch(choice);await touch(page.getByRole('option',{name:label,exact:true}));
    await page.waitForFunction(mode=>document.documentElement.dataset.tabletSurface===mode,mode);
    await page.reload();await page.waitForFunction(mode=>document.documentElement.dataset.tabletSurface===mode,mode);
-   assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),mode);
+   assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),mode);await page.screenshot({path:path.join(artifacts,'android-tablet-surface-'+mode+'.png')});
   }
+  const colourInfo=await native(page,'native.info');
+  const system=page.getByRole('checkbox',{name:'Use Android colours',exact:true});
+  if(!await system.isChecked())await touch(system.locator('..'));
+  await page.waitForFunction(accent=>getComputedStyle(document.documentElement).getPropertyValue('--accent').trim().toLowerCase()===accent.toLowerCase(),colourInfo.systemAccentLight);
+  for(const [preset,colour]of [['ember','rgb(255, 122, 26)'],['festival','rgb(255, 156, 66)']]){
+   const swatch=page.locator('.tablet-colour[data-accent='+preset+'] > span');
+   assert.equal(await swatch.evaluate(element=>getComputedStyle(element).backgroundColor),colour,'Named palette preview stays accurate while Android colours are enabled');
+  }
+  await touch(page.getByRole('button',{name:'festival',exact:true}));
+  await page.waitForFunction(()=>document.documentElement.dataset.accent==='festival');
+  assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),'light','Festival cannot override Light glass');
+  assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()),'#eaf0fa');
+  await touch(system.locator('..'));await page.waitForFunction(accent=>getComputedStyle(document.documentElement).getPropertyValue('--accent').trim().toLowerCase()===accent.toLowerCase(),colourInfo.systemAccentLight);
   await page.emulateMedia({reducedMotion:'no-preference'});
   const reduced=page.getByRole('checkbox',{name:'Reduce animations',exact:true});
   if(await reduced.isChecked())await touch(reduced.locator('..'));
@@ -179,6 +191,17 @@ try{
    await page.waitForFunction(mode=>document.querySelector('.tablet-app')?.getAttribute('data-navigation')===mode,mode);
    await page.reload();await page.waitForFunction(mode=>document.querySelector('.tablet-app')?.getAttribute('data-navigation')===mode,mode);
    assert.equal(await page.getByRole('navigation',{name:'Main',exact:true}).getByRole('link').count(),4);
+   const chrome=await page.evaluate(()=>{
+    const rect=element=>{const r=element.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+    const main=rect(document.querySelector('.tablet-main')),search=rect(document.querySelector('.tablet-search-dock')),nav=rect(document.querySelector('.tablet-nav'));
+    return {main,search,nav,logo:rect(document.querySelector('.tablet-brand')),profile:rect(document.querySelector('.tablet-profile-pill')),header:getComputedStyle(document.querySelector('.tablet-topbar')).backgroundColor,glass:[...document.querySelectorAll('.tablet-brand,.tablet-profile-pill,.tablet-nav,.tablet-search-dock .tablet-search')].map(element=>({blur:getComputedStyle(element).backdropFilter,background:getComputedStyle(element).backgroundImage})),viewport:{width:innerWidth,height:innerHeight}};
+   });
+   assert.equal(chrome.header,'rgba(0, 0, 0, 0)','There is no painted full-width app bar');
+   assert.ok(chrome.logo.width<=60&&chrome.profile.right>chrome.viewport.width-40&&chrome.profile.width<300,'Logo and account controls are separate floating groups');
+   assert.ok(chrome.search.width>=320&&chrome.search.width<=362&&chrome.main.bottom<=chrome.search.top-4,'Bottom search has a reserved safe gutter');
+   if(mode==='tabs')assert.ok(chrome.search.bottom<=chrome.nav.top-4&&chrome.nav.width<=chrome.viewport.width*.73,'Search floats above a proportionate bottom capsule');
+   else assert.ok(chrome.nav.width>=84&&chrome.nav.width<=96&&chrome.nav.right<=chrome.main.left,'Vertical capsule retains the main canvas');
+   for(const surface of chrome.glass)assert.ok(surface.blur.includes('blur(24px)')&&surface.blur.includes('saturate(1.3)'),'Floating chrome has actual bounded backdrop frosting: '+JSON.stringify(surface));
    const floating=await page.getByRole('navigation',{name:'Main',exact:true}).evaluate(element=>{const rect=element.getBoundingClientRect(),main=document.querySelector('.tablet-main').getBoundingClientRect(),style=getComputedStyle(element);return {left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom,width:innerWidth,height:innerHeight,radius:parseFloat(style.borderRadius),gap:document.querySelector('.tablet-app').dataset.navigation==='rail'?main.left-rect.right:rect.top-main.bottom};});
    assert.ok(floating.left>=8&&floating.top>=8&&floating.right<=floating.width-8&&floating.bottom<=floating.height-8,'Navigation capsule floats away from every viewport edge');
    assert.ok(floating.radius>=28&&floating.gap>=6,'Floating capsule has rounded corners and a separate content gutter');
@@ -186,6 +209,7 @@ try{
    for(const [name,route]of [['Home','/'],['Browse','/browse'],['Library','/library'],['Sources','/sources'],['Local watch','/local'],['Downloads','/downloads'],['History','/history'],['Schedule','/schedule'],['Settings','/settings']]){
     await nav(name);await page.waitForFunction(route=>location.hash.split('?')[0]==='#'+route,route);
     assert.equal(await page.getByRole('dialog',{name:'More',exact:true}).count(),0);
+    if(name==='Home'){await page.locator('.hero-thumbs .hero-thumb').first().waitFor();await page.screenshot({path:path.join(artifacts,'android-tablet-home-'+mode+'.png')});}
    }
    const more=page.getByRole('navigation',{name:'Main',exact:true}).getByRole('button',{name:'More',exact:true});
    assert.equal(await more.getAttribute('class').then(value=>value.includes('active')),true);
@@ -194,6 +218,107 @@ try{
    assert.equal(await more.evaluate(element=>document.activeElement===element),true);
    await page.screenshot({path:path.join(artifacts,'android-tablet-navigation-'+mode+'.png')});
   }
+ });
+ await test('Pull-to-refresh arms only on a long vertical pull at the main scroll origin',async()=>{
+  await nav('Settings');
+  const saved=await native(page,'storage.load'),expires=Date.now()+600000;
+  saved.metadata??={};saved.metadata['pull-refresh-probe']={value:null,expires,at:Date.now()};
+  await native(page,'storage.save',{value:saved});await page.reload();await page.waitForSelector('.tablet-settings');
+  await page.locator('.tablet-main').evaluate(element=>element.scrollTo({top:0}));
+  const main=await page.locator('.tablet-main').boundingBox();assert.ok(main);
+  const gesture=async(dx,dy)=>{
+   const session=await page.context().newCDPSession(page),x=main.x+44,y=main.y+25;
+   try{
+    await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+    for(let i=1;i<=8;i++){await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*i/8,y:y+dy*i/8}]});await delay(18);}
+    await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+   }finally{await session.detach();}
+  };
+  await gesture(130,45);await delay(100);assert.equal((await native(page,'storage.load')).metadata['pull-refresh-probe'].expires,expires,'Horizontal intent must not refresh');
+  await gesture(0,65);await delay(100);assert.equal((await native(page,'storage.load')).metadata['pull-refresh-probe'].expires,expires,'A short pull must not refresh');
+  await gesture(0,165);
+  let refreshed=false;for(const end=Date.now()+5000;Date.now()<end;){if((await native(page,'storage.load')).metadata['pull-refresh-probe'].expires===0){refreshed=true;break;}await delay(100);}
+  assert.ok(refreshed,'A released armed gesture reaches the real metadata invalidation path');
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).count(),1,'Manual refresh remains available next to search');
+ });
+ await test('Touch context menu stays above the dock without a hover tooltip and remains scrollable',async()=>{
+  await nav('Home');await page.locator('.tablet-main[aria-busy=false]').waitFor();
+  await page.waitForFunction(()=>!document.querySelector('.hero.skeleton')&&!document.querySelector('.latest-episodes .skeleton')&&[...document.querySelectorAll('section.section')].some(section=>section.querySelector('h2')?.textContent.trim()==='Continue watching'&&section.querySelector('.mcard[role=link]')),{},{timeout:20000});
+  const token='context-'+Date.now(),attempts=[];let target,previous,stableSince=0;
+  contextMenuEvidence={status:'finding-stable-card',installedApkSHA256,attempts};
+  for(const until=Date.now()+12000;Date.now()<until;){
+   const actual=await page.evaluate(token=>{
+    const main=document.querySelector('.tablet-main'),clip=main.getBoundingClientRect();
+    const rect=element=>{const r=element.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+    const section=[...main.querySelectorAll('section.section')].find(element=>element.querySelector('h2')?.textContent.trim()==='Continue watching');
+    const candidates=[...new Set([...(section?.querySelectorAll('.mcard[role=link]')??[]),...main.querySelectorAll('.mcard[role=link]')])];
+    const diagnostics=candidates.slice(0,8).map(card=>({title:card.querySelector('.mcard-title')?.textContent.trim(),bounds:rect(card)}));
+    const card=candidates.find(card=>getComputedStyle(card).display!=='none'&&card.getBoundingClientRect().width>48);
+    if(!card)return {ready:false,reason:'No current media card',scrollTop:main.scrollTop,clip:rect(main),cards:diagnostics};
+    const poster=card.querySelector('.mcard-poster')??card,r=poster.getBoundingClientRect(),track=card.closest('.rail-track')?.getBoundingClientRect();
+    const left=Math.max(r.left,clip.left,track?.left??clip.left),right=Math.min(r.right,clip.right,track?.right??clip.right);
+    const top=Math.max(r.top,clip.top),bottom=Math.min(r.bottom,clip.bottom);
+    if(right-left>=50&&bottom-top>=50){
+     const x=(left+right)/2,y=Math.min(bottom-25,Math.max(top+25,r.top+40));
+     if(document.elementFromPoint(x,y)?.closest('.mcard')===card){
+      card.setAttribute('data-context-target',token);
+      card.__contextIdentity??=crypto.randomUUID();
+      return {ready:true,identity:card.__contextIdentity,x,y,scrollTop:main.scrollTop,scrollLeft:card.closest('.rail-track')?.scrollLeft??0,clip:rect(main),card:rect(card),poster:rect(poster),title:card.querySelector('.mcard-title')?.textContent.trim()};
+     }
+    }
+    main.scrollTo({top:main.scrollTop+r.top-clip.top-Math.max(30,(clip.height-Math.min(r.height,clip.height-40))/2),behavior:'instant'});
+    if(track&&(r.right<=track.left||r.left>=track.right))card.scrollIntoView({block:'nearest',inline:'center',behavior:'instant'});
+    return {ready:false,reason:'Bringing current card into the main clip',scrollTop:main.scrollTop,clip:rect(main),cards:diagnostics};
+   },token);
+   attempts.push(actual);if(attempts.length>10)attempts.shift();
+   if(actual.ready){
+    const current=await page.evaluate(({token,x,y})=>document.querySelector('[data-context-target="'+token+'"]')===document.elementFromPoint(x,y)?.closest('.mcard'),{token,x:actual.x,y:actual.y});
+    const stable=current&&previous?.identity===actual.identity&&['x','y','scrollTop','scrollLeft'].every(key=>Math.abs(previous[key]-actual[key])<.5)&&['left','top','right','bottom'].every(key=>Math.abs(previous.card[key]-actual.card[key])<.5);
+    if(!stable)stableSince=Date.now();
+    if(stable&&Date.now()-stableSince>=200){target={...actual,stableMilliseconds:Date.now()-stableSince};break;}
+    previous=current?actual:undefined;
+   }else{previous=undefined;stableSince=0;}
+   await delay(50);
+  }
+  assert.ok(target,'No stable card touch point inside the main clip: '+JSON.stringify(attempts));
+  assert.ok(target.x>=target.clip.left+24&&target.x<=target.clip.right-24&&target.y>=target.clip.top+24&&target.y<=target.clip.bottom-24,'Long press stays at least24px inside the main canvas: '+JSON.stringify(target));
+  contextMenuEvidence={...contextMenuEvidence,status:'holding',target};
+  writeFileSync(path.join(artifacts,'android-context-progress.json'),JSON.stringify(contextMenuEvidence,null,2));
+  const session=await page.context().newCDPSession(page);
+  await page.evaluate(({token,x,y})=>{
+   const card=document.querySelector('[data-context-target="'+token+'"]'),main=document.querySelector('.tablet-main');
+   if(document.elementFromPoint(x,y)?.closest('.mcard')!==card)throw Error('Stable long-press target changed before touchStart');
+   window.__contextTrace=[];
+   const log=event=>{const target=event.target instanceof Element?event.target:null;window.__contextTrace.push({type:event.type,time:performance.now(),trusted:event.isTrusted,pointerType:event.pointerType,primary:event.isPrimary,button:event.button,x:event.clientX,y:event.clientY,target:target?.tagName+' '+target?.className,cardIdentity:target?.closest('.mcard')?.__contextIdentity,scrollTop:main.scrollTop,hash:location.hash});};
+   window.__contextTraceListener=log;
+   for(const type of ['pointerdown','pointerup','pointercancel','pointermove','touchstart','touchend','touchcancel','contextmenu','click','scroll'])addEventListener(type,log,true);
+  },{token,x:target.x,y:target.y});
+  try{
+   await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:target.x,y:target.y}]});
+   await delay(750);await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await delay(120);
+  }finally{
+   await session.detach();
+   const actual=await page.evaluate(()=>{
+    const trace=window.__contextTrace??[];
+    for(const type of ['pointerdown','pointerup','pointercancel','pointermove','touchstart','touchend','touchcancel','contextmenu','click','scroll'])removeEventListener(type,window.__contextTraceListener,true);
+    delete window.__contextTraceListener;
+    return {trace,hash:location.hash,menuVisible:!!document.querySelector('.ctx-menu')};
+   });
+   contextMenuEvidence={...contextMenuEvidence,status:'released',...actual};
+   writeFileSync(path.join(artifacts,'android-context-progress.json'),JSON.stringify(contextMenuEvidence,null,2));
+  }
+  const down=contextMenuEvidence.trace.find(event=>event.type==='pointerdown'),up=contextMenuEvidence.trace.find(event=>event.type==='touchend');
+  assert.ok(down?.pointerType==='touch'&&down.primary&&down.cardIdentity===target.identity,'Real primary touch reaches the stable media card: '+JSON.stringify(contextMenuEvidence));
+  assert.ok(up&&up.time-down.time>=700,'Hold input remains pressed for at least700ms: '+JSON.stringify(contextMenuEvidence));
+  assert.ok(!contextMenuEvidence.trace.some(event=>event.type==='scroll'&&event.time>=down.time&&event.time<=up.time),'No setup scroll continues during the long press: '+JSON.stringify(contextMenuEvidence));
+  const menu=page.getByRole('menu');await menu.waitFor();
+  await page.waitForFunction(()=>{const m=document.querySelector('.ctx-menu').getBoundingClientRect(),r=document.querySelector('.tablet-main').getBoundingClientRect();return m.top>=r.top&&m.bottom<=r.bottom+1;});
+  const geometry=await menu.evaluate(element=>{const r=element.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height,scrollHeight:element.scrollHeight,items:[...element.querySelectorAll('.ctx-item')].map(item=>item.getBoundingClientRect().height)};});
+  assert.ok(geometry.items.every(height=>height>=48),'Context actions retain tablet touch targets');
+  assert.equal(await page.locator('.hovercard:visible').count(),0,'Automatic hover previews stay hidden during touch menus');
+  await menu.evaluate(element=>{element.scrollTop=element.scrollHeight;});await delay(100);assert.equal(await menu.isVisible(),true,'Scrolling inside the menu must not trigger its outside-scroll dismissal');
+  await touch(menu.getByRole('menuitem',{name:'Settings',exact:true}));await page.waitForSelector('.tablet-settings');
+  contextMenuEvidence.status='passed';writeFileSync(path.join(artifacts,'android-context-progress.json'),JSON.stringify(contextMenuEvidence,null,2));return {target,geometry,trace:contextMenuEvidence.trace};
  });
  await test('Sources screen presents the configured browser source',async()=>{
   await nav('Sources');await page.getByText('Fixture library',{exact:true}).waitFor();await page.screenshot({path:path.join(artifacts,'android-tablet-sources.png')});
@@ -237,6 +362,65 @@ try{
    sourcePage=undefined;
   }
  });
+ await test('Active playback survives compact, medium, large and portrait window changes',async()=>{
+  const progress=(phase,values={})=>{resizeContinuity={...resizeContinuity,phase,...values};writeFileSync(path.join(artifacts,'android-resize-progress.json'),JSON.stringify(resizeContinuity,null,2));console.log('[RESIZE phase] '+phase);};
+  progress('settings-navigation',{status:'running',serial,appId,installedApkSHA256,startedAt:new Date().toISOString(),samples:[]});
+  await nav('Settings');await page.waitForFunction(()=>location.hash.startsWith('#/settings'));await page.waitForSelector('.tablet-settings');progress('choose-navigation');const layout=page.getByRole('combobox',{name:'Navigation layout',exact:true});await touch(layout);await touch(page.getByRole('option',{name:'Navigation rail',exact:true}));
+  const beforeSize=adb('shell','wm','size').match(/Override size:\s*(\d+x\d+)/)?.[1],beforeDensity=adb('shell','wm','density').match(/Override density:\s*(\d+)/)?.[1];
+  const rotation=adb('shell','settings','get','system','user_rotation'),autoRotate=adb('shell','settings','get','system','accelerometer_rotation');
+  const marker='resize-'+Date.now(),pid=adb('shell','pidof',appId).split(/\s+/)[0],samples=[];
+  let activeSession,primaryError;const cleanupErrors=[];
+  progress('open-player',{pid,marker,samples,previousDisplay:{size:beforeSize,density:beforeDensity,rotation,autoRotate}});
+  try{
+   await page.evaluate(marker=>{window.__resizeMainMarker=marker;window.__resizeSessions=[];window.__resizeListener=event=>{if(event.detail?.session&&!window.__resizeSessions.includes(event.detail.session))window.__resizeSessions.push(event.detail.session);};addEventListener('tablet-playback',window.__resizeListener);location.hash='#/watch/7/2?source=tablet-fixture';},marker);
+   await page.waitForSelector('.tablet-player-slot[data-player-state=ready]',{timeout:30000});sourcePage=await sourceTarget();
+   progress('start-website-video');
+   await sourcePage.evaluate(marker=>{window.__resizeSourceMarker=marker;const v=document.querySelector('video');v.muted=true;},marker);
+   if(await sourcePage.locator('video').evaluate(video=>video.paused))await touch(sourcePage.locator('video'));
+   await sourcePage.waitForFunction(()=>{const v=document.querySelector('video');return v&&!v.paused&&v.currentTime>.1&&v.videoWidth>0;});
+   const session=await page.evaluate(()=>window.__resizeSessions[0]);assert.match(session,/^[a-f0-9-]{36}$/);activeSession=session;progress('playing',{session});console.log('[RESIZE] active session '+session+' pid '+pid);
+   let frames=await sourcePage.locator('video').evaluate(video=>video.getVideoPlaybackQuality?.().totalVideoFrames??video.webkitDecodedFrameCount??0);
+   const profiles=[{id:'compact',width:1200,height:912,density:320},{id:'medium',width:1600,height:1312,density:320},{id:'large',width:2560,height:1712,density:320},{id:'portrait',width:840,height:1632,density:320}];
+   adb('shell','settings','put','system','accelerometer_rotation','0');adb('shell','settings','put','system','user_rotation','0');
+   for(const profile of profiles){
+    progress('profile:'+profile.id+':applying',{currentProfile:profile});console.log('[RESIZE] applying '+profile.id);
+    adb('shell','wm','size',profile.width+'x'+profile.height);adb('shell','wm','density',String(profile.density));await delay(900);
+    assert.equal(adb('shell','pidof',appId).split(/\s+/)[0],pid,'Window change retains the application process');
+    assert.equal(await page.evaluate(()=>window.__resizeMainMarker),marker,'Trusted WebView is not reloaded');
+    assert.equal(await sourcePage.evaluate(()=>window.__resizeSourceMarker),marker,'Source WebView is not recreated');
+    assert.equal(await sourcePage.evaluate(()=>document.querySelector('video')===window.fixtureOriginalVideo),true);
+    const actual=await page.evaluate(()=>{
+     const main=document.querySelector('.tablet-main').getBoundingClientRect(),slot=document.querySelector('.tablet-player-slot').getBoundingClientRect(),app=document.querySelector('.tablet-app');
+     return {width:innerWidth,height:innerHeight,navigation:app.dataset.navigation,preference:app.dataset.navigationPreference,sessions:window.__resizeSessions,overflow:document.documentElement.scrollWidth-innerWidth,clipHeight:Math.min(main.bottom,slot.bottom)-Math.max(main.top,slot.top)};
+    });
+    samples.push({requested:profile,...actual});progress('profile:'+profile.id+':measured');
+    assert.equal(actual.navigation,actual.width<600?'tabs':'rail','Compact window adapts navigation without changing the preference');assert.equal(actual.preference,'rail');assert.deepEqual(actual.sessions,[session]);
+    assert.ok(actual.overflow<=1&&actual.clipHeight>20,'Player retains a visible main-canvas clip: '+JSON.stringify(actual));
+    await delay(500);
+    const video=await sourcePage.locator('video').evaluate(video=>({time:video.currentTime,paused:video.paused,frames:video.getVideoPlaybackQuality?.().totalVideoFrames??video.webkitDecodedFrameCount??0}));
+    assert.ok(!video.paused&&video.frames>frames,'Decoded playback continues after resize: '+JSON.stringify({profile,video,frames}));frames=video.frames;
+    Object.assign(samples.at(-1),{video});progress('profile:'+profile.id+':passed');console.log('[RESIZE] passed '+profile.id+' '+actual.width+'x'+actual.height);await page.screenshot({path:path.join(artifacts,'android-resize-'+profile.id+'.png')});
+   }
+   assert.equal((await native(page,'storage.load')).navigation,'rail','Adaptive navigation never rewrites the saved layout choice');
+   progress('complete',{status:'passed'});return {pid,session,marker,samples};
+  }catch(error){
+   primaryError=error;
+   console.error('[RESIZE primary failure] '+String(error.stack??error));throw error;
+  }finally{
+   const cleanups=[
+    ()=>adb('shell','wm','size',beforeSize??'reset'),
+    ()=>adb('shell','wm','density',beforeDensity??'reset'),
+    ()=>/^[0-3]$/.test(rotation)&&adb('shell','settings','put','system','user_rotation',rotation),
+    ()=>/^[01]$/.test(autoRotate)&&adb('shell','settings','put','system','accelerometer_rotation',autoRotate),
+    async()=>{if(!page.isClosed()&&activeSession)await native(page,'playback.close',{session:activeSession});},
+    async()=>{if(!page.isClosed())await page.evaluate(()=>{if(window.__resizeListener)removeEventListener('tablet-playback',window.__resizeListener);location.hash='#/sources';});},
+   ];
+   for(const cleanup of cleanups)try{await cleanup();}catch(error){cleanupErrors.push(error.message);console.error('[RESIZE cleanup] '+error.message);}
+   resizeContinuity.cleanup={displayRestoreAttempted:true,errors:cleanupErrors};writeFileSync(path.join(artifacts,'android-resize-progress.json'),JSON.stringify(resizeContinuity,null,2));
+   sourcePage=undefined;
+   if(cleanupErrors.length&&!primaryError)throw Error('Resize cleanup failed: '+cleanupErrors.join('; '));
+  }
+ });
  await test('Episode click opens a focused inline player under strict source CSP and leaving closes it', async () => {
   await page.evaluate(() => { location.hash = '#/watch/7/2?source=tablet-fixture'; });
   try {
@@ -261,6 +445,7 @@ try{
    sourcePage = undefined;
   }
  });
+ if(!uiCase){
  await native(page,'sources.open',{id:'tablet-fixture'});sourcePage=await sourceTarget('tablet-fixture');
  await test('Website WebView has neither native nor trusted application bridge',async()=>{
   assert.equal(await sourcePage.evaluate(()=>typeof window.AniVerseNative+'|'+typeof window.aniverse),'undefined|undefined');assert.ok(sourcePage.url().startsWith(fixtureOrigin));await sourcePage.getByRole('heading',{name:'Arcadia Story',exact:true}).waitFor();
@@ -288,6 +473,7 @@ try{
  await test('Same-origin websites in separate source profiles do not share cookies',async()=>{
   const marker='profile-'+Date.now(),firstURL=sourcePage.url();await sourcePage.evaluate(value=>document.cookie='aniverseFixtureProfile='+value+'; path=/; SameSite=Lax',marker);assert.ok((await sourcePage.evaluate(()=>document.cookie)).includes('aniverseFixtureProfile='+marker));await mainActivity();await native(page,'sources.open',{id:'tablet-fixture-two'});sourcePage=await sourceTarget('tablet-fixture-two');await sourcePage.waitForLoadState('domcontentloaded');const secondURL=sourcePage.url();assert.notEqual(firstURL,secondURL,'Must inspect the newly opened source WebView, not a retiring CDP target');assert.ok(!(await sourcePage.evaluate(()=>document.cookie)).includes('aniverseFixtureProfile='+marker));assert.equal(await sourcePage.evaluate(()=>typeof window.AniVerseNative+'|'+typeof window.aniverse),'undefined|undefined');return {firstURL,secondURL,sharedCookie:false};
  });
+ }
  await mainActivity();assert.deepEqual(pageErrors,[]);
 }catch(error){errors.push(String(error.stack||error));console.error(error);}
 finally{
@@ -295,6 +481,6 @@ finally{
  for(const connection of connections)await connection.close().catch(()=>{});
  for(const port of forwarded)try{adb('forward','--remove','tcp:'+port);}catch{}
  server.closeAllConnections();forbidden.closeAllConnections();await Promise.all([server.listening?new Promise(resolve=>server.close(resolve)):Promise.resolve(),forbidden.listening?new Promise(resolve=>forbidden.close(resolve)):Promise.resolve()]);
- const report={passed:!errors.length,serial,appId,run,nativeInfo,installedApkSHA256,environment:{hostRendering:process.env.ANDROID_TEST_BACKEND??'unspecified'},checks,errors,pageErrors,forbiddenRequests,requests,limits:['Debug application on the explicitly owned emulator, not a physical Galaxy Tab S10+.','Real source playback uses a neutral local fixture and public sample video. No remote website attack, account action or installed release profile was used.','No native picker/file-transfer or physical casting/audio certification is implied.']};
- writeFileSync(path.join(artifacts,'android-tablet.json'),JSON.stringify(report,null,2)+'\n');if(errors.length)process.exitCode=1;
+ const report={passed:!errors.length,scope:uiCase??'full-suite',serial,appId,run,nativeInfo,installedApkSHA256,resizeContinuity,contextMenuEvidence,environment:{hostRendering:process.env.ANDROID_TEST_BACKEND??'unspecified'},checks,errors,pageErrors,forbiddenRequests,requests,limits:['Debug application on the explicitly owned emulator, not a physical Galaxy Tab S10+.','Real source playback uses a neutral local fixture and public sample video. No remote website attack, account action or installed release profile was used.','No native picker/file-transfer or physical casting/audio certification is implied.']};
+ writeFileSync(path.join(artifacts,uiCase?'android-tablet-'+uiCase+'.json':'android-tablet.json'),JSON.stringify(report,null,2)+'\n');if(errors.length)process.exitCode=1;
 }

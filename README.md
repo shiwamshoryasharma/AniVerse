@@ -8,7 +8,7 @@
 
 A browser with anime discovery and isolated website sessions. Windows includes a local workspace; Android tablets have a touch interface and offline travel library.
 
-[Windows download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Android tablet APK](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/android-v0.1.0) · [Getting started](#getting-started) · [Features](#version-221-windows-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
+[Windows download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Android tablet APK](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/android-v0.4.6) · [Getting started](#getting-started) · [Features](#version-221-windows-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
 
 Windows 10 / 11 · Android 15+ tablets · React · Kotlin / Electron · GPL-3.0-or-later
 
@@ -20,13 +20,15 @@ Windows 10 / 11 · Android 15+ tablets · React · Kotlin / Electron · GPL-3.0-
 
 AniVerse does not provide, endorse or control the sources users configure. Users are responsible for the sources they choose, the content they watch and ensuring they have permission to access it. The project does not grant content rights or permission to bypass a source’s restrictions. See [DISCLAIMER.md](DISCLAIMER.md).
 
-## Android tablet edition 0.1.0
+## Android tablet edition 0.4.6
 
-A **Kotlin host with the shared React design**, landscape touch navigation, Android 15+, and a 600 dp minimum tablet width. Galaxy Tab S10+ is the primary target; compatible Tab S8/S9 and other tablets qualify when they meet the OS/screen requirements. Phones and other device categories are unsupported; future device/OS support is not guaranteed for this personal comfort project.
+A **Kotlin host with the shared React design**, adaptive navigation on Android 15+ with resizable windows and optional touchscreen hardware. Galaxy Tab S10+ is the primary target. The old tablet-size launch gate reported on Samsung DeX and BlueStacks is removed; physical DeX and BlueStacks compatibility remain untested. Compact windows use bottom navigation and can be resized without restarting the source player. Future device/OS compatibility is not guaranteed for this personal project.
 
-Paste source URLs into a table, import or save permitted direct video files for **Local watch**, attach SRT/WebVTT, resume offline, then remove the saved app copies. Downloads provide queue/progress/speed/ETA, pause/resume, safe restart and cancel. Touch controls include double-tap seek, brightness/volume swipes, touch lock and supported picture in picture. AniList/MAL use verified native OAuth access-token entry and Android Keystore encryption.
+Add source websites as cards, then use **Download** below a playing episode to save supported direct video or HLS VOD for **Local watch**. You can also import video files, attach SRT/WebVTT, resume offline, then remove the saved app copies. Choose actual source SUB/DUB options beside the player; downloads retain confirmed audio and include audio filters. Older saved audio stays unknown. Downloads provide queue/progress/speed/ETA, pause/resume, safe restart and cancel. Touch controls include double-tap seek, brightness/volume swipes, touch lock and supported picture in picture. AniList/MAL use verified native OAuth access-token entry and Android Keystore encryption.
 
-**4K enhancement stays desktop-only.** Android 0.1.0 does not include Windows Workspace/casting/Drive tools or source-backed DUB/SUB catalogue scans. Use the original website's audio controls. Profiles are independent of Windows. App isolation cannot repair an unpatched OS, firmware or WebView. [Android setup, security, build and limits](docs/ANDROID.md) · [Android release notes](docs/releases/android-0.1.0.md).
+Smaller floating glass controls overlay a full-width canvas, with bottom navigation/search or a vertical rail with a show/hide button. The hero uses a smooth poster-card strip. Pull down at the top to refresh, use Android wallpaper colours or a custom accent, and reduce animation in Settings. Android updates are delivered through signed GitHub releases inside the app.
+
+**4K enhancement stays desktop-only.** Android 0.4.6 does not include Windows Workspace/casting/Drive tools or source-backed DUB/SUB catalogue scans. Player audio options come from the source; global catalogue audio scans remain desktop-only. Profiles are independent of Windows. App isolation cannot repair an unpatched OS, firmware or WebView. [Android setup, security, build and limits](docs/ANDROID.md) · [Android release notes](docs/releases/android-0.4.6.md).
 
 ## What AniVerse does
 

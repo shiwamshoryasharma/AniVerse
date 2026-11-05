@@ -23,7 +23,7 @@ html[data-platform=android]{--fs:14px;--fs-sm:13px;--fs-md:15px;--pad:24px;-webk
 @media(max-width:1150px){.tablet-topbar{gap:8px;padding:0 16px}.tablet-brand{min-width:145px}.tablet-main .page{padding:24px}.tablet-main .home-grid{grid-template-columns:minmax(0,1fr)}.tablet-main .home-grid>aside{display:none}.tablet-main .browse{grid-template-columns:minmax(0,1fr)}.tablet-main .browse>.side-panel{display:none}.tablet-main .grid.six{grid-template-columns:repeat(auto-fill,minmax(135px,1fr))}.tablet-main .history-items{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}.tablet-download-card{flex-wrap:wrap}.tablet-download-actions{margin-left:76px}.tablet-page-heading{align-items:flex-start;flex-wrap:wrap}.tablet-security-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tablet-source-card{flex-wrap:wrap}.tablet-source-copy{min-width:180px}.tablet-source-actions{margin-left:64px;width:calc(100% - 64px)}}
 @media(max-height:650px){.tablet-nav{padding-top:12px;gap:4px}.tablet-nav-item{min-height:64px}.tablet-main .page{padding:20px 24px}.tablet-main .hero{min-height:260px}.tablet-main .page-title{font-size:25px}.tablet-more-link{min-height:60px}.tablet-more-link small{font-size:12px}}
 @media(max-width:850px){.tablet-topbar{gap:6px;padding:0 12px}.tablet-brand{min-width:48px}.tablet-brand>span{display:none}.tablet-security{display:none}.tablet-app[data-navigation=tabs] .tablet-nav{padding:0 8px}.tablet-app[data-navigation=tabs] .tablet-nav-item{min-width:80px;padding-inline:10px;gap:7px}.tablet-accounts{grid-template-columns:minmax(0,1fr)}}
-@media(orientation:portrait){.tablet-app{display:none!important}.tablet-rotate{display:flex;position:fixed;inset:0;background:var(--bg);align-items:center;justify-content:center;flex-direction:column;gap:15px;padding:40px;text-align:center}.tablet-rotate svg{color:var(--accent);transform:rotate(90deg)}.tablet-rotate p{max-width:400px;color:var(--text-2);line-height:1.8}}
+
 
 /* Portal dialogs and dropdowns sit outside tablet-main; preserve the same touch target. */
 [data-platform=android] .btn,[data-platform=android] .btn.sm,[data-platform=android] .icon-btn,[data-platform=android] .select-trigger,[data-platform=android] .select-option,[data-platform=android] .check,[data-platform=android] .radio{min-height:48px}
@@ -515,7 +515,7 @@ html[data-platform=android] {
 @keyframes tablet-watch-entry{from{opacity:.3}to{opacity:1}}
 
 /* User-selected glass finish: portal colours are scoped on the Android root too. */
-html[data-platform=android][data-tablet-surface=light] {
+html:root[data-platform=android][data-tablet-surface=light] {
   color-scheme:light;
   --bg:#eaf0fa;
   --bg-2:#f2f5fb;
@@ -534,12 +534,12 @@ html[data-platform=android][data-tablet-surface=light] {
   --tablet-glass-highlight:rgba(255,255,255,.96);
   --tablet-glass-shadow:0 8px 32px #3c517019,inset 0 1px 0 #fff;
 }
-html[data-platform=android][data-tablet-surface=light][data-accent=aqua]{--accent-2:#006d60}
-html[data-platform=android][data-tablet-surface=light][data-accent=violet]{--accent-2:#6140b6}
-html[data-platform=android][data-tablet-surface=light][data-accent=sakura]{--accent-2:#a32961}
-html[data-platform=android][data-tablet-surface=light][data-accent=crimson]{--accent-2:#af273c}
-html[data-platform=android][data-tablet-surface=light][data-accent=festival]{--accent-2:#854300}
-html[data-platform=android][data-tablet-surface=dark] {
+html:root[data-platform=android][data-tablet-surface=light][data-accent=aqua]{--accent-2:#006d60}
+html:root[data-platform=android][data-tablet-surface=light][data-accent=violet]{--accent-2:#6140b6}
+html:root[data-platform=android][data-tablet-surface=light][data-accent=sakura]{--accent-2:#a32961}
+html:root[data-platform=android][data-tablet-surface=light][data-accent=crimson]{--accent-2:#af273c}
+html:root[data-platform=android][data-tablet-surface=light][data-accent=festival]{--accent-2:#854300}
+html:root[data-platform=android][data-tablet-surface=dark] {
   color-scheme:dark;
   --tablet-glass:rgba(34,40,55,.8);
   --tablet-glass-highlight:rgba(255,255,255,.1);
@@ -554,8 +554,8 @@ html[data-platform=android] .tablet-app {
 }
 .tablet-topbar {
   background:linear-gradient(180deg,var(--tablet-glass),color-mix(in srgb,var(--tablet-glass) 40%,transparent));
-  backdrop-filter:blur(14px);
   -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
   box-shadow:0 1px 0 var(--tablet-glass-highlight);
 }
 .tablet-topbar .tablet-search { background:var(--tablet-glass); box-shadow:inset 0 1px 0 var(--tablet-glass-highlight); border:1px solid var(--line); }
@@ -578,8 +578,8 @@ html[data-platform=android] .tablet-app {
   border:1px solid var(--tablet-glass-highlight);
   border-radius:38px;
   background:linear-gradient(140deg,var(--tablet-glass),color-mix(in srgb,var(--surface) 68%,transparent));
-  backdrop-filter:blur(18px);
   -webkit-backdrop-filter:blur(18px);
+  backdrop-filter:blur(18px);
   box-shadow:var(--tablet-glass-shadow);
 }
 .tablet-nav-item { min-height:72px; font-size:12px; line-height:18px; font-weight:600; color:var(--text-2); border-radius:26px; }
@@ -655,10 +655,482 @@ html[data-platform=android] .tablet-app {
 html[data-platform=android] .tablet-app[data-navigation=tabs]{grid-template-columns:minmax(0,1fr)!important}
 
 /* Shared checkbox borders were white; unchecked controls need contrast on light glass. */
-html[data-platform=android][data-tablet-surface=light] .check:not(.on) .check-box,
-html[data-platform=android][data-tablet-surface=light] .radio:not(.on) .radio-dot{border-color:#748198;background:transparent}
+html:root[data-platform=android][data-tablet-surface=light] .check:not(.on) .check-box,
+html:root[data-platform=android][data-tablet-surface=light] .radio:not(.on) .radio-dot{border-color:#748198;background:transparent}
 
 /* Bottom navigation owns its own row: the native player clips above this gutter. */
 html[data-platform=android] .tablet-app[data-navigation=tabs]{grid-template-rows:64px minmax(0,1fr) 104px!important}
 .tablet-app[data-navigation=tabs] .tablet-nav{grid-row:3}
 .tablet-app[data-navigation=tabs] .tablet-main{grid-row:2!important}
+
+/* 0.4.6: separate floating controls leave the canvas open. */
+html[data-platform=android] .tablet-app {
+  grid-template-columns:112px minmax(0,1fr)!important;
+  grid-template-rows:80px minmax(0,1fr) 84px!important;
+}
+.tablet-topbar {
+  grid-row:1;
+  grid-column:1/-1;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px 18px;
+  gap:16px;
+  background:transparent;
+  box-shadow:none;
+  border:0;
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+  pointer-events:none;
+}
+.tablet-topbar>* { pointer-events:auto; }
+.tablet-topbar .tablet-brand {
+  display:grid;
+  place-items:center;
+  width:52px;
+  height:52px;
+  min-width:52px;
+  min-height:52px;
+  border:1px solid var(--tablet-glass-highlight);
+  border-radius:18px;
+  background:var(--tablet-glass);
+  box-shadow:var(--tablet-glass-shadow);
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+}
+.tablet-topbar .tablet-brand svg { width:33px; height:33px; }
+.tablet-profile-pill {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-height:56px;
+  padding:3px 4px 3px 6px;
+  border:1px solid var(--tablet-glass-highlight);
+  border-radius:32px;
+  background:var(--tablet-glass);
+  box-shadow:var(--tablet-glass-shadow);
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+}
+.tablet-profile-pill .incognito-button { min-height:48px; padding:8px 13px; border:0; border-radius:26px; background:transparent; }
+.tablet-profile-pill .incognito-button.on { background:var(--accent-soft); color:var(--accent-2); }
+.tablet-profile-pill .tablet-avatar { width:48px; min-width:48px; height:48px; }
+.tablet-profile-pill .tablet-offline { display:grid; place-items:center; width:32px; color:var(--text-2); }
+.tablet-app .tablet-nav {
+  grid-column:1;
+  grid-row:2;
+  width:90px;
+  margin:12px 11px;
+  padding:10px 4px;
+  gap:5px;
+  max-height:calc(100% - 24px);
+}
+.tablet-app .tablet-nav-item { min-height:64px; font-size:11px; }
+.tablet-app .tablet-nav-icon { width:56px; height:34px; }
+.tablet-app .tablet-nav-spacer { flex:0 0 8px; min-height:8px; }
+.tablet-app .tablet-main {
+  position:relative;
+  grid-column:2!important;
+  grid-row:2!important;
+  margin:0 18px 0 0;
+}
+.tablet-search-dock {
+  grid-column:2;
+  grid-row:3;
+  align-self:center;
+  justify-self:center;
+  width:min(360px,calc(100% - 32px));
+  min-width:0;
+  z-index:60;
+}
+.tablet-search-dock .tablet-search {
+  width:100%;
+  max-width:none;
+  min-width:0;
+  height:54px;
+  padding:2px 4px 2px 16px;
+  gap:9px;
+  border:1px solid var(--tablet-glass-highlight);
+  border-radius:30px;
+  background:var(--tablet-glass);
+  box-shadow:var(--tablet-glass-shadow);
+  -webkit-backdrop-filter:blur(18px);
+  backdrop-filter:blur(18px);
+}
+.tablet-search-dock input { font-size:14px; }
+.tablet-search-dock .icon-btn { width:48px; min-width:48px; height:48px; padding:0; border:0; border-radius:50%; }
+.tablet-search-dock .tablet-search-refresh { color:var(--text-2); background:var(--surface-2); }
+.tablet-search-dock .tablet-search-results {
+  top:auto;
+  bottom:calc(100% + 12px);
+  max-height:min(360px,calc(100dvh - 210px));
+  border:1px solid var(--tablet-glass-highlight);
+  border-radius:22px;
+  z-index:62;
+  background:var(--surface);
+}
+.tablet-search-dismiss { inset:0; z-index:51; }
+.tablet-search-dock .tablet-search>svg,.tablet-search-dock .tablet-search>input,.tablet-search-dock .tablet-search>button:not(.tablet-search-dismiss) { position:relative; z-index:61; }
+html[data-platform=android] .tablet-app[data-navigation=tabs] {
+  grid-template-columns:minmax(0,1fr)!important;
+  grid-template-rows:80px minmax(0,1fr) 72px 88px!important;
+}
+.tablet-app[data-navigation=tabs] .tablet-main { grid-column:1!important; grid-row:2!important; margin:0 18px; }
+.tablet-app[data-navigation=tabs] .tablet-search-dock { grid-column:1; grid-row:3; }
+.tablet-app[data-navigation=tabs] .tablet-nav {
+  grid-column:1;
+  grid-row:4;
+  align-self:center;
+  justify-self:center;
+  width:min(60vw,800px);
+  min-width:500px;
+  max-width:calc(100% - 36px);
+  height:64px;
+  min-height:64px;
+  max-height:none;
+  margin:0;
+  padding:6px;
+  gap:5px;
+}
+.tablet-app[data-navigation=tabs] .tablet-nav-item { min-height:50px; min-width:0; padding:8px 12px; font-size:13px; gap:8px; }
+.tablet-app[data-navigation=tabs] .tablet-nav-icon { width:24px; height:30px; }
+.tablet-pull-indicator {
+  position:absolute;
+  z-index:40;
+  top:8px;
+  left:50%;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:48px;
+  padding:10px 17px;
+  border:1px solid var(--tablet-glass-highlight);
+  border-radius:28px;
+  background:var(--surface);
+  box-shadow:var(--tablet-glass-shadow);
+  color:var(--accent-2);
+  font-size:13px;
+  font-weight:600;
+  pointer-events:none;
+  transition:transform 120ms var(--tablet-ease);
+}
+
+/* Touch uses the explicit long-press menu, never a desktop hover preview. */
+html[data-platform=android] .hovercard { display:none!important; }
+html[data-platform=android] .ctx-menu {
+  left:var(--tablet-menu-left,120px)!important;
+  top:var(--tablet-menu-top,88px)!important;
+  width:min(300px,calc(100vw - 148px))!important;
+  max-height:var(--tablet-menu-height,calc(100dvh - 260px));
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  z-index:1500;
+  border:1px solid var(--tablet-glass-highlight);
+  border-radius:22px;
+  padding:6px;
+  background:var(--surface);
+  box-shadow:0 18px 50px #172d5233;
+  animation:tablet-dialog-in 180ms var(--tablet-ease);
+}
+html[data-platform=android] .ctx-item { min-height:48px; padding:11px 13px; border-radius:14px; font-size:13px; }
+html[data-platform=android] .ctx-head { padding:12px; }
+html[data-platform=android] .ctx-hint { display:none; }
+html[data-platform=android] .ctx-menu .ctx-title { font-size:14px; }
+
+/* Spotlight controls become one bounded tray instead of loose posters and dots. */
+.tablet-main .hero { border-radius:24px; }
+.tablet-main .hero-body { left:28px; bottom:30px; width:min(560px,47%); gap:11px; }
+.tablet-main .hero-title { font-size:clamp(26px,3vw,42px); }
+.tablet-main .hero-desc { -webkit-line-clamp:2; font-size:13px; }
+.tablet-main .hero-nav {
+  right:22px;
+  bottom:24px;
+  width:min(430px,44%);
+  padding:11px;
+  gap:8px;
+  align-items:stretch;
+  border:1px solid #ffffff30;
+  border-radius:23px;
+  background:linear-gradient(140deg,#1b2638cf,#101a29ad);
+  box-shadow:0 12px 28px #0003,inset 0 1px 0 #ffffff12;
+  -webkit-backdrop-filter:blur(12px);
+  backdrop-filter:blur(12px);
+}
+.tablet-main .hero-thumbs {
+  width:100%;
+  min-width:0;
+  padding:4px;
+  gap:8px;
+  overflow-x:auto;
+  scrollbar-width:none;
+  scroll-snap-type:x mandatory;
+}
+.tablet-main .hero-thumbs::-webkit-scrollbar { display:none; }
+.tablet-main .hero-thumb {
+  flex:0 0 50px;
+  width:50px;
+  min-width:50px;
+  height:70px;
+  min-height:70px;
+  border:2px solid transparent;
+  border-radius:12px;
+  opacity:.65;
+  transform:none;
+  scroll-snap-align:center;
+}
+.tablet-main .hero-thumb.active { border-color:var(--accent); opacity:1; transform:none; box-shadow:0 0 0 2px #ffffff66; }
+.tablet-main .hero-nav>.row { width:100%; justify-content:space-between; gap:8px; }
+.tablet-main .hero-nav .icon-btn { width:48px; min-width:48px; height:48px; color:white; background:#ffffff14; border:0; border-radius:50%; }
+.tablet-main .hero-dots { flex:1; justify-content:center; gap:0; }
+.tablet-main .hero-dots button { display:none; }
+.tablet-main .hero-dots button.active { display:grid; width:auto; min-width:80px; height:48px; padding:0 8px; color:#f5f7fc; }
+.tablet-main .hero-dots button.active:before { display:none; }
+.tablet-main .hero-dots button.active:after { content:attr(aria-label); font-size:12px; font-weight:650; letter-spacing:.02em; }
+@media(max-width:1100px) {
+  .tablet-main .hero-body { width:calc(100% - 48px); bottom:120px; left:24px; }
+  .tablet-main .hero-nav { left:18px; right:18px; bottom:18px; width:auto; flex-direction:row; align-items:center; padding:9px; gap:12px; }
+  .tablet-main .hero-thumbs { flex:1; }
+  .tablet-main .hero-thumb { width:48px; min-width:48px; flex-basis:48px; height:62px; min-height:62px; }
+  .tablet-main .hero-nav>.row { flex:0 0 168px; width:168px; }
+}
+@media(max-height:650px) {
+  .tablet-app .tablet-nav { padding-block:8px; gap:2px; }
+  .tablet-app .tablet-nav-item { min-height:54px; }
+  .tablet-app .tablet-nav-spacer { flex-basis:4px; min-height:4px; }
+  .tablet-main .hero-body { gap:8px; }
+}
+@media(max-width:900px) {
+  .tablet-topbar { padding-inline:14px; }
+  .tablet-profile-pill .incognito-button { padding-inline:10px; }
+  .tablet-app[data-navigation=tabs] .tablet-nav { width:72vw; min-width:480px; }
+}
+
+/* Chrome frosts the accent-lit backdrop; the canvas itself is never blurred. */
+html:root[data-platform=android][data-tablet-surface=light]{--tablet-glass:rgba(255,255,255,.48)}
+html:root[data-platform=android][data-tablet-surface=dark]{--tablet-glass:rgba(29,37,53,.45)}
+html[data-platform=android] .tablet-app {
+  background:
+    radial-gradient(ellipse at 4% 32%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 38%),
+    radial-gradient(ellipse at 75% 96%,color-mix(in srgb,var(--accent) 15%,transparent),transparent 48%),
+    var(--bg);
+}
+.tablet-topbar .tablet-brand,
+.tablet-profile-pill,
+.tablet-app .tablet-nav,
+.tablet-app[data-navigation=tabs] .tablet-nav,
+.tablet-search-dock .tablet-search {
+  background:linear-gradient(135deg,var(--tablet-glass),color-mix(in srgb,var(--tablet-glass) 80%,transparent));
+  -webkit-backdrop-filter:blur(24px) saturate(1.3);
+  backdrop-filter:blur(24px) saturate(1.3);
+}
+
+/* Named palette swatches remain truthful while the root follows Android colours. */
+.tablet-colour[data-accent=ember]{--accent:#ff7a1a;--accent-ink:#1a0b00}
+.tablet-colour[data-accent=festival]{--accent:#ff9c42;--accent-ink:#251000}
+
+/* Glass appearance owns surface contrast even when a saved desktop palette has more selectors. */
+html:root[data-platform=android][data-tablet-surface=light]{--ok:#17744c;--warn:#815600;--err:#bb2436;--info:#215d9c}
+html:root[data-platform=android][data-tablet-surface=dark] {
+ --bg:#101219;--bg-2:#14171f;--surface:#1c202a;--surface-2:#252a36;--surface-3:#303744;--surface-hover:#363e4e;
+ --text:#f0f1f7;--text-2:#bcc2d1;--text-3:#929bad;--line:rgba(211,220,247,.06);--line-2:rgba(211,220,247,.12);
+ --ok:#3ddc97;--warn:#ffc94d;--err:#ff5d6c;--info:#5aa9ff;
+}
+.tablet-main .hero-body{--warn:#ffc94d}
+
+
+/* A 64px capsule in the 88px row keeps a 20px bottom inset. */
+.tablet-app[data-navigation=tabs] .tablet-nav{align-self:start;margin:4px 0 0}
+[data-platform=android] .mcard{-webkit-touch-callout:none}
+
+
+/* Android desktop/freeform windows use available space, never device-kind rejection. */
+.tablet-app[data-navigation=tabs] .tablet-nav{min-width:0}
+@media(max-width:900px){
+ .tablet-watch-layout{grid-template-columns:minmax(0,1fr)}
+ .tablet-watch-episodes{width:100%}
+ .tablet-episode-list{max-height:320px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+ .tablet-watch-heading{flex-wrap:wrap}
+ .tablet-watch-source{flex:1 1 160px}
+}
+@media(max-width:700px){
+ .tablet-main .page,.tablet-main .tablet-settings{padding:18px 16px 28px}
+ .tablet-main .page-title{font-size:26px}
+ .tablet-settings-heading{align-items:flex-start;flex-wrap:wrap;gap:10px}
+ .tablet-version{font-size:11px;padding:8px 11px}
+ .tablet-appearance{grid-template-columns:minmax(0,1fr);padding:18px 18px 0}
+ .tablet-appearance-copy{padding:0}
+ .tablet-layout-preview{width:min(320px,100%);justify-self:center;margin-top:16px}
+ .tablet-setting-row{gap:10px;flex-wrap:wrap}
+ .tablet-setting-row>.tablet-setting-icon{width:36px;height:36px;border-radius:12px}
+ .tablet-setting-row>div:first-of-type{min-width:130px}
+ .tablet-setting-row .select-trigger{min-width:140px}
+ .tablet-setting-row>.check{margin-left:auto;max-width:100%}
+ .tablet-accounts{grid-template-columns:minmax(0,1fr)}
+ .tablet-main .hero{margin:0 0 18px;width:100%;height:410px}
+ .tablet-main .hero-body{left:18px;width:calc(100% - 36px);bottom:118px}
+ .tablet-main .hero-desc{display:none}
+ .tablet-main .hero-title{font-size:27px}
+ .tablet-main .hero-nav{left:12px;right:12px;bottom:12px;gap:8px}
+ .tablet-main .hero-nav>.row{flex:0 0 192px;width:192px}
+ .tablet-main .hero-actions{gap:8px;padding:0}
+ .tablet-main .cta{min-height:48px;padding:10px 14px}
+ .tablet-settings-card.card{padding:18px}
+ .tablet-security-grid{grid-template-columns:minmax(0,1fr)}
+ .tablet-touch-tips{grid-template-columns:minmax(0,1fr)}
+ .tablet-watch-heading h1{font-size:23px}
+ .tablet-watch-cover{width:48px;height:68px}
+ .tablet-watch-back{margin-top:0}
+}
+@media(max-width:599px){
+ html[data-platform=android] .tablet-app,
+ html[data-platform=android] .tablet-app[data-navigation=tabs]{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:68px minmax(0,1fr) 64px 80px!important}
+ .tablet-topbar{padding:8px 12px}
+ .tablet-topbar .tablet-brand{width:48px;min-width:48px;height:48px;min-height:48px;border-radius:16px}
+ .tablet-profile-pill{min-height:52px;padding:1px 2px 1px 4px;gap:3px}
+ .tablet-profile-pill .incognito-button{font-size:12px;padding-inline:9px}
+ .tablet-app[data-navigation=tabs] .tablet-main{margin:0 12px}
+ .tablet-app[data-navigation=tabs] .tablet-nav{width:calc(100% - 24px);max-width:none;min-width:0;height:64px;min-height:64px;padding:5px;gap:3px;align-self:start;margin:4px 0 0}
+ .tablet-app[data-navigation=tabs] .tablet-nav-item{flex-direction:column;gap:2px;padding:3px;min-width:48px;min-height:52px;font-size:10px;line-height:13px}
+ .tablet-app[data-navigation=tabs] .tablet-nav-icon{width:24px;height:24px}
+ .tablet-app[data-navigation=tabs] .tablet-nav-icon svg{width:22px;height:22px}
+ .tablet-search-dock{width:min(360px,calc(100% - 24px))}
+ html[data-platform=android] .ctx-menu{width:min(300px,calc(100vw - 32px))!important}
+ .tablet-watch-heading{gap:10px;padding:12px}
+ .tablet-player-tools{gap:4px}
+ .tablet-main .tablet-player-tools .btn{padding-inline:12px}
+ .tablet-source-actions{margin-left:0;width:100%}
+ .tablet-settings-details>summary{padding:14px 16px;gap:10px}
+ .tablet-settings-details>summary small{font-size:11px}
+}
+@media(max-height:600px){
+ html[data-platform=android] .tablet-app{grid-template-rows:64px minmax(0,1fr) 60px!important}
+ html[data-platform=android] .tablet-app[data-navigation=tabs]{grid-template-rows:64px minmax(0,1fr) 60px 72px!important}
+ .tablet-topbar{padding-block:6px}
+ .tablet-topbar .tablet-brand{width:48px;min-width:48px;height:48px;min-height:48px}
+ .tablet-profile-pill{min-height:52px;padding-block:1px}
+ .tablet-app .tablet-nav{padding-block:4px;gap:0;margin-block:8px;max-height:calc(100% - 16px)}
+ .tablet-app .tablet-nav-item{min-height:48px;gap:0}
+ .tablet-app .tablet-nav-spacer{flex:0 0 0;min-height:0}
+ .tablet-app[data-navigation=tabs] .tablet-nav{height:60px;min-height:60px;max-height:none;margin:4px 0 0;padding:4px;gap:3px}
+ .tablet-app[data-navigation=tabs] .tablet-nav-item{min-height:50px}
+ .tablet-app .tablet-main{border-radius:20px}
+ .tablet-main .page,.tablet-main .tablet-settings{padding-top:16px}
+ .tablet-search-dock .tablet-search{height:52px}
+ .tablet-watch-heading{padding:10px 12px;margin-bottom:12px}
+ .tablet-watch-cover{width:44px;height:62px}
+ .tablet-watch-heading h1{font-size:21px}
+}
+@media(max-width:379px){
+ .tablet-profile-pill .incognito-button>span{display:none}
+ .tablet-main .hero{height:450px}
+ .tablet-main .hero-body{bottom:180px}
+ .tablet-main .hero-nav{flex-direction:column;gap:6px}
+ .tablet-main .hero-nav>.row{width:100%;flex:none}
+ .tablet-setting-row>.select-trigger,.tablet-setting-row>.check{margin-left:auto}
+}
+
+@media(max-height:600px){
+ .tablet-app .tablet-nav-item{padding:3px 0;line-height:14px}
+ .tablet-app .tablet-nav-icon{height:28px}
+}
+@media(max-width:700px){
+ .tablet-app[data-navigation=tabs] .tablet-nav-item{flex-direction:column;gap:2px;padding:3px;font-size:11px;line-height:14px}
+ .tablet-app[data-navigation=tabs] .tablet-nav-icon{height:24px}
+}
+/* Short desktop windows prioritize the live player while retaining 48px controls. */
+@media(max-height:500px){
+ .tablet-main .tablet-watch{padding:10px 12px 24px}
+ .tablet-watch-heading{display:grid;grid-template-columns:minmax(0,1fr) minmax(130px,36%);align-items:center;padding:8px 10px;gap:10px;margin-bottom:10px;min-width:0}
+ .tablet-watch-cover,.tablet-watch-banner,.tablet-watch-eyebrow{display:none}
+ .tablet-watch-title{position:relative;min-height:48px;padding-left:50px;display:flex;flex-direction:column;justify-content:center}
+ .tablet-watch-back{position:absolute;left:0;top:0;width:48px;height:48px;min-height:48px;margin:0;display:grid;place-items:center;font-size:0}
+ .tablet-watch-back svg{width:20px;height:20px}
+ .tablet-watch-heading h1{margin:0 0 4px;font-size:18px;line-height:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .tablet-watch-meta{font-size:11px;gap:6px}
+ .tablet-watch-meta>span:not(:has(svg)){display:none}
+ .tablet-watch-meta strong{padding:2px 7px}
+ .tablet-watch-source{width:100%;min-width:0;align-self:center}
+ .tablet-watch-source .select-trigger{min-width:0;font-size:12px;padding-inline:12px}
+ .tablet-watch-theater{padding:5px}
+}
+
+@media(max-width:599px) and (min-height:501px){
+ .tablet-watch-heading{display:grid;grid-template-columns:48px minmax(0,1fr);align-items:start;gap:10px}
+ .tablet-watch-cover{grid-column:1;width:48px;height:68px}
+ .tablet-watch-title{grid-column:2;min-width:0}
+ .tablet-watch-source{grid-column:1/-1;width:100%;min-width:0}
+ .tablet-watch-source .select-trigger{width:100%}
+}
+/* Compact windows keep shared Library and Details content inside the Android canvas. */
+.tablet-main .page>.tabs{display:flex;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+.tablet-main .page>.tabs>.tab{flex:0 0 auto}
+/* Popup positioning already reserves its inline minWidth; do not grow beyond it. */
+html[data-platform=android] .select-pop{width:0;max-width:calc(100vw - 16px)}
+html[data-platform=android] .select-filter input{width:0}
+@media(max-width:700px){
+ .tablet-main .details-hero{margin:-18px -16px 0;padding:24px 16px 20px;min-height:0}
+ .tablet-main .details-head{grid-template-columns:84px minmax(0,1fr);gap:16px;align-items:start}
+ .tablet-main .details-cover{width:84px}
+ .tablet-main .details-head>div{min-width:0}
+ .tablet-main .details-title{font-size:26px;overflow-wrap:anywhere}
+ .tablet-main .details-head .row.wrap{gap:8px!important}
+ .tablet-main .details-head :is(.cta,.btn,.select-trigger){max-width:100%}
+ .tablet-main .details-head .cta{white-space:normal}
+}
+
+/* Floating chrome owns only its capsules; the page continues beneath them. */
+html[data-platform=android] .tablet-app,
+html[data-platform=android] .tablet-app[data-navigation=tabs]{position:relative;grid-template-columns:minmax(0,1fr)!important;grid-template-rows:80px minmax(0,1fr)!important;--tablet-dock-clearance:76px;--tablet-watch-inset:24px}
+html[data-platform=android] .tablet-app[data-navigation=tabs]{--tablet-dock-clearance:140px}
+html[data-platform=android] .tablet-app[data-navigation=rail][data-rail-visible=true]{--tablet-watch-inset:100px}
+html[data-platform=android] .tablet-app .tablet-main{grid-column:1!important;grid-row:2!important;margin:0;border:0;border-radius:0;background:transparent}
+.tablet-main>.tablet-route>.page{padding-bottom:var(--tablet-dock-clearance)}
+.tablet-main>.tablet-route>.tablet-watch{padding-left:var(--tablet-watch-inset);padding-bottom:var(--tablet-dock-clearance)}
+.tablet-leading-chrome{display:flex;align-items:center;gap:8px;min-width:0}
+.tablet-rail-toggle{display:grid;place-items:center;width:48px;min-width:48px;height:48px;min-height:48px;border:0;border-radius:50%;color:var(--text-2);background:var(--tablet-glass);box-shadow:var(--tablet-glass-shadow);-webkit-backdrop-filter:blur(24px) saturate(1.3);backdrop-filter:blur(24px) saturate(1.3)}
+html[data-platform=android] .tablet-app .tablet-nav[hidden]{display:none!important}
+html[data-platform=android] .tablet-app[data-navigation=rail] .tablet-nav{position:absolute;left:12px;top:50%;bottom:auto;transform:translateY(-50%);width:72px;height:fit-content;max-height:calc(100% - 148px);margin:0;padding:3px;gap:2px;border-radius:34px;z-index:60;animation:tablet-rail-in 180ms ease-out}
+html[data-platform=android] .tablet-app[data-navigation=rail] .tablet-nav-item{min-height:56px;padding:3px 0;gap:2px;font-size:10px;line-height:13px}
+html[data-platform=android] .tablet-app[data-navigation=rail] .tablet-nav-icon{width:48px;height:28px}
+html[data-platform=android] .tablet-app .tablet-nav-spacer{display:none}
+html[data-platform=android] .tablet-app .tablet-search-dock{position:absolute;grid-column:auto;grid-row:auto;left:50%;bottom:12px;transform:translateX(-50%);width:min(304px,calc(100% - 24px));margin:0;z-index:60}
+html[data-platform=android] .tablet-app .tablet-search-dock .tablet-search{height:48px;padding:0 0 0 12px;border:0;border-radius:26px;gap:7px}
+html[data-platform=android] .tablet-app .tablet-search-dock input{height:48px;min-height:48px;font-size:13px}
+html[data-platform=android] .tablet-app .tablet-search-dock .icon-btn{height:48px;min-height:48px;width:48px;min-width:48px}
+html[data-platform=android] .tablet-app[data-navigation=tabs] .tablet-search-dock{bottom:76px}
+html[data-platform=android] .tablet-app[data-navigation=tabs] .tablet-nav{position:absolute;left:50%;top:auto;bottom:12px;transform:translateX(-50%);width:min(560px,calc(100% - 24px));height:56px;min-height:56px;max-height:none;max-width:none;margin:0;padding:3px;gap:2px;border-radius:30px;z-index:60}
+html[data-platform=android] .tablet-app[data-navigation=tabs] .tablet-nav-item{min-height:48px;height:48px;min-width:48px;padding:4px 8px;gap:6px;font-size:12px;line-height:14px}
+html[data-platform=android] .tablet-app[data-navigation=tabs] .tablet-nav-icon{width:22px;height:24px}
+@keyframes tablet-rail-in{from{opacity:0}to{opacity:1}}
+@media(max-width:599px){
+ html[data-platform=android] .tablet-app,html[data-platform=android] .tablet-app[data-navigation=tabs]{grid-template-rows:68px minmax(0,1fr)!important;--tablet-watch-inset:16px}
+ html[data-platform=android] .tablet-app[data-navigation=tabs] .tablet-nav-item{flex-direction:column;gap:0;padding:3px;font-size:10px;line-height:12px}
+ html[data-platform=android] .tablet-app[data-navigation=tabs] .tablet-nav-icon{height:22px;width:22px}
+}
+@media(max-height:600px){
+ html[data-platform=android] .tablet-app,html[data-platform=android] .tablet-app[data-navigation=tabs]{grid-template-rows:64px minmax(0,1fr)!important}
+ html[data-platform=android] .tablet-app[data-navigation=rail] .tablet-nav{max-height:calc(100% - 132px);gap:0}
+ html[data-platform=android] .tablet-app[data-navigation=rail] .tablet-nav-item{min-height:48px;height:48px;gap:0;padding:2px 0}
+}
+/* Poster cards and a compact pager replace the empty wide Hero tray. */
+.tablet-main .hero-nav{width:max-content;max-width:min(430px,calc(100% - 36px));left:auto;right:18px;bottom:18px;flex-direction:column;align-items:flex-end;padding:0;gap:6px;border:0;background:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+.tablet-main .hero-thumbs{display:flex;flex:none;width:max-content;max-width:100%;gap:8px;padding:5px;overflow-x:auto;scroll-snap-type:x proximity;scroll-behavior:smooth;overscroll-behavior-x:contain;touch-action:pan-x}
+.tablet-main .hero-thumb{width:58px;min-width:58px;flex-basis:58px;height:82px;min-height:82px;border-radius:11px;border:2px solid #ffffff66;opacity:.78;box-shadow:0 4px 12px #0005;transition:transform 180ms var(--tablet-ease),opacity 180ms var(--tablet-ease),border-color 180ms var(--tablet-ease)}
+.tablet-main .hero-thumb.active{border-color:var(--accent);opacity:1;transform:translateY(-2px);box-shadow:0 0 0 2px #ffffff55,0 5px 15px #0006}
+.tablet-main .hero-nav>.row{width:max-content;flex:none;gap:4px;padding:2px;border-radius:28px;background:#172033c9;box-shadow:inset 0 1px 0 #ffffff28,0 4px 12px #0003;-webkit-backdrop-filter:blur(24px) saturate(1.3);backdrop-filter:blur(24px) saturate(1.3)}
+.tablet-main .hero-dots{flex:none;min-width:56px}
+.tablet-main .hero-dots button.active{width:56px;min-width:56px;padding:0 3px}
+.tablet-main .hero-dots button.active:after{content:attr(data-slide-caption);font-size:11px;font-variant-numeric:tabular-nums}
+.tablet-main .hero-nav .icon-btn{width:48px;min-width:48px;height:48px;background:transparent}
+@media(max-width:1100px){.tablet-main .hero-body{bottom:170px}.tablet-main .hero-nav{max-width:calc(100% - 36px)}.tablet-main .hero-thumbs{max-width:min(430px,calc(100vw - 90px))}}
+@media(max-width:599px){.tablet-main .hero-thumb{width:52px;min-width:52px;flex-basis:52px;height:74px;min-height:74px}.tablet-main .hero-body{bottom:166px}.tablet-main .hero-nav{right:14px;bottom:14px;max-width:calc(100% - 28px)}.tablet-main .hero-thumbs{max-width:calc(100vw - 76px)}}
+
+/* Absolute capsules anchor to the full canvas, not their former grid rows. */
+html[data-platform=android] .tablet-app .tablet-nav{grid-area:auto!important}
+
+html[data-platform=android] .tablet-app .tablet-main{scroll-padding-bottom:var(--tablet-dock-clearance)}
+
+/* Android desktop windows use the complete canvas, including very wide displays. */
+html[data-platform=android] .tablet-main .page,html[data-platform=android] .tablet-main .tablet-settings{width:100%;max-width:none}
+
+.tablet-audio-selector{max-width:100%}.tablet-audio-selector>.row,.tablet-audio-filters{flex-wrap:wrap;gap:6px}

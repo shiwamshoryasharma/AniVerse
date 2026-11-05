@@ -112,6 +112,25 @@ internal class SourcePane(
         }
     }
 
+    fun audio(id:String,value:String?,callback:(JSONObject?,Exception?)->Unit){
+        val owned=browser
+        if(session!=id||owned==null){callback(null,IllegalStateException("This player session is no longer active."));return}
+        owned.audio(value){result,error->
+            if(session==id&&browser===owned)callback(result,error)
+            else callback(null,IllegalStateException("The selected player changed."))
+        }
+    }
+    fun requestDownload(id:String,callback:(JSONObject?,Exception?)->Unit){
+        val owned=browser
+        if(session!=id||owned==null){callback(null,IllegalStateException("This player session is no longer active."));return}
+        owned.requestDownload { value,error->
+            if(value!=null||(session==id&&browser===owned))callback(value,error)
+            else callback(null,IllegalStateException("The selected player changed."))
+        }
+    }
+    @Suppress("UNUSED_PARAMETER")
+    fun requestDownload(id:String,title:String,callback:(JSONObject?,Exception?)->Unit)=requestDownload(id,callback)
+
     fun hideFullscreen() = browser?.hideFullscreen() == true
     fun pause() { browser?.pause() }
     fun resume() { browser?.resume() }

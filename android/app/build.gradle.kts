@@ -1,5 +1,21 @@
+import java.util.Properties
+import java.net.URI
+
 plugins { id("com.android.application") }
 val fixtureBuild = providers.gradleProperty("aniverseFixture").orNull == "true"
+val fixtureOrigins=Properties().apply{
+    if(fixtureBuild)rootDir.resolve("../test/android/fixture-origins.properties").inputStream().use{load(it)}
+}
+fun fixtureOrigin(key:String):String{
+    if(!fixtureBuild)return ""
+    val value=fixtureOrigins.getProperty(key).orEmpty().trim()
+    val uri=URI(value)
+    require(uri.scheme=="http"&&uri.host=="10.0.2.2"&&uri.port in 1..65535&&uri.rawUserInfo==null&&
+        uri.rawPath.isNullOrEmpty()&&uri.rawQuery==null&&uri.rawFragment==null){"Invalid exact fixture origin: "+key}
+    return value
+}
+val fixtureApiOrigin=fixtureOrigin("api")
+val fixtureMediaOrigin=fixtureOrigin("media")
 android {
     namespace = "app.aniverse.tablet"
     compileSdk = 37
@@ -7,8 +23,8 @@ android {
         applicationId = "app.aniverse.tablet"
         minSdk = 35
         targetSdk = 35
-        versionCode = 405
-        versionName = "0.4.5"
+        versionCode = 406
+        versionName = "0.4.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }
@@ -24,12 +40,17 @@ android {
         }
     }
     buildTypes {
-        debug { applicationIdSuffix = if(fixtureBuild) ".fixture" else ".debug"; buildConfigField("String", "TEST_ORIGIN", if(fixtureBuild) "\"http://10.0.2.2:18765\"" else "\"\"") }
+        debug {
+            applicationIdSuffix = if(fixtureBuild) ".fixture" else ".debug"
+            buildConfigField("String", "TEST_ORIGIN", "\""+fixtureApiOrigin+"\"")
+            buildConfigField("String", "TEST_MEDIA_ORIGIN", "\""+fixtureMediaOrigin+"\"")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "TEST_ORIGIN", "\"\"")
+            buildConfigField("String", "TEST_MEDIA_ORIGIN", "\"\"")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -55,6 +76,7 @@ dependencies {
     }
     implementation("androidx.webkit:webkit:1.18.0")
     implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.7.0")

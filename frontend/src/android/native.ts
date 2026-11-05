@@ -1,10 +1,12 @@
 export interface NativeInfo {
   version: string; platform: 'android'; buildType:string; fixture:boolean; sdkInt: number; tablet: boolean; smallestWidthDp: number; securityPatch: string; webViewVersion: string; webViewUpdatedAtMs:number; upscaling: false;
+  window:{widthDp:number;heightDp:number;widthClass:'compact'|'medium'|'expanded';heightClass:'compact'|'medium'|'expanded';density:number;multiWindow:boolean};
+  systemAccentLight:string;systemAccentDark:string;
   sandbox: { appPrivateStorage: boolean; originRestrictedBridge: boolean; websiteNativeBridge: false; multiProfile: boolean };
 }
-export interface OfflineVideo { id:string; title:string; bytes:number; durationMs:number; positionMs:number; subtitleName:string|null; addedAt:number }
+export interface OfflineVideo { id:string; title:string; bytes:number; durationMs:number; positionMs:number; subtitleName:string|null; audio:'sub'|'dub'|null; addedAt:number }
 export interface OfflineLibrary { items:OfflineVideo[]; usedBytes:number; freeBytes:number }
-export interface DownloadItem { id:string;title:string;host:string;status:'queued'|'running'|'paused'|'failed'|'complete';bytes:number;totalBytes:number;resumable:boolean;speedBytesPerSecond:number;error:string|null }
+export interface DownloadItem { id:string;title:string;host:string;status:'queued'|'running'|'paused'|'failed'|'complete';bytes:number;totalBytes:number;resumable:boolean;speedBytesPerSecond:number;error:string|null;audio:'sub'|'dub'|null }
 export interface NativeAccount { provider:'anilist'|'mal';connected:boolean;userId:number;userName:string|null;avatar:string|null;lastSyncAt:number|null }
 interface NativeChannel { postMessage:(message:string)=>void; onmessage:((event:{data:string})=>void)|null }
 declare global { interface Window { AniVerseNative?:NativeChannel } }

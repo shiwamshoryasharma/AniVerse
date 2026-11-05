@@ -1,0 +1,11 @@
+Android advertising domain filter
+Source: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+Project: https://github.com/AdguardTeam/AdGuardSDNSFilter
+Retrieved: 2026-11-05
+Source SHA256: 4c5ce6f4d96ac3830c5327c1cf675b7bd7335838e17da8d3b2936d7730abf229
+Source last modified: 2026-11-05T08:13:43.611Z
+License: GNU General Public License v3.0; see ADFILTER-LICENSE.txt
+Compiled entries: 187767. Supported syntax: complete anchored domains, exceptions, important; badfilter disables a matching rule. Unsupported wildcard/regex rules (1024) are omitted rather than widened. DNS/domain filtering cannot remove same-origin media ads.
+Extra domains and cosmetic selectors: repository config/filters.txt (AniVerse GPL-3.0-or-later).
+No configured source identities are included. This pinned snapshot updates with the app.
+Gzip content is named ad-domains.bin deliberately: Android AAPT expands and strips .gz assets during packaging. Keep the byte comparison APK gate.

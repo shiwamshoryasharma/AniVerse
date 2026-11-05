@@ -34,6 +34,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class MainActivity:Activity() {
     private lateinit var web:WebView
     private var sourcePane: SourcePane? = null
+    private var appRoot: FrameLayout? = null
+    private var displayedSurface: String? = null
     private lateinit var accounts:NativeAccounts
     private lateinit var updater:AndroidUpdater
     private val updateExecutor=ThreadPoolExecutor(1,1,30,TimeUnit.SECONDS,ArrayBlockingQueue(1))
@@ -48,7 +50,6 @@ class MainActivity:Activity() {
     override fun onCreate(state:Bundle?) {
         super.onCreate(state)
         current=java.lang.ref.WeakReference(this)
-        if(resources.configuration.smallestScreenWidthDp<600){notice("AniVerse is for Android tablets", "This edition needs Android 15+ and a tablet screen of at least 600 dp. Phones and other device categories are not supported.");return}
         if(!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)||!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)){
             notice("Update Android System WebView", "AniVerse requires origin-restricted messages and separate browser profiles. Update Android System WebView before opening sources.");return
         }
@@ -62,6 +63,10 @@ class MainActivity:Activity() {
             keepSystemInsets()
             addView(web, FrameLayout.LayoutParams(-1, -1))
         }
+        root.addOnLayoutChangeListener{_,left,top,right,bottom,oldLeft,oldTop,oldRight,oldBottom->
+            if(left!=oldLeft||top!=oldTop||right!=oldRight||bottom!=oldBottom)dispatchWindowChanged()
+        }
+        appRoot = root
         sourcePane = SourcePane(this, root, web)
         setContentView(root)
         web.setBackgroundColor(Color.rgb(12,9,16))
@@ -118,6 +123,8 @@ class MainActivity:Activity() {
             "playback.place" -> { sourcePane?.place(playbackSession(input), input); reply(true) }
             "playback.close" -> { sourcePane?.close(playbackSession(input)); reply(true) }
             "playback.action" -> { sourcePane?.action(playbackSession(input), input.getString("action")); reply(true) }
+            "playback.audio" -> { checkNotNull(sourcePane).audio(playbackSession(input), input.optString("value").takeIf{it.isNotBlank()}) { value,error -> if(error!=null)fail(error) else reply(value) } }
+            "playback.download" -> { checkNotNull(sourcePane).requestDownload(playbackSession(input), "") { value,error -> if(error!=null)fail(error) else {notificationPermission();reply(value)} } }
             "privacy.set" -> {
                 val incognito = input.getBoolean("incognito")
                 if (app.incognito != incognito) sourcePane?.close()
@@ -151,9 +158,9 @@ class MainActivity:Activity() {
         }};dialog.show()
     }
     private fun handle(method:String,input:JSONObject):Any?=when(method){
-        "native.info"->JSONObject().put("version",BuildConfig.VERSION_NAME).put("platform","android").put("buildType",BuildConfig.BUILD_TYPE).put("fixture",BuildConfig.TEST_ORIGIN.isNotBlank()).put("sdkInt",Build.VERSION.SDK_INT).put("tablet",resources.configuration.smallestScreenWidthDp>=600).put("smallestWidthDp",resources.configuration.smallestScreenWidthDp).put("securityPatch",Build.VERSION.SECURITY_PATCH).put("webViewVersion",WebViewCompat.getCurrentWebViewPackage(this)?.versionName ?: "unknown").put("webViewUpdatedAtMs",WebViewCompat.getCurrentWebViewPackage(this)?.lastUpdateTime ?: 0).put("upscaling",false).put("sandbox",JSONObject().put("appPrivateStorage",true).put("originRestrictedBridge",true).put("websiteNativeBridge",false).put("multiProfile",true))
-        "storage.load"->app.store.load()
-        "storage.save"->{app.store.save(input.getJSONObject("value"));true}
+        "native.info"->JSONObject().put("version",BuildConfig.VERSION_NAME).put("platform","android").put("buildType",BuildConfig.BUILD_TYPE).put("fixture",BuildConfig.TEST_ORIGIN.isNotBlank()).put("sdkInt",Build.VERSION.SDK_INT).put("tablet",resources.configuration.smallestScreenWidthDp>=600).put("smallestWidthDp",resources.configuration.smallestScreenWidthDp).put("window",windowInfo()).put("securityPatch",Build.VERSION.SECURITY_PATCH).put("webViewVersion",WebViewCompat.getCurrentWebViewPackage(this)?.versionName ?: "unknown").put("webViewUpdatedAtMs",WebViewCompat.getCurrentWebViewPackage(this)?.lastUpdateTime ?: 0).put("upscaling",false).put("systemAccentLight",String.format("#%06x",getColor(android.R.color.system_accent1_600) and 0xffffff)).put("systemAccentDark",String.format("#%06x",getColor(android.R.color.system_accent1_200) and 0xffffff)).put("sandbox",JSONObject().put("appPrivateStorage",true).put("originRestrictedBridge",true).put("websiteNativeBridge",false).put("multiProfile",true))
+        "storage.load"->app.store.load().also{applySurface(it.optString("surface","light"))}
+        "storage.save"->{val state=input.getJSONObject("value");app.store.save(state);applySurface(state.optString("surface","light"));true}
         "api.request"->requests.request(input)
         "updates.check"->updater.check()
         "updates.install"->updater.install(input.getString("tag"))
@@ -194,7 +201,21 @@ class MainActivity:Activity() {
             .firstOrNull { it.optString("id") == id && it.optBoolean("enabled", true) }
             ?: error("Source not found or disabled.")
         require(policy.allow(source.getString("url"))) { "This source URL is blocked. Use a public HTTPS website." }
-        return source
+        return JSONObject(source.toString()).put("adblock",state.optBoolean("adBlocking",true))
+    }
+
+    private fun applySurface(surface:String){
+        runOnUiThread{
+            if(isDestroyed||!::web.isInitialized)return@runOnUiThread
+            val mode=if(surface=="dark")"dark" else "light"
+            if(displayedSurface==mode)return@runOnUiThread
+            displayedSurface=mode
+            val dark=mode=="dark"
+            val color=if(dark)Color.rgb(16,21,31) else Color.rgb(243,246,252)
+            appRoot?.setBackgroundColor(color);web.setBackgroundColor(color);window.decorView.setBackgroundColor(color)
+            val light=android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            window.insetsController?.setSystemBarsAppearance(if(dark)0 else light,light)
+        }
     }
 
     private fun playbackSession(input: JSONObject): String = input.getString("session").also {
@@ -233,7 +254,34 @@ class MainActivity:Activity() {
 
     private fun notificationPermission(){if(checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),611)}
     override fun onNewIntent(intent:Intent){super.onNewIntent(intent);val route=intent.getStringExtra("route");if(route in setOf("/downloads","/local")&&::web.isInitialized)web.evaluateJavascript("location.hash="+JSONObject.quote("#"+route),null)}
-    override fun onConfigurationChanged(configuration:Configuration){super.onConfigurationChanged(configuration)}
+    override fun onConfigurationChanged(configuration:Configuration){
+        super.onConfigurationChanged(configuration)
+        dispatchWindowChanged()
+    }
+    override fun onMultiWindowModeChanged(inMultiWindow:Boolean,configuration:Configuration){
+        super.onMultiWindowModeChanged(inMultiWindow,configuration)
+        dispatchWindowChanged()
+    }
+    private fun windowInfo():JSONObject{
+        val metrics=windowManager.currentWindowMetrics
+        val bars=metrics.windowInsets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout())
+        val width=(metrics.bounds.width()-bars.left-bars.right).coerceAtLeast(1)
+        val height=(metrics.bounds.height()-bars.top-bars.bottom).coerceAtLeast(1)
+        val size=WindowLayout.pixels(width,height,metrics.density)
+        return JSONObject().put("widthDp",size.widthDp).put("heightDp",size.heightDp)
+            .put("widthClass",size.widthClass).put("heightClass",size.heightClass)
+            .put("density",metrics.density).put("multiWindow",isInMultiWindowMode)
+    }
+    private fun dispatchWindowChanged(){
+        appRoot?.requestApplyInsets()
+        if(!::web.isInitialized||isDestroyed)return
+        web.post{
+            if(!isDestroyed){
+                val current=windowInfo()
+                web.evaluateJavascript("window.dispatchEvent(new Event('resize'));window.dispatchEvent(new CustomEvent('tablet-window-changed',{detail:"+current+"}))",null)
+            }
+        }
+    }
     override fun onDestroy(){sourcePane?.close();picker?.invoke(null);picker=null;for(operation in imports)operation.cancel();imports.clear();if(::web.isInitialized){web.stopLoading();web.destroy()};if(::policy.isInitialized)policy.close();if(::updater.isInitialized)updater.close();executor.shutdownNow();networkExecutor.shutdownNow();updateExecutor.shutdownNow();super.onDestroy()}
     companion object {
         private var current=java.lang.ref.WeakReference<MainActivity>(null)

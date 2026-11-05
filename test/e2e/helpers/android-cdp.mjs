@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {chromium} from 'playwright-core';
+import {touchAndroidTarget} from './android-touch.mjs';
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export function androidClient({root,run,serial='emulator-5584',appId='app.aniverse.tablet.fixture'}){
  const adbPath='C:/Users/Admin/AppData/Local/Android/Sdk/platform-tools/adb.exe',temp=path.join(run,'temp');mkdirSync(temp,{recursive:true});
@@ -26,7 +27,7 @@ export function androidClient({root,run,serial='emulator-5584',appId='app.aniver
   for(const until=Date.now()+20000;Date.now()<until;){page=browser.contexts().flatMap(context=>context.pages()).find(target=>target.url().startsWith('https://appassets.androidplatform.net/assets/'));if(page)break;await delay(150);}
   assert.ok(page,'Trusted application WebView is available');page.setDefaultTimeout(10000);await page.waitForFunction(()=>!!window.aniverse&&!!window.AniVerseNative);return {page,pid,socket,port};
  }
- async function touch(locator){await locator.scrollIntoViewIfNeeded();const box=await locator.boundingBox();assert.ok(box,'Tap target has visible geometry');const session=await locator.page().context().newCDPSession(locator.page());try{await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2,radiusX:1,radiusY:1,force:1}]});await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}finally{await session.detach();}}
+ const touch=touchAndroidTarget;
  async function nav(name){
   let action=page.getByRole('navigation',{name:'Main',exact:true}).getByRole('link',{name,exact:true});
   if(!await action.count()){

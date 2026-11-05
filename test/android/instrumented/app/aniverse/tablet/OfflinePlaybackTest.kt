@@ -8,7 +8,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import androidx.media3.common.Player
-import androidx.media3.common.text.CueGroup
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
@@ -48,10 +47,9 @@ class OfflinePlaybackTest {
   try{
    activity=instrumentation.startActivitySync(Intent(context,OfflinePlayerActivity::class.java).putExtra("id",id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as OfflinePlayerActivity
    val current=activity
-   val cues=AtomicReference("")
-   main{current.player!!.addListener(object:Player.Listener{override fun onCues(group:CueGroup){cues.set(group.cues.mapNotNull{it.text}.joinToString(" "))}});current.player!!.play()}
+   main{current.player!!.play()}
    waitUntil("Local video never decoded advancing frames"){main{val player=current.player!!;player.videoDecoderCounters?.ensureUpdated();player.currentPosition>3000&&player.videoSize.width>0&&(player.videoDecoderCounters?.renderedOutputBufferCount ?: 0)>3}}
-   try{waitUntil("SRT text never reached the player"){cues.get().contains("Flight subtitle fixture")}}catch(error:AssertionError){println("TEXT_TRACK_DIAGNOSTIC="+main{current.player!!.currentTracks.groups.map{group->"type=${group.type},selected=${group.isSelected},formats="+(0 until group.length).map{group.getTrackFormat(it).toString()}}.toString()});println("LAST_CUES="+cues.get()+" CURRENT="+main{current.player!!.currentCues.cues.toString()}+" POS="+main{current.player!!.currentPosition.toString()});throw error}
+   try{waitUntil("SRT text never reached the player"){main{current.player!!.currentCues.cues.any{it.text.toString().contains("Flight subtitle fixture")}}}}catch(error:AssertionError){println("TEXT_TRACK_DIAGNOSTIC="+main{current.player!!.currentTracks.groups.map{group->"type=${group.type},selected=${group.isSelected},formats="+(0 until group.length).map{group.getTrackFormat(it).toString()}}.toString()});println("CURRENT_CUES="+main{current.player!!.currentCues.cues.map{it.text.toString()}.toString()}+" POS="+main{current.player!!.currentPosition.toString()});throw error}
    for(target in listOf(15000L,5000L,25000L)){
     val beforeFrames=main{current.player!!.videoDecoderCounters!!.renderedOutputBufferCount}
     main{current.player!!.seekTo(target);current.player!!.play()}

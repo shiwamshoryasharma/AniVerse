@@ -25,6 +25,6 @@ This is an existing Electron/React desktop anime application. Preserve the layer
 ## Project boundaries
 
 - Sources come from the editable local `config/streaming-sites.txt`; do not hardcode or publish configured site names/URLs. Use neutral `.test` hosts in fixtures and public documentation.
-- Website playback uses rendered source pages and their own players. Existing search/series/episode navigation and focus CSS are intentional. Preserve the boundary against stream extraction, media hosting, private API access, and access-control bypass.
+- Website playback uses rendered source pages and their own players. Existing search/series/episode navigation and focus CSS are intentional. Windows retains the boundary against stream extraction, media hosting, private API access, and access-control bypass. The user explicitly authorized Android current-playing downloads in0.4.6: keep that feature session-scoped and native-only, without DRM/access-control bypass or exposing source cookies/media URLs to the app renderer or ancestor website frames.
 - Keep renderer sandboxing, context isolation, validated trusted-frame IPC, isolated source sessions, and main-process-only credentials.
 - For application changes, follow [CONTRIBUTING.md](CONTRIBUTING.md). Select additional runtime checks using the validation skill. Documentation-only context updates need skill/link validation, not installers, network tests, or release commands.

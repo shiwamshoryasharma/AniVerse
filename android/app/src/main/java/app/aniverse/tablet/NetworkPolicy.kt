@@ -11,21 +11,24 @@ class NetworkPolicy(
     private val debugOrigin:String="",
     private val resolve:(String)->Array<InetAddress> = InetAddress::getAllByName,
     private val dns:java.util.concurrent.ExecutorService = ThreadPoolExecutor(2,4,30,TimeUnit.SECONDS,ArrayBlockingQueue(32),ThreadPoolExecutor.AbortPolicy()),
-    private val dnsTimeoutMillis:Long=3000
+    private val dnsTimeoutMillis:Long=3000,
+    private val additionalDebugOrigin:String=""
 ) {
     private val cache = object : LinkedHashMap<String, Pair<Long,Boolean>>(128,.75f,true) { override fun removeEldestEntry(entry: MutableMap.MutableEntry<String,Pair<Long,Boolean>>) = size > 256 }
     private val inFlight=HashMap<String,java.util.concurrent.Future<Boolean>>()
+    private fun allowedDebugOrigin(uri:URI)=debugOrigin.isNotEmpty()&&
+        (origin(uri)==debugOrigin||(additionalDebugOrigin.isNotEmpty()&&origin(uri)==additionalDebugOrigin))
     fun validUrl(value: String): URI? = try {
         require(value.length <= 8192 && value.none { it.code < 32 })
         val uri=URI(value); val host=uri.host ?: error("Missing host")
         require(uri.rawUserInfo == null && host.isNotBlank() && host.length <= 253 && (uri.port == -1 || uri.port in 1..65535))
-        require(uri.scheme == "https" || (debugOrigin.isNotEmpty() && uri.scheme == "http" && origin(uri)==debugOrigin))
+        require(uri.scheme == "https" || (uri.scheme == "http" && allowedDebugOrigin(uri)))
         require(host.lowercase() != "appassets.androidplatform.net" && !host.lowercase().endsWith(".androidplatform.net"))
         uri
     } catch (_: Exception) { null }
     fun allow(value: String): Boolean {
         val uri=validUrl(value) ?: return false
-        if(debugOrigin.isNotEmpty() && origin(uri)==debugOrigin) return true
+        if(allowedDebugOrigin(uri)) return true
         val host=uri.host.removePrefix("[").removeSuffix("]").lowercase()
         val lookup=synchronized(cache) {
             cache[host]?.let { if(System.currentTimeMillis()-it.first<60000)return it.second }

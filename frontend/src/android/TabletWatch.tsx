@@ -1,4 +1,6 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, EyeOff, FileVideo, Globe, ListVideo, Maximize, Play, RefreshCw, ShieldAlert } from 'lucide-react';
+import { tabletSafeBounds } from './chromeBounds';
+import { TabletAudio } from './TabletAudio';
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, EyeOff, FileVideo, Globe, ListVideo, Maximize, Play, RefreshCw, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Empty, ErrorState, Loading } from '../components/common';
@@ -8,6 +10,8 @@ import { usePrivacy } from '../lib/privacy';
 import { formatLabel, searchTitles, titleOf } from '../lib/format';
 import { seriesMarkers } from '../../../app/core/sources/text';
 import { nativeCall } from './native';
+import { useToast } from '../lib/useToast';
+import { useQueryClient } from '@tanstack/react-query';
 import { episodeChoices, nextEnabledSource } from './playback';
 
 type PlayerState = 'loading' | 'ready' | 'website' | 'needs-site' | 'certificate' | 'error';
@@ -17,6 +21,11 @@ export function TabletWatch() {
   const params = useParams();
   const [query] = useSearchParams();
   const navigate = useNavigate();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [audioChanging, setAudioChanging] = useState(false);
+  const [downloading,setDownloading] = useState(false);
+  const [downloaded,setDownloaded] = useState(false);
   const id = Number(params.id);
   const episode = Math.max(1, Math.trunc(Number(params.episode) || 1));
   const details = useDetails(id);
@@ -52,6 +61,7 @@ export function TabletWatch() {
     if (!slot || !snapshot || !sourceId || !privacyReady) return;
     const id = crypto.randomUUID();
     session.current = id;
+    setDownloading(false);setDownloaded(false);
     attempted.current.add(sourceId);
     setStatus({ session: id, state: 'loading', message: 'Finding the episode…' });
     const main = slot.closest('main');
@@ -66,9 +76,9 @@ export function TabletWatch() {
       frame = 0;
       if (!active || !attached) return;
       const r = slot.getBoundingClientRect();
-      const clip = main?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
+      const clip = tabletSafeBounds(main?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight));
       const dialog = document.querySelector('[aria-modal="true"], .select-pop, [role="menu"], .tablet-search-results, .tablet-search-dismiss');
-      const visible = !document.hidden && !dialog && r.width > 0 && r.height > 0;
+      const visible = !document.hidden && !dialog && r.width > 0 && r.height > 0 && clip.right>clip.left && clip.bottom>clip.top;
       const bounds = visible ? {
         visible, viewportWidth: innerWidth,
         left: r.left, top: r.top, right: r.right, bottom: r.bottom,
@@ -92,6 +102,7 @@ export function TabletWatch() {
     window.addEventListener('resize', schedule);
     window.addEventListener('scroll', schedule, true);
     window.addEventListener('tablet-playback', onStatus);
+    window.addEventListener('tablet-chrome-changed', schedule);
     document.addEventListener('visibilitychange', schedule);
     void nativeCall<boolean>('playback.open', { session: id, id: sourceId, episode, media: snapshot })
       .then(open => {
@@ -113,6 +124,7 @@ export function TabletWatch() {
       window.removeEventListener('resize', schedule);
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('tablet-playback', onStatus);
+      window.removeEventListener('tablet-chrome-changed', schedule);
       document.removeEventListener('visibilitychange', schedule);
       void nativeCall('playback.close', { session: id }).catch(() => undefined);
     };
@@ -132,6 +144,18 @@ export function TabletWatch() {
     void nativeCall('playback.action', { session: id, action: name }).catch((error: Error) => {
       if (session.current === id) setStatus({ session: id, state: 'error', message: error.message });
     });
+  };
+  const download = async () => {
+    const current=session.current;
+    if(!current||downloading||downloaded||audioChanging)return;
+    setDownloading(true);
+    try {
+      await nativeCall('playback.download',{session:current});
+      void qc.invalidateQueries({queryKey:['tablet-downloads']});
+      if(session.current===current){setDownloaded(true);toast.push({level:'success',message:'Episode added to Downloads.',action:{label:'View downloads',run:()=>navigate('/downloads')}});}
+    } catch(error) {
+      if(session.current===current)toast.push({level:'error',message:(error as Error).message});
+    } finally {if(session.current===current)setDownloading(false);}
   };
   const go = (next: number, source = sourceId, replace = false) => {
     navigate('/watch/' + id + '/' + next + (source ? '?source=' + encodeURIComponent(source) : ''), { replace });
@@ -194,6 +218,8 @@ export function TabletWatch() {
               <button className="btn" disabled={next===undefined} onClick={() => next!==undefined&&go(next)}>Next <ChevronRight size={18}/></button>
             </div>
             <div className="tablet-player-tools">
+              <TabletAudio session={status.session} active={visible} onChange={()=>setDownloaded(false)} onBusyChange={setAudioChanging}/>
+              <button className="btn" disabled={!visible||downloading||downloaded||audioChanging} onClick={()=>void download()} aria-label="Download playing episode"><Download size={18}/>{downloading?'Preparing…':downloaded?'Added to Downloads':'Download'}</button>
               <button className="btn ghost" onClick={() => {attempted.current.clear();setRetry(value => value + 1);}}><RefreshCw size={17}/> Retry</button>
               {websiteMode ? <>
                 <button className="btn ghost" onClick={() => action('back')} aria-label="Website back"><ChevronLeft size={18}/></button>

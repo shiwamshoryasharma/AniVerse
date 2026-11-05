@@ -1,0 +1,12 @@
+[class*="share-buttons"],
+[class*="social-share"],
+[class*="sharethis"],
+[id*="telegram-popup"],
+[class*="telegram-popup"],
+[class*="discord-popup"],
+[class*="app-download-banner"],
+[class*="install-app"],
+.adsbygoogle,
+[id^="ad-container"],
+[class^="ad-slot"],
+[data-ad-slot] { display:none !important; visibility:hidden !important; pointer-events:none !important; }

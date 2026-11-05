@@ -10,7 +10,7 @@ import { connectNative, nativeCall, type NativeAccount, type NativeInfo } from '
 
 type CacheEntry={value:unknown;expires:number;at:number};
 type Edit={media:MediaSnapshot;kind:'entry'|'favourite';at:number;providers:Provider[]};
-interface SavedState { surface?:'light'|'dark';navigation?:'rail'|'tabs';metadataMode?:string;settings?:Settings;library?:unknown;sources?:SourceInfo[];privateMediaIds?:number[];metadata?:Record<string,CacheEntry>;kv?:Record<string,unknown>;edits?:Edit[];noticeAccepted?:boolean }
+interface SavedState { railVisible?:boolean;adBlocking?:boolean;systemAccent?:boolean;surface?:'light'|'dark';navigation?:'rail'|'tabs';metadataMode?:string;settings?:Settings;library?:unknown;sources?:SourceInfo[];privateMediaIds?:number[];metadata?:Record<string,CacheEntry>;kv?:Record<string,unknown>;edits?:Edit[];noticeAccepted?:boolean }
 const listeners=new Map<string,Set<(payload:unknown)=>void>>();
 const emit=<E extends EventName>(event:E,payload:EventContract[E])=>listeners.get(event)?.forEach(listener=>listener(payload));
 let saved:SavedState={},library=new TabletLibrary(),privacy:PrivacyState={incognito:false,privateMediaIds:[]};
@@ -52,15 +52,30 @@ const fetchOfficial:typeof fetch=async(url,init)=>{
 };
 function sourceInfo(url:string,name?:string):SourceInfo {
   const parsed=parseSitesConfig(url).entries[0];if(!parsed)throw new Error('Paste a valid source website URL.');
-  return {...parsed,id:crypto.randomUUID(),name:name?.trim()||parsed.name,enabled:true,order:saved.sources?.length??0,adblock:false,autoCloudflare:false,searchTemplate:null,searchTemplateSource:null,searchCheckedAt:null,partition:'tablet-source',capabilities:{search:true,episodes:true,streams:false,comments:false,login:true}};
+  return {...parsed,id:crypto.randomUUID(),name:name?.trim()||parsed.name,enabled:true,order:saved.sources?.length??0,adblock:true,autoCloudflare:false,searchTemplate:null,searchTemplateSource:null,searchCheckedAt:null,partition:'tablet-source',capabilities:{search:true,episodes:true,streams:false,comments:false,login:true}};
+}
+function applySystemAccent(){
+  const root=document.documentElement;
+  for(const key of ['--accent','--accent-2','--accent-soft','--accent-glow','--accent-ink'])root.style.removeProperty(key);
+  const accent=tablet.surface()==='dark'?device?.systemAccentDark:device?.systemAccentLight;
+  if(!tablet.systemAccent()||!accent||!/^#[a-f0-9]{6}$/i.test(accent))return;
+  root.style.setProperty('--accent',accent);root.style.setProperty('--accent-2',accent);
+  root.style.setProperty('--accent-soft',accent+'22');root.style.setProperty('--accent-glow',accent+'35');
+  root.style.setProperty('--accent-ink',tablet.surface()==='dark'?'#192019':'#ffffff');
 }
 export const tablet={
+  adBlocking:()=>saved.adBlocking!==false,
+  async setAdBlocking(enabled:boolean){saved.adBlocking=enabled;await persist();},
+  systemAccent:()=>saved.systemAccent!==false,
+  async setSystemAccent(enabled:boolean){saved.systemAccent=enabled;await persist();applySystemAccent();},
   info:()=>device,
   surface:():'light'|'dark'=>saved.surface==='dark'?'dark':'light',
   async setSurface(mode:'light'|'dark'){
     if(mode!=='light'&&mode!=='dark')throw new Error('Choose a supported glass theme.');
-    saved.surface=mode;await persist();document.documentElement.dataset.tabletSurface=mode;window.dispatchEvent(new CustomEvent('tablet-surface-changed',{detail:mode}));
+    saved.surface=mode;await persist();document.documentElement.dataset.tabletSurface=mode;applySystemAccent();window.dispatchEvent(new CustomEvent('tablet-surface-changed',{detail:mode}));
   },
+  railVisible:()=>saved.railVisible!==false,
+  async setRailVisible(visible:boolean){saved.railVisible=visible;await persist();window.dispatchEvent(new CustomEvent('tablet-rail-visibility-changed',{detail:visible}));},
   navigation:():'rail'|'tabs'=>saved.navigation==='rail'?'rail':'tabs',
   async setNavigation(mode:'rail'|'tabs'){
     if(mode!=='rail'&&mode!=='tabs')throw new Error('Choose a supported navigation layout.');
@@ -170,7 +185,9 @@ export async function installTabletBridge(){
   const metadataMode=device.fixture?'fixture':'official';
   if(saved.metadataMode!==metadataMode){saved.metadata={};saved.metadataMode=metadataMode;await persist();}
   window.aniverse={platform:'android',invoke:async<M extends RpcMethod>(method:M,input:RpcInput<M>)=>dispatch(method,input) as Promise<RpcOutput<M>>,on:<E extends EventName>(event:E,listener:(payload:EventContract[E])=>void)=>{const set=listeners.get(event)??new Set();listeners.set(event,set);set.add(listener as (payload:unknown)=>void);return()=>set.delete(listener as (payload:unknown)=>void);}} satisfies AniverseBridge;
+  window.addEventListener('tablet-window-changed',event=>{device.window=(event as CustomEvent<NativeInfo['window']>).detail;});
   document.documentElement.dataset.platform='android';
   document.documentElement.dataset.tabletSurface=tablet.surface();
+  applySystemAccent();
   window.addEventListener('tablet-progress',event=>{const value=(event as CustomEvent<ProgressSave>).detail;try{const completed=library.saveProgress(value);if(completed.completedNow)edited(value.media,'entry');persistLater();}catch{/* Invalid page observations never grant native access. */}});
 }
