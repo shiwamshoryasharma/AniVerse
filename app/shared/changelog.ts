@@ -5,6 +5,14 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.2.2',date:'2026-11-18',title:'Clearer source recovery and a new Windows theme',
+   summary:'Windows source recovery, an optional Midnight theme and direct MP4 saving.',
+   items:[
+    {kind:'fixed',icon:'fix',title:'Recover from source redirects',description:'Watch retries on an enabled destination in its own website session. A blocked redirect can no longer be reported as a successful episode load.'},
+    {kind:'added',icon:'layout',title:'Midnight theme',description:'Choose navy surfaces and mint controls in Interface layouts.',action:{label:'Open Interface layouts',path:'/settings/themes'}},
+    {kind:'added',icon:'sparkles',title:'Save a direct source MP4',description:'Right-click a supported public MP4 video or link. Choose the default folder in Settings → Player.',action:{label:'Choose download folder',path:'/settings/player'}},
+    {kind:'improved',icon:'shield',title:'Less background work while loading',description:'Watch skips playback probes during automatic navigation and waits for each sample to complete before starting another.'},
+   ]},
   {version:'2.2.1',date:'2026-11-03',title:'Your watch history, with room to breathe.',
    summary:'A clearer Windows watch history with comfortable Grid and List layouts.',
    items:[

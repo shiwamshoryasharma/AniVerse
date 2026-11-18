@@ -67,6 +67,13 @@ fn decide(req: Request<'_>) -> u32 {
         return if path.chars().any(|c|c.is_control()||c=='\\'||c==':'||c=='%') ||
             path.split('/').any(|part|part==".."||part=="."){6}else{0};
     }
+    if matches!(req.context, "handoff" | "mp4") {
+        if url.scheme() != "https" { return 2; }
+        if private_host(&url) { return 4; }
+        if !parse(req.source).is_ok_and(|source| source.origin() == url.origin()) { return 5; }
+        if req.context == "mp4" && !url.path().to_ascii_lowercase().ends_with(".mp4") { return 6; }
+        return 0;
+    }
     if !matches!(req.context,"network"|"navigate"|"external") {return 1;}
     let websocket=req.context=="network"&&matches!(url.scheme(),"ws"|"wss");
     if !matches!(url.scheme(),"http"|"https")&&!websocket {return 2;}
@@ -89,6 +96,19 @@ fn decide(req: Request<'_>) -> u32 {
 }
 #[no_mangle] pub extern "C" fn abi_version() -> u32 {1}
 #[no_mangle] pub extern "C" fn input_ptr() -> *mut u8 {INPUT.with(|input|input.borrow_mut().as_mut_ptr())}
+// Inspect the first ISO BMFF box without buffering a video or accepting a QuickTime file.
+#[no_mangle]
+pub extern "C" fn mp4_header(len: usize) -> u32 {
+    if !(16..=LIMIT).contains(&len) { return 0; }
+    INPUT.with(|input| {
+        let input = input.borrow();
+        let size = u32::from_be_bytes(input[..4].try_into().unwrap()) as usize;
+        if size < 16 || size > len || size % 4 != 0 || &input[4..8] != b"ftyp" { return 0; }
+        let is_mp4 = |brand: &[u8]| matches!(brand, b"isom" | b"mp41" | b"mp42" | b"avc1" | b"dash")
+            || (brand.starts_with(b"iso") && (b'2'..=b'9').contains(&brand[3]));
+        u32::from(is_mp4(&input[8..12]) || input[16..size].chunks_exact(4).any(is_mp4))
+    })
+}
 #[no_mangle] pub extern "C" fn evaluate(len: usize) -> u32 {
     if len==0||len>LIMIT{return 1;}
     INPUT.with(|input|{

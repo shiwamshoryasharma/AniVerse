@@ -1,7 +1,7 @@
 import type {RustPolicy} from '../app/core/security/rustPolicy';
 import {SourceNetworkGuard} from './sourceNetwork';
 import { randomUUID } from 'node:crypto';
-import { app, session, shell, webContents, type Session, type WebContents } from 'electron';
+import { app, Menu, session, shell, webContents, type Session, type WebContents } from 'electron';
 import { isChallengeTitle, isCloudflareChallenge } from '../app/core/net/cloudflare';
 import type { SourceRegistry } from '../app/core/sources/registry';
 import type { SiteFetcher, SiteResponse } from '../app/core/sources/types';
@@ -10,6 +10,7 @@ import { AppError } from '../app/core/util';
 import type { AppNotice, CloudflareEvent, Settings, SourceInfo } from '../app/shared/types';
 import type { Adblocker } from './adblock';
 import type { CloudflareSolver } from './cloudflare';
+import { SourceMp4Download } from './sourceMp4Download';
 
 /** Identity providers a site may legitimately send the user to for sign-in. */
 const SIGN_IN_HOSTS = [
@@ -77,7 +78,10 @@ export class SessionManager implements SiteFetcher {
     private emitCloudflare: (e: CloudflareEvent) => void,
     private security:RustPolicy,
     private privateSessionActive:()=>boolean=()=>false,
+    private navigationBlocked?: (guest: WebContents, destination?: string) => void,
+    private downloadFolder: () => string | null = () => null,
   ) {}
+  private mp4?: SourceMp4Download;
 
   /** Creates/configures the isolated session for a source (idempotent). */
   ensure(source: SourceInfo): Session {
@@ -90,7 +94,7 @@ export class SessionManager implements SiteFetcher {
       ses.setPermissionCheckHandler((_wc, permission) => permission === 'fullscreen' || permission === 'clipboard-sanitized-write');
       ses.setDevicePermissionHandler(() => false);
       ses.on('will-download', (event, item) => {
-        // Drive-by downloads from ad networks are a common malware vector; AniVerse never downloads media.
+        // Source pages cannot start downloads. The app offers an explicit native MP4 action.
         event.preventDefault();
         this.notify({ level: 'warn', message: `Blocked a download from ${source.name}: ${item.getFilename()}`, sourceId: source.id });
       });
@@ -162,19 +166,56 @@ export class SessionManager implements SiteFetcher {
       return { action: 'deny' };
     });
 
-    const guardNavigation = (event: Electron.Event, url: string) => {
-      const current = this.registry.list().find((s) => s.id === source.id) ?? source;
-      if(url==='about:blank'||this.security.decide({context:'navigate',url,source:current.url,allowed_origins:SIGN_IN_HOSTS.map(host=>'https://'+host)}).allowed)return;
-      event.preventDefault();
-      if (this.settings().privacy.blockPopups) {
-        this.adblock.countPopup(source.id);
-        this.notify({ level: 'info', message: `Blocked a redirect from ${source.name} to ${safeHost(url)}.`, sourceId: source.id, url });
-      }
+    if (process.platform === 'win32' && source.kind === 'web') guest.on('context-menu', (_event, params) => {
+      if (guest.isDestroyed() || this.isGuestOf(guest) !== source.id) return;
+      const current = this.sourceForSession(guest.session);
+      if (!current?.enabled) return;
+      const url = [params.linkURL, params.mediaType === 'video' ? params.srcURL : '']
+        .find(url => url && this.security.decide({ context: 'mp4', url, source: current.url }).allowed);
+      if (!url) return;
+      Menu.buildFromTemplate([{
+        label: 'Save MP4 as…',
+        click: () => {
+          if (guest.isDestroyed() || this.sourceForSession(guest.session)?.url !== current.url) return;
+          this.mp4 ??= new SourceMp4Download(this.security, this.downloadFolder);
+          void this.mp4.save(guest, url).then(saved => {
+            if (saved) this.notify({ level: 'info', message: 'MP4 saved.' });
+          }).catch(error => this.notify({ level: 'error', message: error instanceof Error ? error.message : 'MP4 download failed.' }));
+        },
+      }]).popup({ frame: params.frame ?? undefined });
+    });
+
+    const guardNavigation = (event: Electron.Event, url: string, redirect = false) => {
+      if (!this.allowGuestNavigation(guest, source, url, redirect)) event.preventDefault();
     };
-    guest.on('will-navigate', guardNavigation);
-    guest.on('will-redirect', (event, url, _inPlace, isMainFrame) => { if(isMainFrame)guardNavigation(event,url); });
+    guest.on('will-navigate', (event, url) => guardNavigation(event, event.url ?? url));
+    guest.on('will-redirect', (event, url, _inPlace, isMainFrame) => {
+      if (event.isMainFrame ?? isMainFrame) guardNavigation(event, event.url ?? url, true);
+    });
 
     guest.on('page-title-updated', (_e, title) => this.onTitle(guest, source, title));
+  }
+
+  allowGuestNavigation(guest: WebContents, source: SourceInfo, url: string, notifyNavigator = true) {
+    const sources = this.registry.list();
+    const current = sources.find(s => s.id === source.id);
+    if (!current || current.enabled === false) return false;
+    if (url === 'about:blank' || this.security.decide({
+      context: 'navigate', url, source: current.url,
+      allowed_origins: SIGN_IN_HOSTS.map(host => 'https://' + host),
+    }).allowed) return true;
+
+    const destination = current.kind === 'web' ? sources.find(candidate =>
+      candidate.id !== source.id && candidate.enabled && candidate.kind === 'web' &&
+      this.security.decide({ context: 'handoff', url, source: candidate.url }).allowed,
+    ) : undefined;
+    if (notifyNavigator || destination) this.navigationBlocked?.(guest, destination?.id);
+    if (this.settings().privacy.blockPopups) {
+      this.adblock.countPopup(source.id);
+      const external = this.security.decide({ context: 'external', url }).allowed ? url : undefined;
+      this.notify({ level: 'info', message: `Blocked a redirect from ${source.name} to ${safeHost(url)}.`, sourceId: source.id, url: external });
+    }
+    return false;
   }
 
   private onTitle(guest: WebContents, source: SourceInfo, title: string) {

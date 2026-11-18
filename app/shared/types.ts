@@ -522,7 +522,8 @@ export interface SiteEpisodeCard {
 
 export interface OpenEpisodeResult {
   ok: boolean;
-  failure?: 'not-found' | 'blocked' | 'unavailable' | 'cancelled';
+  failure?: 'not-found' | 'blocked' | 'unavailable' | 'cancelled' | 'redirect';
+  destinationSourceId?: string;
   url: string;
   via: 'current' | 'cache' | 'derived' | 'search' | 'title' | null;
   episodes?:SiteEpisodeCard[];

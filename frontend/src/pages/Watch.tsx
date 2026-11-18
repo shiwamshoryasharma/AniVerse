@@ -118,9 +118,9 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
     const params=new URLSearchParams(search);params.delete('local');params.set('source',id);
     return '/watch/'+media.id+'/'+episode+'?'+params.toString();
   };
-  const sourceUnavailable = () => {
+  const sourceUnavailable = (preferred?: string) => {
     if(!sourceId||localId||retrying.current||selection.current.scope!==fallbackScope||selection.current.sourceId!==sourceId)return;
-    const step=fallback.current.unavailable(fallbackScope,sourceId,sources);
+    const step=fallback.current.unavailable(fallbackScope,sourceId,sources,preferred);
     if(step.kind==='switch'){
       const next=enabled.find(s=>s.id===step.sourceId)!;
       toast.push({level:'info',message:(source?.name??'This source')+' could not open this episode. Trying '+next.name+'…'});
@@ -165,14 +165,9 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
 
   // ---- Website sources: AniVerse drives the site (search → title → episode) and focuses its player.
   const siteKey = mode === 'web' && match.data && sourceId ? `${sourceId}:${media.id}` : null;
-  const [siteStart, setSiteStart] = useState<{ key: string; url: string } | null>(null);
-  if (siteKey && siteStart?.key !== siteKey && match.data) {
-    // First page for this title on this site: best learned page, else search/title/home.
-    setSiteStart({ key: siteKey, url: match.data.episodeUrls[episode] ?? match.data.titleUrl ?? match.data.pageUrl ?? source?.url ?? '' });
-  }
-  const siteSrc = siteStart && siteStart.key === siteKey ? siteStart.url : null;
   const navKey = siteKey && webContentsId ? `${siteKey}:${webContentsId}:${episode}` : null;
   const [navDone, setNavDone] = useState<string | null>(null);
+  const [navReady, setNavReady] = useState<string | null>(null);
   const [siteStatus, setSiteStatus] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const [siteOptions, setSiteOptions] = useState<SiteOptions>({ types: [], servers: [] });
@@ -198,13 +193,17 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
     const adopt = adoptRef.current === episode;
     adoptRef.current = null;
     const retries: number[] = [];
+    setNavReady(null);
     call('site.openEpisode', { webContentsId, sourceId, mediaId: media.id, titles: ref.titles, episode, adopt, focus: settings.player.siteFocus })
       .then((r) => {
         if (cancelled) return;
         setFocused(r.focused);
         setSiteOptions(r.options);
-        acceptEpisodes(r);
-        if (shouldFallback(r)) sourceUnavailable();
+        if (r.ok) {
+          setNavReady(navKey);
+          acceptEpisodes(r);
+        }
+        if (shouldFallback(r)) sourceUnavailable(r.destinationSourceId);
         else if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
         // Some sites only render their audio/server switches seconds after the player loads.
         if (r.ok && !r.options.types.length && !r.options.servers.length) {
@@ -236,13 +235,13 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   }, [navKey, navAttempt]);
 
   useEffect(()=>{
-    if(!navKey||navDone!==navKey||!webContentsId)return;
+    if(!navKey||navReady!==navKey||!webContentsId)return;
     let cancelled=false;
     const timers=[1500,4000,10000].map(delay=>window.setTimeout(()=>{
       void call('site.episodes',{webContentsId}).then(episodes=>{if(!cancelled&&episodes.length)acceptEpisodes({episodes});}).catch(()=>undefined);
     },delay));
     return()=>{cancelled=true;timers.forEach(timer=>window.clearTimeout(timer));};
-  },[navKey,navDone,webContentsId,acceptEpisodes]);
+  },[navKey,navReady,webContentsId,acceptEpisodes]);
 
   useEffect(() => {
     if(localId||!sourceId||match.isFetching||retrying.current)return;
@@ -279,7 +278,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         setFocused(r.focused);
         setSiteOptions(r.options);
         acceptEpisodes(r);
-        if (shouldFallback(r)) sourceUnavailable();
+        if (shouldFallback(r)) sourceUnavailable(r.destinationSourceId);
         else if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
       })
       .catch((err) => toast.push({ level: 'error', message: errorText(err) }))
@@ -329,15 +328,17 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
     progressAt.current = null;
   }, [episode, sourceId]);
   useEffect(() => {
-    if (!webContentsId) return;
+    if (!webContentsId || siteBusy) return;
+    let pending = false;
     let last = 0;
     let disposed = false;
     let previousSample: PlaybackSample | null = null;
     setPlaybackProbe(null);
     setPlaybackStatus(null);
     const timer = window.setInterval(async () => {
-      if (document.hidden) return;
-      const probe = await call('player.probe', { webContentsId }).catch(() => null);
+      if (document.hidden || pending) return;
+      pending = true;
+      const probe = await call('player.probe', { webContentsId }).catch(() => null).finally(() => { pending = false; });
       if (disposed) return;
       setPlaybackProbe(probe);
       const sample = probe?.video ? { at: Date.now(), currentTime: probe.currentTime, paused: probe.paused, ended: probe.ended, ...probe.video } : null;
@@ -357,7 +358,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
     return () => { disposed = true; window.clearInterval(timer); };
     // record/goEpisode are recreated each render; the interval only needs the latest ids.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [webContentsId, episode, sourceId, settings.player.autoNext, hasNext, mode]);
+  }, [webContentsId, episode, sourceId, settings.player.autoNext, hasNext, mode, siteBusy]);
 
   // In site mode, follow episodes the user opens on the site itself (not AniVerse's own navigation).
   const onSiteNavigate = (url: string) => {
@@ -418,10 +419,10 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
     screen = <Loading label={`Looking up ${title} on ${source.name}…`} />;
   } else if (match.error) {
     screen = <ErrorState error={match.error} onRetry={() => void match.refetch()} title={`${source.name} is unavailable`} />;
-  } else if (mode === 'web' && siteSrc) {
+  } else if (mode === 'web') {
     screen = (
       <>
-        <WebSession key={source.partition} source={source} src={siteSrc} toolbar={false} controls={siteControls} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />
+        <WebSession key={source.partition} source={source} src="about:blank" toolbar={false} controls={siteControls} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />
         {((siteBusy && !needsUser) || choosing) && (
           <CatLoader label={choosing ?? siteStatus ?? `Loading episode ${episode}…`} hint={slowKey === navKey && !choosing ? `${source.name} is taking a while.` : undefined}>
             {slowKey === navKey && !choosing && (

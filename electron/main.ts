@@ -270,7 +270,10 @@ async function bootstrap() {
     (wc, action, value) => probe.control(wc.id, action, value),
     (wc,url)=>protocols.artwork.grant(wc,url),
     (sourceId,mediaId,cards)=>sourceAudio.observe(sourceId,mediaId,cards),
+    (guest, source, url) => sessions.allowGuestNavigation(guest, source, url),
   );
+  const mp4DownloadKey = 'windows:mp4-download-folder';
+  const mp4DownloadFolder = () => store.getKv<string | null>(mp4DownloadKey, null);
   sessions = new SessionManager(
     registry,
     adblock,
@@ -280,6 +283,8 @@ async function bootstrap() {
     (e) => emit('cloudflare.status', e),
     security,
     () => store.isIncognito(),
+    (guest, destination) => navigator.navigationBlocked(guest, destination),
+    mp4DownloadFolder,
   );
   const comments = new CommentsService(anilist, apiFetch, store, () => settings.get(), youtube, () => oauthClientIds().mal);
   const providers = { anilist: new AniListSync(anilist), mal: new MalSync(apiFetch, anilist) };
@@ -554,6 +559,18 @@ async function bootstrap() {
     },
 
     'player.openFile': () => protocols.pick(mainWindow),
+    'player.mp4Folder': async ({ action }) => {
+      if (action === 'reset') store.setKv(mp4DownloadKey, null);
+      if (action === 'choose' && mainWindow) {
+        const choice = await dialog.showOpenDialog(mainWindow, {
+          title: 'Choose the default MP4 download folder',
+          defaultPath: mp4DownloadFolder() ?? app.getPath('downloads'),
+          properties: ['openDirectory', 'createDirectory'],
+        });
+        if (!choice.canceled && choice.filePaths[0]) store.setKv(mp4DownloadKey, choice.filePaths[0]);
+      }
+      return mp4DownloadFolder();
+    },
 
     'cast.mirrorPrepare': ({ webContentsId, deviceId, title, upscale }) => mirror!.prepare(webContentsId, deviceId, title, upscale, settings.get().player.upscale),
     'cast.mirrorChunk': ({ ticket, sequence, bytes }) => mirror!.push(ticket, sequence, bytes),

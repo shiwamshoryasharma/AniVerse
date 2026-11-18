@@ -27,7 +27,9 @@ import { useToast } from '../lib/useToast';
 import { Logo, Spinner } from './common';
 import { ContextMenuProvider } from './ContextMenu';
 import { interfaceStyle } from '../../../app/shared/interface';
-import {seasonalVisuals} from '../../../app/shared/seasonal';
+import { seasonalVisuals } from '../../../app/shared/seasonal';
+import { useMidnightTheme } from '../lib/desktopTheme';
+import { DesktopSeasonalVisuals } from '../lib/seasonal';
 import { IncognitoButton } from './Privacy';
 import { ReleaseAnnouncements } from './Changelog';
 import { UpdateBadge } from './Updates';
@@ -56,6 +58,7 @@ export function Shell() {
   useBridgeEvents(qc);
   const settings = useSettings();
   const [open, setOpen] = useState(readRailPref);
+  const midnight = useMidnightTheme();
   const layout = interfaceStyle(settings.appearance.style).layout;
   const navigate = useNavigate();
   const toast = useToast();
@@ -64,19 +67,29 @@ export function Shell() {
 
   useEffect(() => {
     const root = document.documentElement;
+    root.dataset.desktopTheme = midnight ? 'midnight' : 'standard';
     root.dataset.style = settings.appearance.style;
     root.dataset.layout = interfaceStyle(settings.appearance.style).layout;
     root.dataset.accent = settings.appearance.accent;
     root.dataset.density = settings.appearance.density;
     root.dataset.font = settings.appearance.fontFamily;
     root.dataset.motion = settings.appearance.reduceMotion ? 'reduce' : 'full';
-  }, [settings.appearance]);
+  }, [settings.appearance, midnight]);
 
   useEffect(()=>{
     const icon=document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    const refresh=()=>{const on=seasonalVisuals(new Date(),settings.appearance.accent);document.documentElement.dataset.seasonal=String(on);if(icon)icon.href=on?'./festival-icon.svg':'./favicon.svg';};
-    refresh();const timer=setInterval(refresh,1000);return()=>clearInterval(timer);
-  },[settings.appearance.accent]);
+    const refresh = () => {
+      const on = !midnight && seasonalVisuals(new Date(), settings.appearance.accent);
+      const root = document.documentElement;
+      if (root.dataset.seasonal === String(on)) return;
+      root.dataset.seasonal = String(on);
+      if (icon) icon.href = on ? './festival-icon.svg' : './favicon.svg';
+    };
+    refresh();
+    if (midnight || settings.appearance.accent !== 'festival') return;
+    const timer = window.setInterval(refresh, 1000);
+    return () => window.clearInterval(timer);
+  }, [settings.appearance.accent, midnight]);
 
   useEffect(() => {
     main.current?.scrollTo({ top: 0 });
@@ -105,6 +118,7 @@ export function Shell() {
   };
 
   return (
+    <DesktopSeasonalVisuals.Provider value={!midnight}>
     <div className={cx('app', layout === 'classic' && open && 'rail-open', 'layout-' + layout)}>
       <header className={cx('topbar', platform === 'win32' && 'win')}>
         <div className="brand">
@@ -152,6 +166,7 @@ export function Shell() {
         </ContextMenuProvider>
       </main>
     </div>
+    </DesktopSeasonalVisuals.Provider>
   );
 }
 

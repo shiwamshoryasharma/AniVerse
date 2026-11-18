@@ -1,0 +1,50 @@
+/* Desktop-only palette. The selected navigation layout, font and density still apply. */
+:root[data-desktop-theme='midnight'][data-style] {
+  color-scheme: dark;
+  --bg: #0b111a;
+  --bg-2: #111b27;
+  --surface: #172332;
+  --surface-2: #1d2c3c;
+  --surface-3: #26394b;
+  --surface-hover: #2c4054;
+  --text: #eef5fa;
+  --text-2: #bccddd;
+  --text-3: #94aec2;
+  --line: #abc4d92a;
+  --line-2: #abc4d94a;
+  --accent: #78dfc1;
+  --accent-2: #b4f5df;
+  --accent-ink: #082b25;
+  --accent-soft: #78dfc121;
+  --accent-glow: #78dfc137;
+  --ok: #9be7b5;
+  --warn: #ffce8a;
+  --err: #ffa2ae;
+  --info: #94ccff;
+}
+
+[data-desktop-theme='midnight'][data-style] .main {
+  background: radial-gradient(ellipse at 75% 0%, #1b3b4d70, transparent 55%), var(--bg);
+}
+[data-desktop-theme='midnight'][data-style] .topbar { background: var(--bg-2); }
+[data-desktop-theme='midnight'][data-style] .ep-row { background: var(--bg-2); }
+[data-desktop-theme='midnight'][data-style] .ep-row.active {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+[data-desktop-theme='midnight'] .watch .toolbar .btn.on { color: var(--accent); }
+.midnight-preview {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 18px;
+  background: linear-gradient(110deg, #142232, #183943);
+  border-color: #78dfc155;
+  color: #eef5fa;
+}
+.midnight-preview h3 { margin: 0; }
+.midnight-preview p { margin: 4px 0 0; color: #bccddd; }
+.midnight-preview .btn { background: #78dfc1; color: #082b25; }

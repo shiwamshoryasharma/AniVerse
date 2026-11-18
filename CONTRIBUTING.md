@@ -9,7 +9,7 @@ By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 AniVerse is a **browser with anime features, not a content source**. Contributions must keep it that way:
 
 - **No site lists or links.** Don't add streaming-site URLs to code, docs, tests or issues. Tests use neutral placeholder hosts such as `stream-one.test`.
-- **No content extraction.** No code that downloads, rips, re-hosts or pulls stream URLs out of third-party websites.
+- **No content extraction.** Keep website playback in the original player. The Windows save action accepts public, direct MP4 files selected by the user. Do not rip, re-host or extract streaming URLs.
 - **No circumvention.** No DRM, paywall or login bypass, and no CAPTCHA/Turnstile solvers or fingerprint spoofing.
 - **Official APIs only** for AniList, MyAnimeList and YouTube. No secrets in the repository: OAuth client IDs live in the untracked `config/oauth.json`.
 - **Security boundaries stay intact:** a sandboxed renderer with `contextIsolation`, every IPC call validated (zod) in `electron/ipc.ts`, and websites only in their own `persist:src-<id>` sessions.

@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
-export type SecurityContext='network'|'navigate'|'external'|'asset'|'address';
+export type SecurityContext='network'|'navigate'|'external'|'asset'|'address'|'handoff'|'mp4';
 export interface PolicyRequest {context:SecurityContext;url:string;source?:string;allowed_origins?:string[]}
-interface Engine {memory:WebAssembly.Memory;abi_version:()=>number;input_ptr:()=>number;evaluate:(length:number)=>number}
+interface Engine {memory:WebAssembly.Memory;abi_version:()=>number;input_ptr:()=>number;evaluate:(length:number)=>number;mp4_header?:(length:number)=>number}
 const reasons=['allowed','invalid-input','scheme','credentials','local-network','origin','path','engine-unavailable'] as const;
 export class RustPolicy {
   private engine:Engine;
@@ -24,6 +24,11 @@ export class RustPolicy {
       const result=this.engine.evaluate(bytes.length);
       return {allowed:result===0,reason:reasons[result]??'invalid-input'};
     }catch{this.healthy=false;return {allowed:false,reason:'engine-unavailable'};}
+  }
+  isMp4Header(bytes: Uint8Array): boolean {
+    if (!this.healthy || !this.engine.mp4_header || bytes.length < 16 || bytes.length > 16384) return false;
+    new Uint8Array(this.engine.memory.buffer, this.engine.input_ptr(), bytes.length).set(bytes);
+    return this.engine.mp4_header(bytes.length) === 1;
   }
   snapshot(){return {engine:'rust-wasm' as const,ready:this.healthy,abi:1,sha256:this.sha256};}
 }

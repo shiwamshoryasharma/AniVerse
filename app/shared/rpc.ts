@@ -148,6 +148,7 @@ export interface RpcContract {
   'settings.set': [DeepPartial<Settings>, Settings];
 
   'player.openFile': [void, { url: string; name: string } | null];
+  'player.mp4Folder': [{ action: 'get' | 'choose' | 'reset' }, string | null];
 
   'cast.mirrorPrepare': [{ webContentsId: number; deviceId: string; title: string; upscale: boolean }, { ticket: string }];
   'cast.mirrorChunk': [{ ticket: string; sequence: number; bytes: Uint8Array }, void];

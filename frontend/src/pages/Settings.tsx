@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, Download, Info, KeyRound, LogOut, Palette, Play, RefreshCw, RotateCw, Search, Shield, UserRound, Globe, Link2, X, Cpu, ContactRound, ScrollText } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -189,12 +189,31 @@ function GeneralSection() {
 
 const numberOptions = (values: number[], label: (v: number) => string) => values.map((v) => ({ value: v, label: label(v) }));
 
+function DownloadFolderSetting() {
+  const toast = useToast();
+  const client = useQueryClient();
+  const key = ['windows-mp4-folder'];
+  const folder = useQuery({ queryKey: key, queryFn: () => call('player.mp4Folder', { action: 'get' }) });
+  const change = useMutation({
+    mutationFn: (action: 'choose' | 'reset') => call('player.mp4Folder', { action }),
+    onSuccess: value => client.setQueryData(key, value),
+    onError: error => toast.push({ level: 'error', message: errorText(error) }),
+  });
+  return <Setting title="MP4 download folder" desc={<span style={{ overflowWrap: 'anywhere' }}>
+    {folder.isPending ? 'Loading folder…' : folder.isError ? errorText(folder.error) : folder.data || 'Windows Downloads'}
+  </span>}>
+    <button className="btn sm" disabled={change.isPending} onClick={() => change.mutate('choose')}>Choose folder</button>
+    {folder.data && <button className="btn sm" disabled={change.isPending} onClick={() => change.mutate('reset')}>Reset</button>}
+  </Setting>;
+}
+
 function PlayerSection() {
   const s = useSettings().player;
   const save = useSave();
   return (
     <>
     <Group title="Anime4K · up to 4K"><div className="card-pad"><Anime4KPanel /></div></Group>
+    <Group title="Downloads"><DownloadFolderSetting /></Group>
     <Group title="Playback">
       <Setting title="Autoplay" desc="Start playing as soon as a stream loads.">
         <Switch label="Autoplay" on={s.autoplay} onChange={(v) => save({ player: { autoplay: v } })} />

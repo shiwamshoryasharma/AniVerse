@@ -132,6 +132,12 @@ interface SitePreference {
  */
 export class SiteNavigator {
   private jobs = new Map<number, number>();
+  private redirects = new WeakMap<WebContents, { source: SourceInfo; blocked: boolean; destination?: string }>();
+
+  navigationBlocked(wc: WebContents, destination?: string) {
+    const request = this.redirects.get(wc);
+    if (request && !request.blocked) Object.assign(request, { blocked: true, destination });
+  }
   private episodeContexts=new Map<number,{sourceId:string;mediaId:number;slug:string|null;pageKey:string}>();
   private focusCss = new Map<number, string>();
   private focusWanted = new Map<number, boolean>();
@@ -149,6 +155,7 @@ export class SiteNavigator {
     private control?: (wc: WebContents, action: 'seek' | 'play' | 'pause', value?: number) => Promise<boolean>,
     private artwork?:(wc:WebContents,url:string)=>string|null,
     private observeAudio?:(sourceId:string,mediaId:number,cards:SiteEpisodeCard[])=>void,
+    private allowNavigate?: (wc: WebContents, source: SourceInfo, url: string) => boolean,
   ) {}
 
   /** Recipes are re-read when the file changes (cheap mtime check). */
@@ -245,7 +252,15 @@ export class SiteNavigator {
   }
 
   private async load(wc: WebContents, url: string, alive: () => boolean, status?: (m: string) => void) {
-    await wc.loadURL(url).catch(() => undefined);
+    if (!alive()) return;
+    const request = this.redirects.get(wc);
+    if (request && this.allowNavigate && !this.allowNavigate(wc, request.source, url)) {
+      this.navigationBlocked(wc);
+      return;
+    }
+    await wc.loadURL(url).catch(error => {
+      if (alive() && !String(error).includes('ERR_ABORTED')) throw Error('This source page could not load.');
+    });
     await this.settle(wc, alive, 0, status);
   }
 
@@ -271,7 +286,9 @@ export class SiteNavigator {
     const token = (this.jobs.get(wc.id) ?? 0) + 1;
     this.jobs.set(wc.id, token);
     this.episodeContexts.delete(wc.id);
-    const alive = () => this.jobs.get(wc.id) === token && !wc.isDestroyed();
+    const redirect: { source: SourceInfo; blocked: boolean; destination?: string } = { source, blocked: false };
+    const currentJob = () => this.jobs.get(wc.id) === token && !wc.isDestroyed();
+    const alive = () => currentJob() && !redirect.blocked;
     const status = (message: string | null) => {
       if (alive()) this.emit({ webContentsId: wc.id, sourceId: source.id, message });
     };
@@ -286,6 +303,7 @@ export class SiteNavigator {
     const readCards=async()=>{
       if(!alive())return;
       const cards=await this.page<SiteEpisodeCard[]>(wc,{op:'episodeCards',slug:slugOf(titlePage)});
+      if (!alive()) return;
       for(const card of cards??[]){
         const prior=episodeCards.get(card.episode);
         episodeCards.set(card.episode,{...card,thumbnail:prior?.thumbnail??(card.thumbnail?this.artwork?.(wc,card.thumbnail)??null:null),audio:[...new Set([...(prior?.audio??[]),...card.audio])]});
@@ -295,9 +313,11 @@ export class SiteNavigator {
     if (!req.adopt) wc.setAudioMuted(true);
 
     const finish = async (ok: boolean, via: OpenEpisodeResult['via'], message: string | null): Promise<OpenEpisodeResult> => {
-      const url = wc.isDestroyed() ? '' : wc.getURL();
+      if (!alive()) return fail(null, via);
+      const url = wc.getURL();
       if(ok&&alive()&&(await this.page<{missing:boolean}>(wc,{op:'availability'}))?.missing)return fail('This source no longer has the requested page.',via,'not-found');
-      if (ok && alive() && cache && this.onSite(source, url)) {
+      if (!alive()) return fail(null, via);
+      if (ok && cache && this.onSite(source, url)) {
         this.store.setSiteLink(source.id, req.mediaId, N, url);
         if (!links[0] && !pinned && titlePage) this.store.setSiteLink(source.id, req.mediaId, 0, titlePage);
         if (method && !this.store.isPrivate(req.mediaId) && source.partition.startsWith('persist:')) this.store.setKv(`site-method:${source.id}`, { ...method, at: Date.now() });
@@ -310,24 +330,35 @@ export class SiteNavigator {
         status('Getting the player ready…');
         options = await this.applyPreferences(wc, source, alive);
         await readCards();
-        if(alive())this.episodeContexts.set(wc.id,{sourceId:source.id,mediaId:req.mediaId,slug:slugOf(titlePage),pageKey:titleKey(wc.getURL())});
+        if (!alive()) return fail(null, via);
+        this.episodeContexts.set(wc.id,{sourceId:source.id,mediaId:req.mediaId,slug:slugOf(titlePage),pageKey:titleKey(wc.getURL())});
         if (req.focus ?? true) focused = await this.focus(wc, true, recipe);
         if (alive()) wc.setAudioMuted(false);
         if (focused && alive() && !req.adopt) await this.kickPlayback(wc, alive);
       } else if (alive()) {
         wc.setAudioMuted(false);
       }
+      if (!alive()) return fail(null, via);
       status(null);
       return { ok, url, via, focused, message, options,episodes:ok?[...episodeCards.values()]:[] };
     };
     const fail = (message: string | null, via: OpenEpisodeResult['via'] = null, failure: OpenEpisodeResult['failure'] = 'unavailable'): OpenEpisodeResult => {
-      failure = !alive() ? 'cancelled' : isChallengeTitle(wc.getTitle()) ? 'blocked' : failure;
-      if (failure === 'blocked') message = 'Complete this source’s security check, then retry the episode.';
-      if (alive()) wc.setAudioMuted(false);
-      status(null);
-      return { ok: false, failure, url: wc.isDestroyed() ? '' : wc.getURL(), via, focused: false, message, options: EMPTY_OPTIONS };
+      if (!currentJob()) failure = 'cancelled';
+      else {
+        if (redirect.blocked) {
+          failure = redirect.destination ? 'redirect' : 'unavailable';
+          message = 'This source redirected outside its configured site.';
+        } else if (isChallengeTitle(wc.getTitle())) {
+          failure = 'blocked';
+          message = 'Complete this source’s security check, then retry the episode.';
+        }
+        wc.setAudioMuted(false);
+        this.emit({ webContentsId: wc.id, sourceId: source.id, message: null });
+      }
+      return { ok: false, failure, destinationSourceId: redirect.destination, url: wc.isDestroyed() ? '' : wc.getURL(), via, focused: false, message, options: EMPTY_OPTIONS };
     };
 
+    this.redirects.set(wc, redirect);
     try {
       const current = wc.getURL();
       const known = Object.entries(links)
@@ -335,20 +366,20 @@ export class SiteNavigator {
         .map(([, u]) => u);
 
       // 0. The site already shows this episode.
-      if (req.adopt || (links[N] && links[N] === current)) return finish(true, 'current', null);
-      if (episodeFromUrl(current) === N && known.some((u) => titleKey(u) === titleKey(current))) return finish(true, 'current', null);
+      if (req.adopt || (links[N] && links[N] === current)) return await finish(true, 'current', null);
+      if (episodeFromUrl(current) === N && known.some((u) => titleKey(u) === titleKey(current))) return await finish(true, 'current', null);
 
       // 1. Learned episode page, or one derived from a sibling episode's URL pattern.
       if (links[N]) {
         status(`Loading episode ${N}…`);
         await this.load(wc, links[N], alive, status);
-        return finish(true, 'cache', null);
+        return await finish(true, 'cache', null);
       }
       const derived = deriveEpisodeUrl(links, N);
       if (derived) {
         status(`Loading episode ${N}…`);
         await this.load(wc, derived, alive, status);
-        if (episodeFromUrl(wc.getURL()) === N) return finish(true, 'derived', null);
+        if (episodeFromUrl(wc.getURL()) === N) return await finish(true, 'derived', null);
       }
 
       // 2. Title page: pinned/learned, or found through the site's search.
@@ -366,12 +397,12 @@ export class SiteNavigator {
       const here = wc.getURL();
       const hereEp = episodeFromUrl(here);
       if (hereEp !== null) {
-        if (hereEp === N) return finish(true, 'search', null);
+        if (hereEp === N) return await finish(true, 'search', null);
         const direct = deriveEpisodeUrl({ [hereEp]: here }, N);
         if (direct) {
           status(`Loading episode ${N}…`);
           await this.load(wc, direct, alive, status);
-          if (episodeFromUrl(wc.getURL()) === N) return finish(true, 'derived', null);
+          if (episodeFromUrl(wc.getURL()) === N) return await finish(true, 'derived', null);
         }
       }
 
@@ -379,10 +410,12 @@ export class SiteNavigator {
       const found = await this.openEpisodeOnPage(wc, recipe, N, slugOf(titlePage), alive, status, method);
       if (!alive()) return fail(null);
       if (!found) return fail(`Opened the series on ${source.name}, but couldn’t find episode ${N}.`, 'title', 'not-found');
-      return finish(true, 'search', null);
+      return await finish(true, 'search', null);
     } catch (err) {
       if(alive()&&(await this.page<{missing:boolean}>(wc,{op:'availability'}))?.missing)return fail('This source no longer has the requested page.',null,'not-found');
       return fail((err as Error).message);
+    } finally {
+      if (this.redirects.get(wc) === redirect) this.redirects.delete(wc);
     }
   }
 
@@ -411,13 +444,14 @@ export class SiteNavigator {
       if (template) await this.load(wc, buildSearchUrl(template, query), alive, status);
       else if (!(await this.searchWithSiteBox(wc, source, query, alive, status, method))) continue;
 
+      if (!alive()) return null;
       const findHits = () => this.page<PickResult[]>(wc, { op: 'findTitle', titles: req.titles, season, selector: titleSelector });
       let hits = !titleSelector && method?.titleLink ? await this.poll(() => this.page<PickResult[]>(wc, { op: 'findTitle', titles: req.titles, season, selector: method.titleLink }), alive, 1200) : null;
       if (!hits) {
         if (method) delete method.titleLink;
         hits = await this.poll(findHits, alive, 7000);
       }
-      if (!hits && (await this.page<{ clicked: boolean }>(wc, { op: 'viewAll' }))?.clicked) {
+      if (alive() && !hits && (await this.page<{ clicked: boolean }>(wc, { op: 'viewAll' }))?.clicked) {
         await this.settle(wc, alive, 1500, status);
         this.learnFromUrl(source, wc.getURL(), query);
         hits = await this.poll(findHits, alive, 6000);
@@ -434,6 +468,7 @@ export class SiteNavigator {
           await this.page(wc, { op: 'click', pick: hit.pick! });
           await this.settle(wc, alive, 1800, status);
         }
+        if (!alive()) return null;
         const check = await this.page<{ score: number; checked: number }>(wc, { op: 'titleCheck', titles: req.titles, season });
         if (!check || check.checked === 0 || check.score >= 0.6) {
           if (method && hit.selector) method.titleLink = hit.selector;
@@ -449,6 +484,7 @@ export class SiteNavigator {
   private async searchWithSiteBox(wc: WebContents, source: SourceInfo, query: string, alive: () => boolean, status: (m: string | null) => void, method: NavigationMethod | null): Promise<boolean> {
     if (!this.onSite(source, wc.getURL())) await this.load(wc, source.url, alive, status);
     type Opened = { input: boolean; clicked: boolean; more: boolean; selector?: string };
+    if (!alive()) return false;
     const hasInput = async () => (await this.page<Opened>(wc, { op: 'openSearch', attempt: -1 }))?.input ?? false;
     // Single-page apps render their header after load: give the search box a moment to appear.
     let ready = await hasInput();

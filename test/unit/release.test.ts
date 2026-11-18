@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MediaCard } from '../../app/shared/types';
 import { availableEpisodes, pendingRelease } from '../../frontend/src/lib/format';
 
@@ -28,6 +28,9 @@ const card = (over: Partial<MediaCard>): MediaCard => ({
 });
 
 describe('release gating', () => {
+  beforeEach(() => { vi.spyOn(Date, 'now').mockReturnValue(NOW * 1000); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
   it('blocks a title that has not premiered and reports its date', () => {
     const movie = card({ format: 'MOVIE', status: 'NOT_YET_RELEASED', episodes: 1, startDate: { year: 2026, month: 11, day: 14 } });
     const p = pendingRelease(movie, 1, NOW);

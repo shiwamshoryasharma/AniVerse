@@ -232,6 +232,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'settings.set': settingsPatch as z.ZodType<RpcContract['settings.set'][0]>,
 
   'player.openFile': none,
+  'player.mp4Folder': z.object({ action: z.enum(['get', 'choose', 'reset']) }),
 
   'cast.mirrorPrepare': z.object({ webContentsId: id, deviceId: text(200).min(1), title: text(300), upscale: z.boolean() }),
   'cast.mirrorChunk': z.object({ ticket: z.uuid(), sequence: z.number().int().nonnegative(), bytes: z.instanceof(Uint8Array).refine((bytes) => bytes.length > 0 && bytes.length <= 2_000_000, 'Invalid capture chunk size') }),

@@ -2,6 +2,15 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.2.2 Windows — 2026-11-18
+
+- Reopen a redirected episode using an enabled destination's own browser session.
+- Choose the optional Midnight theme in Settings → Interface layouts.
+- Right-click a supported public source video or link and choose **Save MP4 as…**.
+- Skip playback sampling during automatic navigation and prevent overlapping probes.
+
+[Windows release notes](docs/releases/2.2.2.md)
+
 ## 2.2.1 Windows — 2026-11-03
 
 - Comfortable Watch History with persisted Grid/List layouts, date groups, title/source search, progress and exact-episode Resume.

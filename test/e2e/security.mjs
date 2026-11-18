@@ -20,6 +20,9 @@ const forbiddenURL='http://127.0.0.1:'+forbidden.address().port;
 const html='<!doctype html><meta charset="utf-8"><title>Security playback fixture</title><style>body{margin:0;background:#151020;color:white;font:16px sans-serif}#player{position:relative;width:960px;height:540px}video{width:100%;height:100%;object-fit:contain}a,button{margin:10px}</style><div id="player"><video id="v" controls muted loop src="/video.mp4"></video></div><button id="quality">Switch quality</button><a href="/next" id="next">Next page</a><script>window.originalVideo=v;quality.onclick=()=>{v.src="/video.mp4?quality=low";v.play();};</script>';
 const episodeList='<div class="episodes">'+[1,2,3].map(n=>'<a href="/watch/fixture/'+n+'" data-episode="'+n+'"><img src="/still/'+n+'.gif"><span>Episode '+n+'</span><b>'+(n===2?'SUB':'SUB DUB')+'</b></a>').join('')+'</div>';
 const server=createServer((req,res)=>{
+ if(req.url==='/redirect/episode-1'){
+  res.writeHead(302,{Location:forbiddenURL+'/other-site'});res.end();return;
+ }
  if(req.url.startsWith('/still/')){res.writeHead(200,{'Content-Type':'image/gif'});res.end(Buffer.from('R0lGODlhAQABAPAAAP8AAAAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==','base64'));return;}
  if(req.url==='/'){
   const card='<a data-anilist-id="7" data-sub-count="12" data-dub-count="11" data-total-count="12" href="/watch/fixture/1"><img src="/still/7.gif"><h3>Fixture Series</h3></a>';
@@ -73,6 +76,21 @@ try{
  const csp=await page.evaluate(()=>{const script=document.createElement('script');script.textContent='window.__badInlineCsp=true';document.head.append(script);return !window.__badInlineCsp;});
  assert.equal(csp,true);check('App CSP blocks untrusted inline scripts');
  assert.equal(await page.locator('.seasonal-logo').count(),1);
+ await page.evaluate(()=>location.hash='#/settings/themes');
+ await page.getByRole('button',{name:'Use Midnight theme',exact:true}).click();
+ await page.waitForFunction(()=>document.documentElement.dataset.desktopTheme==='midnight' &&
+  getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()==='#78dfc1');
+ assert.equal(await page.locator('.seasonal-logo').count(),0);
+ await page.screenshot({path:path.join(artifacts,'windows-2.2.2-midnight.png')});
+ await page.reload();
+ await page.getByRole('button',{name:'Restore previous colours',exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>document.documentElement.dataset.desktopTheme),'midnight');
+ await page.getByRole('button',{name:'Restore previous colours',exact:true}).click();
+ await page.locator('.seasonal-logo').waitFor();
+ await page.evaluate(()=>location.hash='#/settings/player');
+ await page.getByText('Windows Downloads',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'Choose folder',exact:true}).count(),1);
+ check('Midnight persists across reload, restores the previous theme, and exposes the Windows MP4 folder setting');
  const sources=await rpc('sources.list'),source=sources[0];
  const fresh=await rpc('sources.catalogue',{sourceId:source.id,audio:'dub',page:1});
  assert.equal(fresh.items.length,1);assert.equal(fresh.items[0].sub,12);assert.equal(fresh.items[0].dub,11);
@@ -117,6 +135,15 @@ try{
  check('Compiled checkbox filters reset without disturbing existing player routes');
 
 
+
+ await rpc('sources.pin',{sourceId:source.id,mediaId:7,url:origin+'/redirect/episode-1'});
+ await page.evaluate(id=>location.hash='#/watch/7/1?source='+id,source.id);
+ await page.getByText('This source redirected outside its configured site.',{exact:true}).waitFor({timeout:12000});
+ assert.equal(forbiddenRequests,0);
+ await page.locator('.festival-buffer').waitFor({state:'hidden'});
+ check('The source guard ends loading without requesting an unconfigured redirect target');
+ await page.evaluate(()=>location.hash='#/history');
+ await page.locator('webview').waitFor({state:'detached'});
 
  await rpc('sources.pin',{sourceId:source.id,mediaId:7,url:origin+'/slow/episode-1'});
  await page.evaluate(id=>location.hash='#/watch/7/1?source='+id,source.id);
