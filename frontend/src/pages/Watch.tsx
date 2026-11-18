@@ -205,8 +205,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         }
         if (shouldFallback(r)) sourceUnavailable(r.destinationSourceId);
         else if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
-        // Some sites only render their audio/server switches seconds after the player loads.
-        if (r.ok && !r.options.types.length && !r.options.servers.length) {
+        // A source may render servers before the audio rows finish loading.
+        if (r.ok && r.options.types.length < 2) {
           let found = false;
           for (const delay of [4000, 10000]) {
             retries.push(
@@ -214,8 +214,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
                 if (found || cancelled) return;
                 void call('site.options', { webContentsId })
                   .then((o) => {
-                    if (cancelled || (!o.types.length && !o.servers.length)) return;
-                    found = true;
+                    if (cancelled || o.types.length <= r.options.types.length) return;
+                    found = o.types.length >= 2;
                     setSiteOptions(o);
                   })
                   .catch(() => undefined);

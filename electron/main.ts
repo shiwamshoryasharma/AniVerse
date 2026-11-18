@@ -427,7 +427,10 @@ async function bootstrap() {
     'site.focus': async ({ webContentsId, on }) => ({ focused: await navigator.focus(guestFor(webContentsId), on, null) }),
     'site.options': ({ webContentsId }) => navigator.options(guestFor(webContentsId)),
     'site.episodes':({webContentsId})=>navigator.episodeCards(guestFor(webContentsId)),
-    'site.choose': ({ webContentsId, sourceId, kind, value }) => navigator.choose(guestFor(webContentsId, sourceId), registry.get(sourceId), kind, value),
+    'site.choose': ({ webContentsId, sourceId, kind, value }) => {
+      const guest = guestFor(webContentsId, sourceId);
+      return navigator.choose(guest, sessions.sourceForSession(guest.session) ?? registry.get(sourceId), kind, value);
+    },
     'site.forget': ({ sourceId, mediaId }) => {
       registry.get(sourceId);
       store.clearSiteLinks(sourceId, mediaId);

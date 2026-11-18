@@ -20,3 +20,25 @@ it('blocks same-site and cross-site popup windows without replacing the player, 
  guest.emit('will-redirect',event,'https://cdn.test/frame',false,false);expect(event.preventDefault).toHaveBeenCalledTimes(1);
  guest.emit('will-navigate',event,'https://stream.test/episode-2');expect(event.preventDefault).toHaveBeenCalledTimes(1);
 });
+
+it('hands a configured main-frame redirect to its own session while still cancelling the guest navigation',()=>{
+ const source={id:'old',name:'Origin',url:'https://old.test',kind:'web',enabled:true};
+ const target={id:'new',name:'Destination',url:'https://new.test',kind:'web',enabled:true};
+ const guest=Object.assign(new EventEmitter(),{id:2,setWindowOpenHandler:vi.fn()});
+ const notify=vi.fn();
+ const navigationBlocked=vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+ const registry={list:()=>[source,target]};
+ const manager=new SessionManager(registry as never,{countPopup:vi.fn()} as never,{} as never,()=>DEFAULT_SETTINGS,
+  notify,vi.fn(),new RustPolicy(readFileSync('dist/electron/security.wasm')),()=>false,navigationBlocked);
+ manager.manageGuest(guest as never,source as never);
+ const event={preventDefault:vi.fn()};
+ guest.emit('will-redirect',event,'https://new.test/watch/2',false,false);
+ expect(event.preventDefault).not.toHaveBeenCalled();
+ guest.emit('will-redirect',event,'https://new.test/watch/2',false,true);
+ expect(event.preventDefault).toHaveBeenCalledTimes(1);
+ expect(notify).toHaveBeenLastCalledWith(expect.objectContaining({sourceId:'old',destinationSourceId:'new'}));
+ guest.emit('will-redirect',event,'https://new.test/watch/2',false,true);
+ expect(event.preventDefault).toHaveBeenCalledTimes(2);
+ expect(notify).toHaveBeenCalledTimes(1);
+ expect(navigationBlocked).toHaveBeenLastCalledWith(guest,'new');
+});

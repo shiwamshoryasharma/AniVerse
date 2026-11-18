@@ -7,10 +7,19 @@ import type { SourceRegistry } from '../app/core/sources/registry';
 import { episodeFromUrl, seriesMarkers } from '../app/core/sources/text';
 import { buildSearchUrl, siteDomain } from '../app/core/sources/web';
 import { sleep } from '../app/core/util';
+import { desktopAudioOptions } from './desktopSiteAudio';
 import type { OpenEpisodeRequest, OpenEpisodeResult, ProbeResult, SiteOption, SiteOptions, SiteStatusEvent, SourceInfo, SiteEpisodeCard } from '../app/shared/types';
 import { FOCUS_CSS, pageScript, recipeSelector, SCROLLBAR_CSS, type PageOp, type PickResult, type RawSiteOption } from './sitePage';
 
 const WORLD = 1017;
+const INSPECT_AUDIO = 'data-aniverse-inspect-audio';
+// These rules can be suspended for a synchronous native-control read/click. The page is
+// restored in the same task, before Chromium can paint the rest of the source website.
+const SCAN_AUDIO = pageScript({ op: 'siteOptions' });
+const visibleFocus = ':root:not([' + INSPECT_AUDIO + '])';
+const DESKTOP_FOCUS_CSS = FOCUS_CSS.replace(/([^{}]+)\{/g, (_rule, selectors: string) =>
+  ':is(' + selectors.trim() + '):where(' + visibleFocus + ', ' + visibleFocus + ' *) {',
+);
 const EMPTY_OPTIONS: SiteOptions = { types: [], servers: [] };
 
 /** Removes episode markers so pages of the same title compare equal. */
@@ -136,7 +145,9 @@ export class SiteNavigator {
 
   navigationBlocked(wc: WebContents, destination?: string) {
     const request = this.redirects.get(wc);
-    if (request && !request.blocked) Object.assign(request, { blocked: true, destination });
+    if (!request) return false;
+    if (!request.blocked) Object.assign(request, { blocked: true, destination });
+    return true;
   }
   private episodeContexts=new Map<number,{sourceId:string;mediaId:number;slug:string|null;pageKey:string}>();
   private focusCss = new Map<number, string>();
@@ -227,14 +238,18 @@ export class SiteNavigator {
     }
   }
 
-  private async page<T>(wc: WebContents, op: PageOp): Promise<T | null> {
+  private page<T>(wc: WebContents, op: PageOp): Promise<T | null> {
+    return this.runPage<T>(wc, op.op, pageScript(op));
+  }
+
+  private async runPage<T>(wc: WebContents, operation: string, code: string): Promise<T | null> {
     if (wc.isDestroyed()) return null;
     try {
-      return (await wc.executeJavaScriptInIsolatedWorld(WORLD, [{ code: pageScript(op) }], true)) as T;
+      return (await wc.executeJavaScriptInIsolatedWorld(WORLD, [{ code }], true)) as T;
     } catch (err) {
       // Navigations abort scripts routinely; anything else is a bug in a page op worth seeing.
       const message = err instanceof Error ? err.message : String(err);
-      if (!/destroyed|navigat|context|frame/i.test(message)) console.warn(`[site] ${op.op} failed: ${message}`);
+      if (!/destroyed|navigat|context|frame/i.test(message)) console.warn('[site] '+operation+' failed: '+message);
       return null;
     }
   }
@@ -588,62 +603,84 @@ export class SiteNavigator {
 
   // ---------------------------------------------------------------- SUB/DUB & servers
 
+  private async readOptions(wc: WebContents, selection?: {kind: 'type' | 'server'; value: string}) {
+    const code = `(() => {
+      const root = document.documentElement, attr = ${JSON.stringify(INSPECT_AUDIO)};
+      const had = root.hasAttribute(attr);
+      root.setAttribute(attr, '');
+      try {
+        const raw = (${desktopAudioOptions.toString()})(${SCAN_AUDIO});
+        const choice = ${JSON.stringify(selection ?? null)};
+        const group = raw.find(o => o.kind === 'type' && o.active)?.value;
+        const target = choice && raw.find(o => o.kind === choice.kind && o.value === choice.value &&
+          (o.kind === 'type' || !o.group || !group || o.group === group));
+        const el = target && !target.active && document.querySelector('[data-aniverse-pick="' + target.pick + '"]');
+        if (el) { el.scrollIntoView({ block: 'center' }); el.click(); }
+        return { raw, clicked: !!el };
+      } finally { root.toggleAttribute(attr, had); }
+    })()`;
+    return await this.runPage<{raw: RawSiteOption[]; clicked: boolean}>(wc, 'siteOptions', code)
+      ?? { raw: [], clicked: false };
+  }
+
   async options(wc: WebContents): Promise<SiteOptions> {
-    return toSiteOptions(await this.page<RawSiteOption[]>(wc, { op: 'siteOptions' }));
+    return toSiteOptions((await this.readOptions(wc)).raw);
   }
 
   /** Clicks a SUB/DUB toggle or server on the site, remembers it for this site, and re-isolates the player. */
   async choose(wc: WebContents, source: SourceInfo, kind: 'type' | 'server', value: string): Promise<{ options: SiteOptions; focused: boolean }> {
-    const raw = (await this.page<RawSiteOption[]>(wc, { op: 'siteOptions' })) ?? [];
-    const target = raw.find((o) => o.kind === kind && o.value === value);
-    if (target) {
-      const job = (this.jobs.get(wc.id) ?? 0) + 1;
-      this.jobs.set(wc.id, job);
-      const alive = () => !wc.isDestroyed() && this.jobs.get(wc.id) === job;
-      const playback = await this.probe(wc).catch(() => null);
-      const wasFocused = this.focusWanted.get(wc.id) ?? false;
-      await this.page(wc, { op: 'click', pick: target.pick });
+    const job = (this.jobs.get(wc.id) ?? 0) + 1;
+    this.jobs.set(wc.id, job);
+    const alive = () => !wc.isDestroyed() && this.jobs.get(wc.id) === job;
+    const wasFocused = this.focusWanted.get(wc.id) ?? false;
+    const playback = await this.probe(wc).catch(() => null);
+    if (!alive()) return { options: EMPTY_OPTIONS, focused: false };
+    const { raw, clicked } = await this.readOptions(wc, { kind, value });
+    if (!clicked) return { options: toSiteOptions(raw), focused: wasFocused && alive() };
+    await this.settle(wc, alive, 0);
+    // Wait for the site's selection marker, including controls that hydrate after a switch.
+    const options = await this.poll(async () => {
+      const next = await this.options(wc);
+      return next[kind === 'type' ? 'types' : 'servers'].some(o => o.value === value && o.active) ? next : null;
+    }, alive, 4500);
+    if (!alive()) return { options: EMPTY_OPTIONS, focused: false };
+    if (options && source.partition.startsWith('persist:')) {
       const pref = this.store.getKv<SitePreference>(`site-pref:${source.id}`, {});
-      this.store.setKv(`site-pref:${source.id}`, kind === 'type' ? { ...pref, type: value } : { ...pref, server: value });
-      await this.settle(wc, alive, 1600);
-      const focused = wasFocused && alive() ? await this.focus(wc, true, null) : false;
-      // A server/audio switch replaces the site's player. Restore the same episode's
-      // position through the original video clock, never by extracting its URL.
-      if (playback && !playback.ended && playback.currentTime > 1 && this.control) {
-        for (const end = Date.now() + 10000; alive() && Date.now() < end; await sleep(400)) {
-          const next = await this.probe(wc).catch(() => null);
-          if (!next || (next.video?.readyState ?? 0) < 2) continue;
-          if (Math.abs(next.duration - playback.duration) <= Math.max(60, playback.duration * 0.1)) {
-            await this.control(wc, 'seek', playback.currentTime);
-            await this.control(wc, playback.paused ? 'pause' : 'play');
-          }
-          break;
-        }
-      }
-      return { options: alive() ? await this.options(wc) : EMPTY_OPTIONS, focused: alive() && focused };
+      this.store.setKv(`site-pref:${source.id}`, { ...pref, [kind]: value });
     }
-    return { options: toSiteOptions(raw), focused: this.focusWanted.get(wc.id) ?? false };
+    const focused = wasFocused && alive() ? await this.focus(wc, true, null) : false;
+    if (options && playback && !playback.ended && playback.currentTime > 1 && this.control) {
+      for (const end = Date.now() + 10000; alive() && Date.now() < end; await sleep(400)) {
+        const next = await this.probe(wc).catch(() => null);
+        if (!next || (next.video?.readyState ?? 0) < 2) continue;
+        if (Math.abs(next.duration - playback.duration) <= Math.max(60, playback.duration * 0.1)) {
+          await this.control(wc, 'seek', playback.currentTime);
+          await this.control(wc, playback.paused ? 'pause' : 'play');
+        }
+        break;
+      }
+    }
+    return { options: alive() ? await this.options(wc) : EMPTY_OPTIONS, focused: alive() && focused };
   }
+
 
   /** Re-applies the user's preferred audio type and server for this site. */
   private async applyPreferences(wc: WebContents, source: SourceInfo, alive: () => boolean): Promise<SiteOptions> {
     const pref = this.store.getKv<SitePreference>(`site-pref:${source.id}`, {});
     // Watch already retries late control reads. Wait here only to apply an actual preference.
-    if (!pref.type && !pref.server) return toSiteOptions(await this.page<RawSiteOption[]>(wc, { op: 'siteOptions' }));
+    if (!pref.type && !pref.server) return this.options(wc);
     let raw: RawSiteOption[] = [];
     for (const end = Date.now() + 5000; alive() && Date.now() < end; await sleep(400)) {
-      raw = (await this.page<RawSiteOption[]>(wc, { op: 'siteOptions' })) ?? [];
+      raw = (await this.readOptions(wc)).raw;
       if (raw.length) break;
     }
     for (const kind of ['type', 'server'] as const) {
       const wanted = kind === 'type' ? pref.type : pref.server;
       if (!wanted || !alive()) continue;
       const option = toSiteOptions(raw)[kind === 'type' ? 'types' : 'servers'].find((o) => o.value === wanted);
-      const target = raw.find((o) => o.kind === kind && o.value === wanted);
-      if (option && target && !option.active) {
-        await this.page(wc, { op: 'click', pick: target.pick });
+      if (option && !option.active && (await this.readOptions(wc, { kind, value: wanted })).clicked) {
         await this.settle(wc, alive, 1400);
-        raw = (await this.page<RawSiteOption[]>(wc, { op: 'siteOptions' })) ?? raw;
+        raw = (await this.readOptions(wc)).raw;
       }
     }
     return toSiteOptions(raw);
@@ -695,7 +732,7 @@ export class SiteNavigator {
       const r = await this.page<{ found: boolean }>(wc, { op: 'markPlayer', selector: recipeSelector(resolved, 'player'), keep: true });
       if (!current()) return false;
       if (r?.found) {
-        const key = await wc.insertCSS(FOCUS_CSS).catch(() => null);
+        const key = await wc.insertCSS(DESKTOP_FOCUS_CSS).catch(() => null);
         if (key && current()) this.focusCss.set(wc.id, key);
         else if (key) await wc.removeInsertedCSS(key).catch(() => undefined);
         if(current())await this.focusChildren(wc,true);

@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Cookie, FileText, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { useEffect } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Empty, Loading, SourceIcon } from '../components/common';
 import { WebSession } from '../components/WebSession';
-import { call, errorText } from '../lib/bridge';
+import { call, errorText, onEvent } from '../lib/bridge';
 import { cx } from '../lib/format';
 import { keys, useAdblockStats, useSessionInfo, useSources } from '../lib/queries';
 import { useToast } from '../lib/useToast';
@@ -85,6 +86,14 @@ export function SourceBrowserPage() {
   const { data: sources } = useSources();
   const navigate = useNavigate();
   const source = sources?.find((s) => s.id === id);
+  const location = useLocation();
+  useEffect(() => onEvent('app.notice', notice => {
+    if (!id || notice.sourceId !== id || !notice.destinationSourceId) return;
+    const previous: string[] = location.state?.sourceRedirects ?? [];
+    const next = sources?.find(item => item.id === notice.destinationSourceId && item.enabled);
+    if (!next || next.id === id || previous.includes(next.id)) return;
+    navigate('/sources/' + next.id, { replace: true, state: { sourceRedirects: [...previous, id] } });
+  }), [id, location.state, navigate, sources]);
   const session = useSessionInfo(id ?? '');
   const toast = useToast();
   const qc = useQueryClient();
@@ -124,7 +133,7 @@ export function SourceBrowserPage() {
         </button>
       </div>
       <div className="card" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <WebSession source={source} src={(()=>{try{const page=new URL(params.get('page')??source.url),base=new URL(source.url);return /^https?:$/.test(page.protocol)&&page.hostname.replace(/^www\./,'')===base.hostname.replace(/^www\./,'')&&!page.username&&!page.password?page.href:source.url;}catch{return source.url;}})()} onNavigate={() => void qc.invalidateQueries({ queryKey: keys.session(source.id) })} />
+        <WebSession key={source.partition} source={source} src={(()=>{try{const page=new URL(params.get('page')??source.url),base=new URL(source.url);return /^https?:$/.test(page.protocol)&&page.hostname.replace(/^www\./,'')===base.hostname.replace(/^www\./,'')&&!page.username&&!page.password?page.href:source.url;}catch{return source.url;}})()} onNavigate={() => void qc.invalidateQueries({ queryKey: keys.session(source.id) })} />
       </div>
     </div>
   );

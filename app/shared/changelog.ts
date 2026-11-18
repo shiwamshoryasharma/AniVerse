@@ -5,6 +5,12 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.2.3',date:'2026-11-18',title:'Keep watching after a source redirects',
+   summary:'Windows source handoffs and SUB/DUB controls work together in player-only mode.',
+   items:[
+    {kind:'fixed',icon:'fix',title:'Open the configured destination',description:'Sources and Watch switch to an enabled destination in its own browser session when the original site redirects.'},
+    {kind:'fixed',icon:'fix',title:'Switch between SUB and DUB',description:'Watch finds the site’s original audio controls, including grouped server rows, and confirms the selection while keeping player-only mode.'},
+   ]},
   {version:'2.2.2',date:'2026-11-18',title:'Clearer source recovery and a new Windows theme',
    summary:'Windows source recovery, an optional Midnight theme and direct MP4 saving.',
    items:[

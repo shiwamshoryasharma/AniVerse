@@ -78,7 +78,7 @@ export class SessionManager implements SiteFetcher {
     private emitCloudflare: (e: CloudflareEvent) => void,
     private security:RustPolicy,
     private privateSessionActive:()=>boolean=()=>false,
-    private navigationBlocked?: (guest: WebContents, destination?: string) => void,
+    private navigationBlocked?: (guest: WebContents, destination?: string) => boolean,
     private downloadFolder: () => string | null = () => null,
   ) {}
   private mp4?: SourceMp4Download;
@@ -209,7 +209,13 @@ export class SessionManager implements SiteFetcher {
       candidate.id !== source.id && candidate.enabled && candidate.kind === 'web' &&
       this.security.decide({ context: 'handoff', url, source: candidate.url }).allowed,
     ) : undefined;
-    if (notifyNavigator || destination) this.navigationBlocked?.(guest, destination?.id);
+    const handled = (notifyNavigator || destination) && this.navigationBlocked?.(guest, destination?.id);
+    if (destination && handled) return false;
+    if (destination && notifyNavigator) {
+      this.notify({ level: 'info', message: 'This source redirected to ' + destination.name + '. Opening its session.',
+        sourceId: source.id, destinationSourceId: destination.id });
+      return false;
+    }
     if (this.settings().privacy.blockPopups) {
       this.adblock.countPopup(source.id);
       const external = this.security.decide({ context: 'external', url }).allowed ? url : undefined;

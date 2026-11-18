@@ -19,6 +19,8 @@ await new Promise(resolve=>forbidden.listen(0,'127.0.0.1',resolve));
 const forbiddenURL='http://127.0.0.1:'+forbidden.address().port;
 const html='<!doctype html><meta charset="utf-8"><title>Security playback fixture</title><style>body{margin:0;background:#151020;color:white;font:16px sans-serif}#player{position:relative;width:960px;height:540px}video{width:100%;height:100%;object-fit:contain}a,button{margin:10px}</style><div id="player"><video id="v" controls muted loop src="/video.mp4"></video></div><button id="quality">Switch quality</button><a href="/next" id="next">Next page</a><script>window.originalVideo=v;quality.onclick=()=>{v.src="/video.mp4?quality=low";v.play();};</script>';
 const episodeList='<div class="episodes">'+[1,2,3].map(n=>'<a href="/watch/fixture/'+n+'" data-episode="'+n+'"><img src="/still/'+n+'.gif"><span>Episode '+n+'</span><b>'+(n===2?'SUB':'SUB DUB')+'</b></a>').join('')+'</div>';
+const audioControls='<section id="audio-picker"><button aria-pressed="true">SUB</button><button aria-pressed="false">DUB</button></section><script>for(const button of document.querySelectorAll("#audio-picker button"))button.onclick=()=>{if(getComputedStyle(button).visibility!=="visible")return;for(const item of button.parentElement.children)item.setAttribute("aria-pressed",String(item===button));v.src="/video.mp4?fixtureAudio="+button.textContent;v.play();};</script>';
+const groupedAudio='<section id="audio-picker" class="server-list"><div><span><svg></svg> SUB:</span><div><button aria-label="Switch to HD-1 server" class="bg-primary text-black" data-audio="SUB">HD-1</button></div></div><div><span><svg></svg> DUB:</span><div><button aria-label="Switch to HD-1 server" data-audio="DUB">HD-1</button></div></div><div><span>H-SUB:</span><button aria-label="Switch to H-SUB server" data-audio="SUB">H-SUB</button></div></section><script>for(const button of document.querySelectorAll("#audio-picker button"))button.onclick=()=>{if(getComputedStyle(button).visibility!=="visible")return;for(const item of document.querySelectorAll("#audio-picker button"))item.classList.toggle("bg-primary",item===button),item.classList.toggle("text-black",item===button);v.src="/video.mp4?fixtureAudio="+button.dataset.audio;v.play();};</script>';
 const server=createServer((req,res)=>{
  if(req.url==='/redirect/episode-1'){
   res.writeHead(302,{Location:forbiddenURL+'/other-site'});res.end();return;
@@ -32,7 +34,7 @@ const server=createServer((req,res)=>{
   const m=req.headers.range?.match(/^bytes=(\d+)-(\d*)$/),start=m?Number(m[1]):0,end=m&&m[2]?Math.min(Number(m[2]),clip.length-1):clip.length-1;
   res.writeHead(m?206:200,{'Content-Type':'video/mp4','Accept-Ranges':'bytes','Content-Length':end-start+1,...(m?{'Content-Range':'bytes '+start+'-'+end+'/'+clip.length}:{})});res.end(clip.subarray(start,end+1));return;
  }
- const send=()=>{if(!res.destroyed){res.writeHead(200,{'Content-Type':'text/html'});res.end(html+episodeList);}};
+ const send=()=>{if(!res.destroyed){res.writeHead(200,{'Content-Type':'text/html'});res.end(html+episodeList+((req.url.startsWith('/watch/fixture/2')||req.url.includes('episode-2'))?groupedAudio:audioControls));}};
  if(req.url.includes('/slow/')){const timer=setTimeout(send,10000);timer.unref();}else send();
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -150,7 +152,7 @@ try{
  await page.waitForSelector('.festival-buffer');await page.screenshot({path:path.join(artifacts,'security-festive-buffer.png')});
  assert.equal(await page.locator('.cat-stage').count(),0);check('Temporary festive buffer and vector logo render without replacing normal loader assets');
  await page.evaluate(()=>{window.__originalDate=Date;window.Date=class extends window.__originalDate{constructor(...args){super(...(args.length?args:[new window.__originalDate(2027,0,1).getTime()]));}static now(){return new window.__originalDate(2027,0,1).getTime();}};});
- await page.waitForSelector('.cat-stage');assert.equal(await page.locator('.festival-buffer').count(),0);assert.equal(await page.locator('.seasonal-logo').count(),0);
+ await page.waitForSelector('.cat-stage');assert.equal(await page.locator('.festival-buffer').count(),0);await page.locator('.seasonal-logo').waitFor({state:'hidden'});
  await page.screenshot({path:path.join(artifacts,'security-january-cat-restored.png')});
  await page.evaluate(()=>window.Date=window.__originalDate);check('January clock restores the cat and standard logo without restarting');
  await page.evaluate(id=>location.hash='#/sources/'+id,source.id);
@@ -194,6 +196,26 @@ try{
  await audio.getByRole('button',{name:'ALL',exact:true}).click();assert.equal(await page.locator('.ep-row').count(),3);
  const known=await rpc('sources.audio');assert.ok(known.find(row=>row.mediaId===7)?.audio.includes('dub'));
  check('Compiled episode audio filters and main-process availability observations agree');
+ const chooseAudio=async(label)=>{
+  await page.locator('.opt-btn').getByText(label,{exact:true}).click({timeout:5000});
+  await page.waitForFunction(wanted=>[...document.querySelectorAll('.opt-btn')].some(button=>button.textContent.trim()===wanted&&button.classList.contains('active')&&!button.disabled),label,{timeout:12000});
+  const guest=page.locator('webview');
+  const snapshot=()=>guest.evaluate(view=>view.executeJavaScript('({visible:getComputedStyle(document.querySelector("#audio-picker button")).visibility,active:(document.querySelector("#audio-picker [aria-pressed=true]")?.textContent ?? document.querySelector("#audio-picker .bg-primary")?.dataset.audio),clock:v.currentTime,width:v.videoWidth})'));
+  const start=await snapshot();
+  await page.waitForFunction(async wanted=>{try{return await document.querySelector('webview').executeJavaScript(wanted);}catch{return false;}},'v.currentTime>'+String(start.clock+.1),{timeout:10000});
+  const state=await snapshot();
+  assert.equal(state.active,label);assert.equal(state.visible,'hidden');assert.ok(state.width>0);
+ };
+ await chooseAudio('DUB');
+ await chooseAudio('SUB');
+ check('Focused Watch changes its native site selection from SUB to DUB and back with advancing decoded playback');
+ await page.evaluate(source=>location.hash='#/watch/7/2?source='+source,source.id);
+ await page.waitForFunction(()=>[...document.querySelectorAll('.opt-btn')].some(button=>button.textContent.trim()==='H-SUB'&&!button.disabled),undefined,{timeout:25000});
+ await chooseAudio('DUB');
+ assert.equal(await page.locator('.opt-btn').getByText('HD-1',{exact:true}).count(),1);
+ await chooseAudio('SUB');
+ check('Grouped SUB/DUB server rows work when the source also offers a hard-sub server');
+
  await page.evaluate(()=>location.hash='#/watch/7/1?local=1');
  await page.waitForFunction(()=>document.querySelector('video')?.duration>0);
  await page.getByRole('button',{name:'Play',exact:true}).first().click();

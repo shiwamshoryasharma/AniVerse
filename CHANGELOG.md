@@ -2,6 +2,13 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.2.3 Windows — 2026-11-18
+
+- Open an enabled redirect destination in its own session from Sources and Watch.
+- Restore SUB/DUB switching in player-only mode, including sites with separate audio server rows and hard-sub options.
+
+[Windows release notes](docs/releases/2.2.3.md)
+
 ## 2.2.2 Windows — 2026-11-18
 
 - Reopen a redirected episode using an enabled destination's own browser session.

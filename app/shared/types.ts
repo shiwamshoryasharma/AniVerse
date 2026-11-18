@@ -494,6 +494,8 @@ export interface AppNotice {
   level: 'info' | 'warn' | 'error';
   message: string;
   sourceId?: string;
+  /** An enabled configured website selected by the desktop redirect guard. */
+  destinationSourceId?: string;
   /** Optional URL the user may choose to open in the system browser. */
   url?: string;
 }
