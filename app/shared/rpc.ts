@@ -218,6 +218,12 @@ export interface RpcError {
 /** Surface exposed by the preload script on `window.aniverse`. */
 export interface AniverseBridge {
   readonly edition?: 'aniverse2';
+  readonly windowControls?: {
+    minimize(): Promise<void>;
+    toggleMaximize(): Promise<void>;
+    isMaximized(): Promise<boolean>;
+    close(): Promise<void>;
+  };
   invoke<M extends RpcMethod>(method: M, input: RpcInput<M>): Promise<RpcOutput<M>>;
   on<E extends EventName>(event: E, listener: (payload: EventContract[E]) => void): () => void;
   platform: string;

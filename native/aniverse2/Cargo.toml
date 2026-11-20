@@ -1,6 +1,6 @@
 [package]
 name = "aniverse2"
-version = "3.0.0"
+version = "3.0.1"
 edition = "2021"
 publish = false
 
@@ -20,3 +20,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "=2.12.7", features = ["custom-protocol"] }
 thiserror = "2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

@@ -133,6 +133,17 @@ try {
   const sources = await invoke('sources.list');
   assert.deepEqual(sources.map((row) => row.id), ['sample-test', 'sample-test-2', 'yt-example']);
   report.tests.savedSourceIds = true;
+  const maximize = page.getByRole('button', { name: 'Maximize window' });
+  await maximize.click();
+  await page.getByRole('button', { name: 'Restore window' }).waitFor();
+  assert.equal(await page.evaluate(() => window.aniverse.windowControls.isMaximized()), true);
+  await page.getByRole('button', { name: 'Restore window' }).click();
+  await maximize.waitFor();
+  assert.equal(await page.evaluate(() => window.aniverse.windowControls.isMaximized()), false);
+  assert.equal(await page.getByRole('button', { name: 'Minimize window' }).count(), 1);
+  assert.equal(await page.getByRole('button', { name: 'Close window' }).count(), 1);
+  assert.equal(await page.locator('.tauri-topbar .spacer[data-tauri-drag-region]').count(), 1);
+  report.tests.customTitleBar = true;
   assert.equal(await page.locator('.brand .word').innerText(), 'AniVerse2');
   await page.waitForFunction(() => document.querySelector('.brand img')?.naturalWidth > 0, null, { polling: 100 });
   await page.evaluate(() => { location.hash = '#/settings/themes'; });

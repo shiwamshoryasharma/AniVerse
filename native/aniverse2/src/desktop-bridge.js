@@ -4,9 +4,16 @@
     'sources.changed', 'cloudflare.status', 'sync.status', 'adblock.stats', 'app.notice',
     'site.status', 'cast.status', 'privacy.changed', 'player.captureEnded', 'update.status',
   ]);
+  const nativeWindow = () => window.__TAURI__.window.getCurrentWindow();
   Object.defineProperty(window, 'aniverse', { value: Object.freeze({
     platform: 'win32',
     edition: 'aniverse2',
+    windowControls: Object.freeze({
+      minimize: () => nativeWindow().minimize(),
+      toggleMaximize: () => nativeWindow().toggleMaximize(),
+      isMaximized: () => nativeWindow().isMaximized(),
+      close: () => nativeWindow().close(),
+    }),
     async invoke(method, input) {
       try {
         return await window.__TAURI__.core.invoke('desktop_rpc', { method, input });

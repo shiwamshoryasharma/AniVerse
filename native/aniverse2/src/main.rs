@@ -103,6 +103,7 @@ fn run(context: tauri::Context<tauri::Wry>) -> Result<(), tauri::Error> {
             WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
                 .title(app.config().product_name.as_deref().unwrap_or("AniVerse2"))
                 .inner_size(1280.0, 860.0)
+                .decorations(false)
                 .visible(!cfg!(feature = "isolated-test"))
                 .use_https_scheme(true)
                 .initialization_script(startup)

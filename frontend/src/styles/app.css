@@ -194,6 +194,22 @@ img {
 .topbar.win {
   padding-right: 150px;
 }
+.tauri-topbar { padding-right: 0; }
+.tauri-topbar [data-tauri-drag-region] { app-region: drag; user-select: none; }
+.tauri-topbar .word b { pointer-events: none; }
+.tauri-window-controls { display: flex; align-self: stretch; flex: 0 0 auto; }
+.tauri-window-controls button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.tauri-window-controls button:hover { background: var(--surface-2); }
+.tauri-window-controls button:last-child:hover { background: #c42b1c; color: #fff; }
+.tauri-window-controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .topbar > * {
   -webkit-app-region: no-drag;
 }

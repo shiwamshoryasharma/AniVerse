@@ -4,17 +4,70 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
-    path::Path,
+    path::{Path, PathBuf},
     sync::OnceLock,
 };
 use tauri::Url;
+
+const SITES_FILE: &str = "config/streaming-sites.txt";
+
+pub(crate) fn open_config(root: &Path) -> std::io::Result<PathBuf> {
+    use std::{fs, io, os::windows::ffi::OsStrExt, ptr::null_mut};
+    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+
+    fs::create_dir_all(root.join("config"))?;
+    let config = root.join("config").canonicalize()?;
+    if config.parent() != Some(root.canonicalize()?.as_path()) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Invalid source folder.",
+        ));
+    }
+    let file = config.join("streaming-sites.txt");
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&file)
+    {
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            if !fs::symlink_metadata(&file)?.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Invalid source list.",
+                ));
+            }
+        }
+        Err(error) => return Err(error),
+    }
+    // The editor receives the ordinary DOS path, including spaces, as one filename.
+    let path = root.join(SITES_FILE);
+    let name: Vec<_> = path.as_os_str().encode_wide().chain([0]).collect();
+    let verb: Vec<_> = "open".encode_utf16().chain([0]).collect();
+    let result = unsafe {
+        ShellExecuteW(
+            null_mut(),
+            verb.as_ptr(),
+            name.as_ptr(),
+            null_mut(),
+            null_mut(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result as usize <= 32 {
+        return Err(io::Error::other(format!(
+            "Windows could not open the text editor ({}).",
+            result as usize
+        )));
+    }
+    Ok(path)
+}
 
 pub(crate) fn list(
     root: &Path,
     db: Option<&Connection>,
 ) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
-    let text =
-        text_file(&root.join("config/streaming-sites.txt"), 4 * 1024 * 1024)?.unwrap_or_default();
+    let text = text_file(&root.join(SITES_FILE), 4 * 1024 * 1024)?.unwrap_or_default();
     let overrides: HashMap<_, _> = rows(db, "SELECT id,data FROM source_overrides", [], |row| {
         let data: String = row.get(1)?;
         Ok((

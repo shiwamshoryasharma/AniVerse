@@ -1,6 +1,10 @@
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
+  Copy,
+  Minus,
+  Square,
+  X,
   PanelsTopLeft,
   Clapperboard,
   Compass,
@@ -120,24 +124,25 @@ export function Shell() {
   return (
     <DesktopSeasonalVisuals.Provider value={!midnight}>
     <div className={cx('app', layout === 'classic' && open && 'rail-open', 'layout-' + layout)}>
-      <header className={cx('topbar', platform === 'win32' && 'win')}>
+      <header className={cx('topbar', platform === 'win32' && !isAniVerse2 && 'win', isAniVerse2 && 'tauri-topbar')}>
         <div className="brand">
           {layout === 'classic' && <button className="icon-btn" aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'} onClick={toggleRail}>
             {open ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
           </button>}
           <Logo />
-          <span className="word">
+          <span className="word" data-tauri-drag-region={isAniVerse2 ? "" : undefined}>
             Ani<b>Verse{isAniVerse2 ? '2' : ''}</b>
           </span>
         </div>
         <SearchBox />
-        <div className="spacer" />
+        <div className="spacer" data-tauri-drag-region={isAniVerse2 ? "" : undefined} />
         <IncognitoButton />
         <ReleaseAnnouncements />
         <UpdateBadge />
         <RefreshButton />
         <AdblockBadge />
         <ProfileMenu />
+        {isAniVerse2 && <WindowControls />}
       </header>
 
       <nav className="rail" aria-label="Main">
@@ -167,6 +172,34 @@ export function Shell() {
       </main>
     </div>
     </DesktopSeasonalVisuals.Provider>
+  );
+}
+
+function WindowControls() {
+  const toast = useToast();
+  const [maximized, setMaximized] = useState(false);
+  const controls = window.aniverse?.windowControls;
+  useEffect(() => {
+    if (!controls) return;
+    const sync = () => void controls.isMaximized().then(setMaximized, () => undefined);
+    sync();
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
+  }, [controls]);
+  if (!controls) return null;
+
+  const run = (action: 'minimize' | 'toggleMaximize' | 'close') => {
+    void controls[action]().catch((error) => toast.push({ level: 'error', message: String(error) }));
+  };
+  const resizeLabel = maximized ? 'Restore window' : 'Maximize window';
+  return (
+    <div className="tauri-window-controls" aria-label="Window controls" role="group">
+      <button type="button" aria-label="Minimize window" title="Minimize" onClick={() => run('minimize')}><Minus size={14} /></button>
+      <button type="button" aria-label={resizeLabel} title={resizeLabel} onClick={() => run('toggleMaximize')}>
+        {maximized ? <Copy size={12} /> : <Square size={12} />}
+      </button>
+      <button type="button" aria-label="Close window" title="Close" onClick={() => run('close')}><X size={15} /></button>
+    </div>
   );
 }
 

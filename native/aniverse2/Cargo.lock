@@ -60,7 +60,7 @@ dependencies = [
 
 [[package]]
 name = "aniverse2"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "aniverse-desktop-migration",
  "dirs",
@@ -71,6 +71,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "thiserror 2.0.21",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

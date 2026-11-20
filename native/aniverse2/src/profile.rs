@@ -17,6 +17,16 @@ const PREFERENCES: &[&str] = &[
 ];
 
 pub(crate) fn request(root: &Path, method: &str, input: Value) -> Result<Value, RpcError> {
+    if method == "sources.openConfig" {
+        return sources::open_config(root)
+            .map(|path| json!({ "path": path }))
+            .map_err(|error| {
+                RpcError::new(
+                    "config",
+                    format!("Could not open streaming-sites.txt. {error}"),
+                )
+            });
+    }
     if !matches!(
         method,
         "settings.get"
