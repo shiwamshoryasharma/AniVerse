@@ -16,6 +16,14 @@ const PREFERENCES: &[&str] = &[
     "aniverse.latestSeen",
 ];
 
+pub(crate) fn update_defaults(root: &Path) -> Value {
+    open(root)
+        .ok()
+        .and_then(|db| kv(db.as_ref(), "settings").ok().flatten())
+        .map(|mut settings| settings["updates"].take())
+        .unwrap_or_default()
+}
+
 pub(crate) fn show_adult(root: &Path) -> Result<bool, RpcError> {
     let db = open(root).map_err(read_error)?;
     let settings = kv(db.as_ref(), "settings").map_err(read_error)?;

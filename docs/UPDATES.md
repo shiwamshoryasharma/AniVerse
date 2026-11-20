@@ -105,3 +105,13 @@ The report is written to `test/artifacts/updater.json`. `UPDATE_KEEP=1` keeps th
 ## Android releases beside Windows
 
 Android0.1.0 uses the separate android-v0.1.0 tag/APK and manual installation. Its GitHub release must use make_latest=false; Windows v2.2.1 remains the latest desktop update feed. Keep all prior tags/releases/assets. Android signing identity is independent of the Windows certificate; retain the existing Android key for later APK updates. See [Android build/signing](ANDROID.md).
+
+## AniVerse2 Windows updates
+
+AniVerse2 3.0.3 and later use the Tauri updater. Install 3.0.3 once over older AniVerse2 previews. About provides manual checks, automatic-check and automatic-download switches, and Restart to update once the download is verified. The NSIS upgrade keeps the existing preview profile and the separate Electron installation. The installer stays in memory until restart. It is downloaded again if the app closes before applying it.
+
+Use the same Windows Authenticode signer as the Electron bridge. After bundling and timestamp-signing the final installer, sign the exact final EXE with `scripts/sign-aniverse2-updater.ps1`. The script reads the local DPAPI-protected AniVerse2 update key or a key provided by the build secret store. The private update key must remain available to the release owner for future versions. Keep a protected backup outside the repository.
+
+Verify the packaged application digest in Windows Sandbox and generate the separate Electron migration manifest. Upload the final EXE, Tauri .sig, latest.json and Electron migration manifest to the new aniverse2-vVERSION release using GitHub CLI. Keep the Electron release marked latest. After verifying the public release's assets, advance the codex/aniverse2-windows-updates branch's latest.json with the identical Tauri manifest. Retain all versioned release assets.
+
+Tauri verifies the installer signature and the signed version before allowing a restart. Its public key is embedded in the desktop config. AniVerse2 accepts installers only from the matching versioned GitHub release and refuses downgrades.

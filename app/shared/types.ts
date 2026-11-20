@@ -457,14 +457,16 @@ export interface ProbeResult {
 export interface PrivacyState { incognito:boolean; privateMediaIds:number[] }
 
 export interface AppInfo {
-  security:{engine:'rust-wasm';ready:boolean;abi:number;sha256:string};
+  security?:{engine:'rust-wasm';ready:boolean;abi:number;sha256:string};
   version: string;
-  electron: string;
-  chrome: string;
+  electron?: string;
+  chrome?: string;
+  tauri?: string;
+  webview2?: string;
   platform: string;
   configPath: string;
   dataPath: string;
-  graphics: import('./graphics').GraphicsSummary & { renderer: string | null; uiRendering: import('./graphics').UiRenderingState };
+  graphics?: import('./graphics').GraphicsSummary & { renderer: string | null; uiRendering: import('./graphics').UiRenderingState };
 }
 
 export interface CloudflareEvent {

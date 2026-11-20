@@ -1,5 +1,5 @@
 import type { UpdateState } from '../../../app/shared/types';
-import { call, errorText } from './bridge';
+import { call, errorText, isAniVerse2 } from './bridge';
 import { timeAgo } from './format';
 import { useToast } from './useToast';
 
@@ -17,13 +17,15 @@ export function updateSummary(u: UpdateState): string {
     case 'not-available':
       return `You’re up to date${u.checkedAt ? ` · checked ${timeAgo(Math.floor(u.checkedAt / 1000))}` : ''}.`;
     case 'available':
-      return `AniVerse ${u.version} is available.`;
+      return `${isAniVerse2 ? 'AniVerse2' : 'AniVerse'} ${u.version} is available.`;
     case 'downloading':
       return u.progress
         ? `Downloading ${u.version}… ${Math.floor(u.progress.percent)}% (${mb(u.progress.transferred)} of ${mb(u.progress.total)})`
         : `Downloading ${u.version}…`;
     case 'downloaded':
-      return `AniVerse ${u.version} is ready. Restart to install it; your library, settings and accounts stay.`;
+      return isAniVerse2
+        ? `AniVerse2 ${u.version} is ready. Restart to install it and keep your profile.`
+        : `AniVerse ${u.version} is ready. Restart to install it; your library, settings and accounts stay.`;
     case 'error':
       return u.error ?? 'The update check failed.';
   }

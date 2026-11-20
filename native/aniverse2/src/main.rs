@@ -5,6 +5,7 @@ mod incoming;
 mod metadata;
 mod profile;
 mod sources;
+mod updates;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -47,6 +48,7 @@ async fn desktop_rpc(
     window: WebviewWindow,
     root: State<'_, PathBuf>,
     metadata: State<'_, metadata::Client>,
+    updater: State<'_, updates::Service>,
     method: String,
     input: Option<Value>,
 ) -> Result<Value, RpcError> {
@@ -57,6 +59,26 @@ async fn desktop_rpc(
         ));
     }
     let root = root.inner().clone();
+    let app = window.app_handle();
+    match method.as_str() {
+        "update.state" => return Ok(updater.snapshot()),
+        "update.check" => return updater.check(app).await,
+        "update.download" => return updater.download(app).await,
+        "update.install" => return updater.install().await,
+        "app.openExternal" => return updater.open_notes(input.as_ref()),
+        "app.info" => {
+            return Ok(serde_json::json!({
+                "version": app.package_info().version.to_string(), "tauri": tauri::VERSION,
+                "webview2": tauri::webview_version().ok(),
+                "platform": "win32",
+                "dataPath": root,
+                "configPath": root.join("config/streaming-sites.txt"),
+            }))
+        }
+        "settings.set" => updater.set_preferences(input.as_ref())?,
+        _ => {}
+    }
+    let settings = matches!(method.as_str(), "settings.get" | "settings.set");
     if let Some(request) = metadata::Request::parse(&method, input.as_ref()) {
         let request = request?;
         let show_adult = tauri::async_runtime::spawn_blocking(move || profile::show_adult(&root))
@@ -64,15 +86,21 @@ async fn desktop_rpc(
             .map_err(|_| RpcError::new("internal", "Could not read metadata preferences."))??;
         return metadata.get(request, show_adult).await;
     }
-    tauri::async_runtime::spawn_blocking(move || {
-        profile::request(&root, &method, input.unwrap_or_default())
+    let mut result = tauri::async_runtime::spawn_blocking(move || {
+        let method = if settings { "settings.get" } else { &method };
+        profile::request(&root, method, input.unwrap_or_default())
     })
     .await
-    .map_err(|_| RpcError::new("internal", "The desktop request was interrupted."))?
+    .map_err(|_| RpcError::new("internal", "The desktop request was interrupted."))??;
+    if settings {
+        result["updates"] = updater.preferences();
+    }
+    Ok(result)
 }
 
 fn run(context: tauri::Context<tauri::Wry>) -> Result<(), tauri::Error> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![desktop_rpc])
         .setup(|app| {
             let root = profile_path(app)?;
@@ -108,6 +136,8 @@ fn run(context: tauri::Context<tauri::Wry>) -> Result<(), tauri::Error> {
                 }})();
             "#);
             let webview = root.join("webview");
+            app.manage(updates::Service::new(app.handle(), &root, &data)?);
+            updates::start(app.handle());
             app.manage(data);
             app.manage(metadata::Client::new()?);
             WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))

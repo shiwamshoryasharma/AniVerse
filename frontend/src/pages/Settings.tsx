@@ -13,7 +13,7 @@ import { ThemePresets } from '../components/ThemePresets';
 import { GraphicsPanel } from '../components/GraphicsPanel';
 import { updateSummary, useInstallUpdate } from '../lib/updates';
 import { RadioGroup, Select } from '../components/controls';
-import { call, errorText, platform } from '../lib/bridge';
+import { call, errorText, isAniVerse2, platform } from '../lib/bridge';
 import { cx, timeAgo } from '../lib/format';
 import { keys, useAccounts, useAdblockStats, useAppInfo, useSettings, useSources, useUpdateSettings, useUpdateSource, useUpdateState } from '../lib/queries';
 import { useToast } from '../lib/useToast';
@@ -590,6 +590,7 @@ function PrivacySection() {
 }
 
 function UpdatesGroup() {
+  const qc = useQueryClient();
   const s = useSettings();
   const save = useSave();
   const toast = useToast();
@@ -600,6 +601,7 @@ function UpdatesGroup() {
   const run = (method: 'update.check' | 'update.download') => {
     setBusy(true);
     call(method)
+      .then((state) => qc.setQueryData(keys.update, state))
       .catch((err) => toast.push({ level: 'error', message: errorText(err) }))
       .finally(() => setBusy(false));
   };
@@ -616,7 +618,7 @@ function UpdatesGroup() {
   const working = busy || u.status === 'checking' || u.status === 'downloading';
   return (
     <Group title="Updates">
-      <Setting title={`AniVerse ${u.current}`} desc={updateSummary(u)}>
+      <Setting title={`${isAniVerse2 ? 'AniVerse2' : 'AniVerse'} ${u.current}`} desc={updateSummary(u)}>
         {u.status === 'downloaded' ? (
           <button className="btn primary sm" onClick={() => void install()}>
             <RotateCw size={14} /> Restart to update
@@ -631,12 +633,12 @@ function UpdatesGroup() {
           </button>
         )}
         {u.version && u.releaseUrl && (
-          <button className="btn ghost sm" onClick={() => void call('app.openExternal', { url: u.releaseUrl! })}>
+          <button className="btn ghost sm" onClick={() => void call('app.openExternal', { url: u.releaseUrl! }).catch((err) => toast.push({ level: 'error', message: errorText(err) }))}>
             What’s new
           </button>
         )}
       </Setting>
-      {platform === 'win32' && !off && (
+      {platform === 'win32' && !isAniVerse2 && !off && (
         <Setting title="AniVerse2" desc="Checks the separate Windows release and prepares to carry over your saved sources and history.">
           <button className="btn sm" disabled={working || u.status === 'downloaded'} onClick={migrate}>
             <ArrowUp size={14} /> Update AniVerse to AniVerse2
@@ -655,7 +657,9 @@ function UpdatesGroup() {
       </Setting>
       <Setting
         title="Download updates automatically"
-        desc="Downloads in the background (only the parts that changed, when possible) and installs when you restart or quit. Updates must carry AniVerse’s code signature, or they are not installed."
+        desc={isAniVerse2
+          ? 'Downloads the signed Windows installer in the background. Choose Restart to update to install it.'
+          : 'Downloads in the background (only the parts that changed, when possible) and installs when you restart or quit. Updates must carry AniVerse’s code signature, or they are not installed.'}
       >
         <Switch on={s.updates.autoDownload} disabled={off} label="Download updates automatically" onChange={(autoDownload) => save({ updates: { autoDownload } })} />
       </Setting>
@@ -669,10 +673,14 @@ function AboutSection() {
     <>
       <Disclaimer />
       <UpdatesGroup />
-      <Group title="AniVerse">
+      <Group title={isAniVerse2 ? 'AniVerse2' : 'AniVerse'}>
         <div className="card-pad help">
           <p style={{ marginTop: 0 }}>
-            Version {info?.version} · Electron {info?.electron} · Chromium {info?.chrome} · {info?.platform}
+            {isAniVerse2 ? (
+              <>Version {info?.version ?? '…'} · Tauri {info?.tauri ?? '…'}{info?.webview2 ? ` · WebView2 ${info.webview2}` : ''}</>
+            ) : (
+              <>Version {info?.version} · Electron {info?.electron} · Chromium {info?.chrome} · {info?.platform}</>
+            )}
           </p>
           <p>
             Data folder: <span className="code">{info?.dataPath}</span>

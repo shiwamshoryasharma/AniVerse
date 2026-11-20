@@ -12,8 +12,7 @@ use tauri::Url;
 const SITES_FILE: &str = "config/streaming-sites.txt";
 
 pub(crate) fn open_config(root: &Path) -> std::io::Result<PathBuf> {
-    use std::{fs, io, os::windows::ffi::OsStrExt, ptr::null_mut};
-    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+    use std::{fs, io};
 
     fs::create_dir_all(root.join("config"))?;
     let config = root.join("config").canonicalize()?;
@@ -42,7 +41,15 @@ pub(crate) fn open_config(root: &Path) -> std::io::Result<PathBuf> {
     }
     // The editor receives the ordinary DOS path, including spaces, as one filename.
     let path = root.join(SITES_FILE);
-    let name: Vec<_> = path.as_os_str().encode_wide().chain([0]).collect();
+    open_in_windows(path.as_os_str())?;
+    Ok(path)
+}
+
+pub(crate) fn open_in_windows(target: &std::ffi::OsStr) -> std::io::Result<()> {
+    use std::{io, os::windows::ffi::OsStrExt, ptr::null_mut};
+    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+
+    let name: Vec<_> = target.encode_wide().chain([0]).collect();
     let verb: Vec<_> = "open".encode_utf16().chain([0]).collect();
     let result = unsafe {
         ShellExecuteW(
@@ -56,11 +63,11 @@ pub(crate) fn open_config(root: &Path) -> std::io::Result<PathBuf> {
     };
     if result as usize <= 32 {
         return Err(io::Error::other(format!(
-            "Windows could not open the text editor ({}).",
+            "Windows could not open the item ({}).",
             result as usize
         )));
     }
-    Ok(path)
+    Ok(())
 }
 
 pub(crate) fn list(

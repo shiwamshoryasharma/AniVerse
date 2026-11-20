@@ -172,6 +172,23 @@ try {
   await copper.waitFor();
   assert.equal(await copper.getAttribute('aria-pressed'), 'true');
   report.tests.brandingAndSavedPalette = true;
+  if (process.env.ANIVERSE2_CHECK_UPDATER === '1') {
+    await page.evaluate(() => { location.hash = '#/settings/about'; });
+    await page.getByRole('button', { name: 'Check for updates' }).waitFor();
+    await page.getByText(/Version [\d.]+ · Tauri [\d.]+ · WebView2 /).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Update AniVerse to AniVerse2' }).count(), 0);
+    const automatic = page.getByRole('switch', { name: 'Download updates automatically' });
+    assert.equal(await automatic.getAttribute('aria-checked'), 'true');
+    await automatic.click();
+    await page.waitForFunction(async () => !(await window.aniverse.invoke('settings.get')).updates.autoDownload);
+    assert.equal((await invoke('update.state')).status, 'idle');
+    const prefs = JSON.parse(await readFile(path.join(profile, 'update-preferences.json'), 'utf8'));
+    assert.equal(prefs.autoDownload, false);
+    await page.reload();
+    await automatic.waitFor();
+    assert.equal(await automatic.getAttribute('aria-checked'), 'false');
+    report.tests.ownUpdaterControlsAndPreferences = true;
+  }
   const unsupported = await page.evaluate(async () => {
     try { await window.aniverse.invoke('site.openEpisode', {}); return null; }
     catch (error) { return error.code; }
