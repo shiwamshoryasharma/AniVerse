@@ -1,0 +1,17 @@
+{
+  "bundle": {
+    "active": true,
+    "useLocalToolsDir": true,
+    "windows": {
+      "allowDowngrades": false
+    },
+    "targets": [
+      "nsis"
+    ]
+  },
+  "build": {
+    "frontendDist": "../../test/cache/renderer"
+  },
+  "productName": "AniVerse2 Preview",
+  "identifier": "app.aniverse2.preview"
+}

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import { call, platform, onEvent } from '../lib/bridge';
+import { call, isAniVerse2, platform, onEvent } from '../lib/bridge';
 import { cx, formatLabel, titleOf } from '../lib/format';
 import { useAccounts, useAdblockStats, useBridgeEvents, useSearch, useSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
@@ -83,7 +83,7 @@ export function Shell() {
       const root = document.documentElement;
       if (root.dataset.seasonal === String(on)) return;
       root.dataset.seasonal = String(on);
-      if (icon) icon.href = on ? './festival-icon.svg' : './favicon.svg';
+      if (icon) icon.href = isAniVerse2 ? './aniverse2-mark.png' : on ? './festival-icon.svg' : './favicon.svg';
     };
     refresh();
     if (midnight || settings.appearance.accent !== 'festival') return;
@@ -127,7 +127,7 @@ export function Shell() {
           </button>}
           <Logo />
           <span className="word">
-            Ani<b>Verse</b>
+            Ani<b>Verse{isAniVerse2 ? '2' : ''}</b>
           </span>
         </div>
         <SearchBox />

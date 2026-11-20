@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-rpc"
+description = "Enables the desktop_rpc command without any pre-configured scope."
+commands.allow = ["desktop_rpc"]
+
+[[permission]]
+identifier = "deny-desktop-rpc"
+description = "Denies the desktop_rpc command without any pre-configured scope."
+commands.deny = ["desktop_rpc"]

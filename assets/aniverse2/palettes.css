@@ -1,0 +1,55 @@
+/* AniVerse2 desktop palettes. Existing layout, motion and density tokens continue to apply. */
+:root[data-aniverse-edition='2'][data-style]:not([data-aniverse2-theme='legacy']) {
+  color-scheme: dark;
+  --bg: #0a1020;
+  --bg-2: #111a30;
+  --surface: #16213c;
+  --surface-2: #1d2b4c;
+  --surface-3: #25375b;
+  --surface-hover: #2e426c;
+  --text: #f1f5ff;
+  --text-2: #c2cce4;
+  --text-3: #9cafd2;
+  --accent: #66dcf9;
+  --accent-2: #b5f2ff;
+  --accent-ink: #071d2a;
+  --line: #859bc034;
+  --line-2: #859bc055;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+:root[data-aniverse-edition='2'][data-style][data-aniverse2-theme='copper'] {
+  --bg: #17100f;
+  --bg-2: #221815;
+  --surface: #2a201c;
+  --surface-2: #382822;
+  --surface-3: #47342b;
+  --surface-hover: #574137;
+  --text: #fff2e9;
+  --text-2: #e2c5b5;
+  --text-3: #c5a591;
+  --accent: #f6ac78;
+  --accent-2: #ffcea7;
+  --accent-ink: #2c140e;
+  --line: #cfa68b36;
+  --line-2: #cfa68b57;
+}
+
+:root[data-aniverse-edition='2'][data-style][data-aniverse2-theme='wisteria'] {
+  --bg: #130f20;
+  --bg-2: #1e172c;
+  --surface: #281f39;
+  --surface-2: #342648;
+  --surface-3: #412f56;
+  --surface-hover: #503a65;
+  --text: #f9f1ff;
+  --text-2: #dcc9ec;
+  --text-3: #bda4d4;
+  --accent: #d7b2ff;
+  --accent-2: #ebd2ff;
+  --accent-ink: #251232;
+  --line: #bf9bdc36;
+  --line-2: #bf9bdc57;
+}
+

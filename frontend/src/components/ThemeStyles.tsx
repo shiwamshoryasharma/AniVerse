@@ -3,12 +3,15 @@ import { INTERFACE_STYLES } from '../../../app/shared/interface';
 import { useSettings, useUpdateSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { setMidnightTheme, useMidnightTheme } from '../lib/desktopTheme';
+import { isAniVerse2 } from '../lib/bridge';
+import { AniVerse2Palettes } from './AniVerse2Palettes';
 const ICONS = { classic: PanelLeft, studio: PanelsTopLeft, cinema: RectangleHorizontal };
 export function ThemeStyles() {
   const settings = useSettings(), update = useUpdateSettings(), toast = useToast();
   const midnight = useMidnightTheme();
   return <section className="settings-group"><h3>Interface layouts</h3>
     <p className="page-sub">Change navigation, page structure and the viewing workspace. Accent and font are separate preferences.</p>
+    {isAniVerse2 && <AniVerse2Palettes />}
     <div className="card midnight-preview">
       <div><h3>Midnight</h3><p>Deep navy surfaces, mint controls and a clearer episode selection.</p></div>
       <button className="btn" aria-pressed={midnight} onClick={() => setMidnightTheme(!midnight)}>

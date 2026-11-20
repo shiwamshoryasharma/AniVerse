@@ -1,0 +1,6 @@
+{
+  "identifier": "desktop-local",
+  "description": "The packaged AniVerse2 renderer may call the native desktop bridge.",
+  "webviews": ["main"],
+  "permissions": ["allow-desktop-rpc", "core:event:allow-listen", "core:event:allow-unlisten"]
+}
