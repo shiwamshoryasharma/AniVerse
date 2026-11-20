@@ -5,6 +5,11 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.2.4',date:'2026-11-20',title:'Prepare to move to AniVerse2',
+   summary:'The final Windows Electron release adds the signed AniVerse2 migration option.',
+   items:[
+    {kind:'added',icon:'shield',title:'Update AniVerse to AniVerse2',description:'Check for the separately signed AniVerse2 release in Settings → About. The migration uses your current AniVerse profile and source configuration.',action:{label:'Open Updates',path:'/settings/about'}},
+   ]},
   {version:'2.2.3',date:'2026-11-18',title:'Keep watching after a source redirects',
    summary:'Windows source handoffs and SUB/DUB controls work together in player-only mode.',
    items:[

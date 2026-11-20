@@ -13,7 +13,7 @@ import { ThemePresets } from '../components/ThemePresets';
 import { GraphicsPanel } from '../components/GraphicsPanel';
 import { updateSummary, useInstallUpdate } from '../lib/updates';
 import { RadioGroup, Select } from '../components/controls';
-import { call, errorText } from '../lib/bridge';
+import { call, errorText, platform } from '../lib/bridge';
 import { cx, timeAgo } from '../lib/format';
 import { keys, useAccounts, useAdblockStats, useAppInfo, useSettings, useSources, useUpdateSettings, useUpdateSource, useUpdateState } from '../lib/queries';
 import { useToast } from '../lib/useToast';
@@ -603,6 +603,15 @@ function UpdatesGroup() {
       .catch((err) => toast.push({ level: 'error', message: errorText(err) }))
       .finally(() => setBusy(false));
   };
+  const migrate = () => {
+    setBusy(true);
+    call('update.migrateToAniVerse2')
+      .then((result) => {
+        if (result === 'no-release') toast.push({ level: 'info', message: 'A signed AniVerse2 Windows release is not available yet.' });
+      })
+      .catch((err) => toast.push({ level: 'error', message: errorText(err) }))
+      .finally(() => setBusy(false));
+  };
   const off = u.status === 'disabled';
   const working = busy || u.status === 'checking' || u.status === 'downloading';
   return (
@@ -627,6 +636,13 @@ function UpdatesGroup() {
           </button>
         )}
       </Setting>
+      {platform === 'win32' && !off && (
+        <Setting title="AniVerse2" desc="Checks the separate Windows release and prepares to carry over your saved sources and history.">
+          <button className="btn sm" disabled={working || u.status === 'downloaded'} onClick={migrate}>
+            <ArrowUp size={14} /> Update AniVerse to AniVerse2
+          </button>
+        </Setting>
+      )}
       {u.status === 'downloading' && (
         <div className="card-pad">
           <div className="update-progress" role="progressbar" aria-valuenow={Math.floor(u.progress?.percent ?? 0)} aria-valuemin={0} aria-valuemax={100}>

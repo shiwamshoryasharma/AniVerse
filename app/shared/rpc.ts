@@ -188,6 +188,7 @@ export interface RpcContract {
   'update.download': [void, UpdateState];
   /** Quits AniVerse, installs the downloaded update silently and starts the new version. */
   'update.install': [void, void];
+  'update.migrateToAniVerse2': [void, 'no-release' | 'cancelled' | 'starting'];
 }
 
 export type RpcMethod = keyof RpcContract;

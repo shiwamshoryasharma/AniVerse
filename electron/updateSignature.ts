@@ -15,6 +15,11 @@ const STATUS = ['Valid', 'UnknownError', 'NotSigned', 'HashMismatch', 'NotTruste
 
 export const certificateFingerprint = (derBase64: string) => createHash('sha256').update(Buffer.from(derBase64, 'base64')).digest('hex').toUpperCase();
 
+export function isPinnedUpdateCertificate(derBase64: string, pinned: readonly string[]): boolean {
+  const fingerprint = certificateFingerprint(derBase64);
+  return pinned.some((pin) => pin.replace(/[\s:]/g, '').toUpperCase() === fingerprint);
+}
+
 /**
  * Decides whether a downloaded update may be installed: it must carry an intact Authenticode
  * signature from one of the pinned certificates (SHA-256 fingerprints).
@@ -33,9 +38,9 @@ export function checkUpdateSignature(info: SignatureInfo, file: string, pinned: 
   if (info.path && path.normalize(info.path).toLowerCase() !== path.normalize(file).toLowerCase()) {
     return 'The signature check looked at a different file.';
   }
-  const fingerprint = certificateFingerprint(info.certificate);
-  const pins = pinned.map((p) => p.replace(/[\s:]/g, '').toUpperCase());
-  if (!pins.includes(fingerprint)) return `The update is signed by an unknown certificate (SHA-256 ${fingerprint}).`;
+  if (!isPinnedUpdateCertificate(info.certificate, pinned)) {
+    return `The update is signed by an unknown certificate (SHA-256 ${certificateFingerprint(info.certificate)}).`;
+  }
   return null;
 }
 

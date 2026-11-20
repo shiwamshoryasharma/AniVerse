@@ -40,6 +40,7 @@ import { PlayerCapture } from './playerCapture';
 import { WindowsDisplay } from './cast/windowsDisplay';
 import { WebsiteMirror } from './cast/websiteMirror';
 import { UpdateService } from './updater';
+import { MigrationBridge } from './migrationBridge';
 import { WorkspaceService } from '../app/core/workspace';
 import { buildWatchPlan, type WatchPlan } from '../app/shared/workspace';
 import { pendingRelease } from '../app/shared/release';
@@ -321,6 +322,7 @@ async function bootstrap() {
     updates.applySettings(s);
   });
 
+  const migration = new MigrationBridge(paths, updates);
   const protocols = new MediaProtocols(paths.renderer, paths.profileDir,security);
   protocols.install();
   const catalogue=new SourceCatalogue(()=>sessions.sourceList(),sessions,security,protocols.artwork,anilist);
@@ -643,6 +645,7 @@ async function bootstrap() {
     'update.check': () => updates.check(),
     'update.download': () => updates.download(),
     'update.install': () => updates.install(),
+    'update.migrateToAniVerse2': () => migration.start(mainWindow),
   };
 
   registerRpc(handlers, (event: IpcMainInvokeEvent) => !!mainWindow && event.sender === mainWindow.webContents && event.senderFrame?.parent === null && isAppUrl(event.senderFrame.url));

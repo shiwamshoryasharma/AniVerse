@@ -282,6 +282,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'update.check': none,
   'update.download': none,
   'update.install': none,
+  'update.migrateToAniVerse2': none,
 };
 
 export type Handlers = { [M in RpcMethod]: (input: RpcContract[M][0], event: IpcMainInvokeEvent) => Promise<RpcContract[M][1]> | RpcContract[M][1] };

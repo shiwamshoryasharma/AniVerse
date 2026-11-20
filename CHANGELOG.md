@@ -2,6 +2,13 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.2.4 Windows — 2026-11-20
+
+- Add **Update AniVerse to AniVerse2** in Settings → About → Updates.
+- Verify the separate AniVerse2 release and installer before starting the migration handoff.
+
+[Windows release notes](docs/releases/2.2.4.md)
+
 ## 2.2.3 Windows — 2026-11-18
 
 - Open an enabled redirect destination in its own session from Sources and Watch.

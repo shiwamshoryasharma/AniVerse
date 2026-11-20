@@ -102,8 +102,21 @@ export class UpdateService {
     setImmediate(() => autoUpdater.quitAndInstall(true, true));
   }
 
+  pauseForMigration() {
+    if (this.state.status === 'downloading' || this.state.status === 'downloaded') {
+      throw new AppError('invalid-input', 'Finish the current AniVerse update first.');
+    }
+    autoUpdater.autoInstallOnAppQuit = false;
+    this.stop();
+    return () => {
+      autoUpdater.autoInstallOnAppQuit = true;
+      this.start();
+    };
+  }
+
   stop() {
     this.timers.forEach((t) => clearTimeout(t));
+    this.timers = [];
   }
 
   private set(patch: Partial<UpdateState>) {
