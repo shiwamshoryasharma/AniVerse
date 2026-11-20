@@ -31,7 +31,7 @@ fragment card on Media {
 // mention the filters that are actually set and inline the adult filter.
 const adultArg = (showAdult: boolean) => (showAdult ? '' : ', isAdult: false');
 
-const homeQuery = (showAdult: boolean) => `${CARD}
+export const homeQuery = (showAdult: boolean) => `${CARD}
 query ($season: MediaSeason, $year: Int, $since: Int, $now: Int) {
   spotlight: Page(perPage: 12) { media(sort: TRENDING_DESC, type: ANIME${adultArg(showAdult)}) { ...card description(asHtml: false) } }
   trending: Page(perPage: 20) { media(sort: TRENDING_DESC, type: ANIME${adultArg(showAdult)}) { ...card } }
@@ -97,7 +97,7 @@ query ($search: String) {
   Page(perPage: 24) { media(search: $search, type: ANIME, sort: SEARCH_MATCH${adultArg(showAdult)}) { ...card } }
 }`;
 
-const SCHEDULE_QUERY = `${CARD}
+export const SCHEDULE_QUERY = `${CARD}
 query ($page: Int, $from: Int, $to: Int) {
   Page(page: $page, perPage: 50) {
     pageInfo { hasNextPage }

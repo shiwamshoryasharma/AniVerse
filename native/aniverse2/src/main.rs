@@ -2,6 +2,7 @@
 
 #[cfg(feature = "installer-handoff")]
 mod incoming;
+mod metadata;
 mod profile;
 mod sources;
 
@@ -45,6 +46,7 @@ fn app_origin(url: &Url) -> bool {
 async fn desktop_rpc(
     window: WebviewWindow,
     root: State<'_, PathBuf>,
+    metadata: State<'_, metadata::Client>,
     method: String,
     input: Option<Value>,
 ) -> Result<Value, RpcError> {
@@ -55,6 +57,13 @@ async fn desktop_rpc(
         ));
     }
     let root = root.inner().clone();
+    if let Some(request) = metadata::Request::parse(&method, input.as_ref()) {
+        let request = request?;
+        let show_adult = tauri::async_runtime::spawn_blocking(move || profile::show_adult(&root))
+            .await
+            .map_err(|_| RpcError::new("internal", "Could not read metadata preferences."))??;
+        return metadata.get(request, show_adult).await;
+    }
     tauri::async_runtime::spawn_blocking(move || {
         profile::request(&root, &method, input.unwrap_or_default())
     })
@@ -100,6 +109,7 @@ fn run(context: tauri::Context<tauri::Wry>) -> Result<(), tauri::Error> {
             "#);
             let webview = root.join("webview");
             app.manage(data);
+            app.manage(metadata::Client::new()?);
             WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
                 .title(app.config().product_name.as_deref().unwrap_or("AniVerse2"))
                 .inner_size(1280.0, 860.0)

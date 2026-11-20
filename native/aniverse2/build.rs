@@ -5,14 +5,19 @@ fn main() {
     let renderer = env::var_os("ANIVERSE2_RENDERER_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("dist/aniverse2"));
-    let defaults = renderer.join("settings-defaults.json");
+    let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     println!("cargo:rerun-if-env-changed=ANIVERSE2_RENDERER_DIR");
-    println!("cargo:rerun-if-changed={}", defaults.display());
-    fs::copy(
-        &defaults,
-        PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("settings-defaults.json"),
-    )
-    .expect("build the AniVerse2 frontend before compiling the Tauri host");
+    for name in [
+        "settings-defaults.json",
+        "anilist-home.graphql",
+        "anilist-home-safe.graphql",
+        "anilist-latest.graphql",
+    ] {
+        let source = renderer.join(name);
+        println!("cargo:rerun-if-changed={}", source.display());
+        fs::copy(source, out.join(name))
+            .expect("build the AniVerse2 frontend before compiling the Tauri host");
+    }
     let manifest = tauri_build::AppManifest::new().commands(&["desktop_rpc"]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))
         .expect("configure AniVerse2");

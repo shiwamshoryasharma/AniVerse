@@ -16,6 +16,15 @@ const PREFERENCES: &[&str] = &[
     "aniverse.latestSeen",
 ];
 
+pub(crate) fn show_adult(root: &Path) -> Result<bool, RpcError> {
+    let db = open(root).map_err(read_error)?;
+    let settings = kv(db.as_ref(), "settings").map_err(read_error)?;
+    Ok(settings
+        .as_ref()
+        .and_then(|settings| settings["appearance"]["showAdult"].as_bool())
+        .unwrap_or(false))
+}
+
 pub(crate) fn request(root: &Path, method: &str, input: Value) -> Result<Value, RpcError> {
     if method == "sources.openConfig" {
         return sources::open_config(root)

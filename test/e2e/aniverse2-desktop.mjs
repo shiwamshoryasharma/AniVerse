@@ -102,6 +102,23 @@ try {
   assert.equal(graphics.webgl2, true);
   report.graphics = graphics;
   const invoke = (method, input) => page.evaluate(({ method, input }) => window.aniverse.invoke(method, input), { method, input });
+  if (process.env.ANIVERSE2_CHECK_METADATA === '1') {
+    const home = await invoke('meta.home');
+    const latest = await invoke('meta.latest', { page: 1 });
+    assert.ok(home.trending.length && home.popularSeason.length && home.topRated.length);
+    assert.ok(latest.items.length);
+    assert.ok(home.trending.every((entry) => !entry.isAdult && entry.title.userPreferred));
+    assert.ok(latest.items.every((item) => !item.media.isAdult && item.episode > 0));
+    await page.locator('.rank-list .rank-item').first().waitFor({ timeout: 15000 });
+    await page.getByRole('heading', { name: 'Latest episodes' }).waitFor();
+    assert.equal(await page.getByText('Couldn’t load AniList', { exact: true }).count(), 0);
+    const badPage = await page.evaluate(async () => {
+      try { await window.aniverse.invoke('meta.latest', { page: 0 }); }
+      catch (error) { return error.code; }
+    });
+    assert.equal(badPage, 'invalid-input');
+    report.tests.liveHomeAndLatestEpisodes = true;
+  }
   const settings = await invoke('settings.get');
   assert.equal(settings.profile.name, 'Saved profile');
   assert.equal(settings.player.volume, 0.48);

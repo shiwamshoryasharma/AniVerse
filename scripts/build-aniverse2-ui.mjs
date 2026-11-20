@@ -12,12 +12,18 @@ await build({
   build: { outDir, sourcemap: false },
 });
 await copyFile(path.join(root, 'assets/aniverse2/mark.png'), path.join(outDir, 'aniverse2-mark.png'));
-const defaults = await bundle({
+const shared = await bundle({
   stdin: {
-    contents: 'export { DEFAULT_SETTINGS } from "./app/core/settings";',
+    contents: `export { DEFAULT_SETTINGS } from "./app/core/settings";
+      export { homeQuery, SCHEDULE_QUERY } from "./app/core/metadata/anilist";`,
     resolveDir: root,
   },
   write: false, bundle: true, platform: 'node', format: 'esm',
 });
-const { DEFAULT_SETTINGS } = await import('data:text/javascript;base64,' + Buffer.from(defaults.outputFiles[0].text).toString('base64'));
-await writeFile(path.join(outDir, 'settings-defaults.json'), JSON.stringify(DEFAULT_SETTINGS) + '\n');
+const { DEFAULT_SETTINGS, homeQuery, SCHEDULE_QUERY } = await import('data:text/javascript;base64,' + Buffer.from(shared.outputFiles[0].text).toString('base64'));
+await Promise.all(Object.entries({
+  'settings-defaults.json': JSON.stringify(DEFAULT_SETTINGS) + '\n',
+  'anilist-home.graphql': homeQuery(true),
+  'anilist-home-safe.graphql': homeQuery(false),
+  'anilist-latest.graphql': SCHEDULE_QUERY.replace('sort: TIME)', 'sort: TIME_DESC)'),
+}).map(([name, content]) => writeFile(path.join(outDir, name), content)));
