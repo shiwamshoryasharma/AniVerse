@@ -1,11 +1,11 @@
 {
-  "version": "3.0.3",
-  "pub_date": "2026-11-20T16:21:21.5857968+00:00",
-  "notes": "AniVerse2 now has its own signed Windows self-updater. Open **Settings → About → Updates** to check, download, or restart to install. Automatic checks and downloads are configurable. About shows the installed version, Tauri and WebView2.\n\nInstall this version once using the signed EXE if you already have an AniVerse2 3.0.0–3.0.2 preview. The new installer keeps the existing preview profile. Later releases use AniVerse2’s own GitHub feed.\n\nFrom AniVerse 2.2.4, **Settings → About → Updates → Update AniVerse to AniVerse2** still migrates your saved sources, history and settings. The preview installs alongside Electron.",
+  "version": "3.0.4",
+  "pub_date": "2026-11-21T11:40:16.1142785+00:00",
+  "notes": "# AniVerse2 3.0.4 Preview for Windows x64\n\nThis playback update restores AniList title details in AniVerse2 and opens configured websites in the embedded WebView2 player. It adds source navigation and SUB/DUB selection where the website exposes those options. AniVerse2 keeps the saved source TXT and profile when updating from the earlier preview.\n\nUse Settings → About → Updates in AniVerse2, or run the Windows x64 setup from this release. The installer uses the existing preview identity and retains AniVerse 1 for rollback. Full browser-session migration, account sync, casting parity and automatic AniVerse 1 removal are still in development.",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.3/AniVerse-Tauri-Setup-3.0.3-x64.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSGhZbFM3clNNVW55aXZBZ0Rsc0szVmJDVmc5S21pb3k3U21uTVFTNHAyK3ZYenJEYVBYMkk4VkhmTVBaM0gzTnExODhORXY5M0NUdUFJc0pQTXl3T0FNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MTkxNjgxCWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjMteDY0LmV4ZQl2ZXJzaW9uOjMuMC4zCkRuVlBzQllEak9IeDczZENTYk5zRXhDNHlla1hMZ24zS1d5RytLcnFERnVKVHdkLzNQQ2pFZW5LSU5VZTVyMitOaWgveG5KMkpKaUJBMEltT3FQQkFnPT0K"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSGhZRXlkelA5RXE1ODhGNTJsNGNBb0cvK05OVk96NnprZDlxV1lTUVZ6L0NEL1lIYzU4Mng0d1lHcGtJamJJNmlUWnlmZEhKbHk0ek1vbGNtQWI5VGdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjYxMjE2CWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjQteDY0LmV4ZQl2ZXJzaW9uOjMuMC40ClkwZVNGeG1QL0VxbFNxa2FiTkNWcnNXNkY3ZUdZQmZyMlNnOVJURERyL0lib1RSQUwzcGcwdXVuczFlSVV1dzA4bTlFdE5Relkxc2tDTGg5RUtNVEFRPT0K",
+      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.4/AniVerse-Tauri-Setup-3.0.4-x64.exe"
     }
   }
 }
