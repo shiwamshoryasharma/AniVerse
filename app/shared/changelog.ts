@@ -5,6 +5,14 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.3.0',date:'2026-11-22',title:'AniVerse 2 features on Electron',
+   summary:'The Windows Electron edition gains the latest themes, search, playback tools and graphics controls.',
+   items:[
+    {kind:'added',icon:'layout',title:'Personalize your workspace',description:'Choose five layouts, a floating navigation rail and independent interface colours.',action:{label:'Open Interface themes',path:'/settings/themes'}},
+    {kind:'added',icon:'sparkles',title:'Discover shows that fit your taste',description:'Click Search to see recommendations based on local watch history. Completed shows remain searchable.',action:{label:'Browse anime',path:'/browse'}},
+    {kind:'added',icon:'cast',title:'Quantum Audio and Download MP4',description:'Access spatial audio and Save As below supported players. Clear HLS downloads are remuxed to MP4.',action:{label:'Open Player settings',path:'/settings/player'}},
+    {kind:'improved',icon:'shield',title:'See what the blocker stopped',description:'Filter activity by source and rule type, then review blocked requests, redirects and popups.',action:{label:'Open Privacy & blocking',path:'/settings/privacy'}},
+   ]},
   {version:'2.2.5',date:'2026-11-21',title:'Move to AniVerse2 when you choose',
    summary:'Windows checks the signed AniVerse2 release even when GitHub limits release-list requests.',
    items:[

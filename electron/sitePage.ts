@@ -18,7 +18,7 @@ export type PageOp = (
   | { op: 'viewAll' }
   | { op: 'episodesTab' }
   | { op: 'click'; pick: string }
-  | { op: 'markPlayer'; selector?: string; keep?: boolean }
+  | { op: 'markPlayer'; selector?: string; keep?: boolean; sticky?: boolean }
   | { op: 'releasePlayer' }
   | { op: 'titleCheck'; titles: string[]; season: number }
   | { op: 'siteOptions' }
@@ -564,34 +564,58 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
   };
 
   // Lives in this page's isolated world for as long as the page does.
-  const keeper = window as unknown as { __aniverseKeeper?: MutationObserver; __aniverseKeeperSelector?: string };
+  const keeper = window as unknown as {
+    __aniverseKeeperCleanup?: () => void; __aniverseKeeperSelector?: string;
+  };
 
   if (A.op === 'markPlayer') {
-    const tag = markPlayer(A.selector);
+    const apply = (selector?: string) => {
+      const tag = markPlayer(selector);
+      // Once focus succeeds, cover the site while a replacement player is loading.
+      if (tag && A.sticky) document.documentElement.setAttribute('data-aniverse-player-only', '');
+      return tag;
+    };
+    const tag = apply(A.selector);
     if (A.keep) {
-      // Sites swap their player element in place (server switch, next episode, ad slot):
-      // re-mark it whenever the marked one is gone, so player-only mode never drops.
       keeper.__aniverseKeeperSelector = A.selector;
-      if (!keeper.__aniverseKeeper) {
+      if (!keeper.__aniverseKeeperCleanup) {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const check = () => {
-          if(!keeper.__aniverseKeeper)return;
           const current = document.querySelector('[data-aniverse-player]');
-          if (!current || !current.isConnected || area(current) < 240 * 135 || !document.querySelector('[data-aniverse-media]')) markPlayer(keeper.__aniverseKeeperSelector);
+          // A responsive site may reparent the same marked player after its
+          // previous ancestor markers were cleared. Rebuild that chain.
+          let intact = !!(current && (current.matches('[data-aniverse-media]') || current.querySelector('[data-aniverse-media]')));
+          if (A.sticky && current) {
+            for (let parent = current.parentElement; parent && parent !== document.documentElement; parent = parent.parentElement) {
+              if (!parent.hasAttribute('data-aniverse-chain')) {
+                intact = false;
+                break;
+              }
+            }
+          }
+          if (!intact || (!A.sticky && current && area(current) < 240 * 135)) apply(keeper.__aniverseKeeperSelector);
         };
-        keeper.__aniverseKeeper = new MutationObserver(() => {
+        const queue = () => {
           clearTimeout(timer);
           timer = setTimeout(check, 150);
-        });
-        keeper.__aniverseKeeper.observe(document.documentElement, { childList: true, subtree: true });
+        };
+        const observer = new MutationObserver(queue);
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        if (A.sticky) window.addEventListener('resize', queue);
+        keeper.__aniverseKeeperCleanup = () => {
+          observer.disconnect();
+          clearTimeout(timer);
+          if (A.sticky) window.removeEventListener('resize', queue);
+        };
       }
     }
     return tag ? { found: true, tag } : { found: false };
   }
 
   if (A.op === 'releasePlayer') {
-    keeper.__aniverseKeeper?.disconnect();
-    keeper.__aniverseKeeper = undefined;
+    keeper.__aniverseKeeperCleanup?.();
+    keeper.__aniverseKeeperCleanup = undefined;
+    document.documentElement.removeAttribute('data-aniverse-player-only');
     document.querySelectorAll('[data-aniverse-player],[data-aniverse-chain],[data-aniverse-media],[data-aniverse-media-chain]').forEach((e) => {
       e.removeAttribute('data-aniverse-player');
       e.removeAttribute('data-aniverse-chain');

@@ -3,11 +3,12 @@ import {seasonalVisuals} from '../app/shared/seasonal';
 import {SourceCatalogue} from './sourceCatalogue';
 import {SourceAudioIndex} from '../app/core/sources/audioIndex';
 import {RustPolicy} from '../app/core/security/rustPolicy';
-import { app, BrowserWindow, Menu, dialog, safeStorage, session, shell, webContents, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import { app, BrowserWindow, Menu, dialog, safeStorage, screen, session, shell, webContents, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { mkdir, rm, writeFile, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Store, type SecretCodec } from '../app/core/db/store';
 import { CommentsService } from '../app/core/comments';
 import { AniListClient } from '../app/core/metadata/anilist';
@@ -49,12 +50,10 @@ import { LocalCollection } from './collection';
 import { GoogleDriveService } from './googleDrive';
 import { ChangelogService } from '../app/core/changelog';
 import { UiRenderingPreferences } from './uiRendering';
-import { summarizeGraphics, type GpuPreference } from '../app/shared/graphics';
-
-// Ask Chromium for the discrete adapter on hybrid laptops before GPU initialization.
-// Explicit low-power/system choices remain available for battery use or driver troubleshooting.
-const gpuPreference: GpuPreference = process.env.ANIVERSE_GPU_PREFERENCE === 'system' || app.commandLine.hasSwitch('force_low_power_gpu') ? 'system' : 'high-performance';
-if (gpuPreference === 'high-performance') app.commandLine.appendSwitch('force_high_performance_gpu');
+import { summarizeGraphics } from '../app/shared/graphics';
+import { DesktopGpuPreferences } from './desktopGpuPreferences';
+import { SourceMp4Download } from './sourceMp4Download';
+import { SiteQuantumAudio } from './siteQuantumAudio';
 
 registerSchemes();
 app.setName('AniVerse');
@@ -63,6 +62,7 @@ app.setName('AniVerse');
 if (process.env.ANIVERSE_DATA_DIR) app.setPath('userData', path.resolve(process.env.ANIVERSE_DATA_DIR));
 // Keep Windows UI composition off the driver's presentation path. GPU video decoding,
 // WebGL Anime4K and embedded encoders remain available; this is not disableHardwareAcceleration().
+const gpu = new DesktopGpuPreferences(path.join(app.getPath('userData'), 'graphics-adapter.json'), process.platform, app.commandLine);
 const uiRendering = new UiRenderingPreferences(path.join(app.getPath('userData'), 'graphics.json'), process.platform, app.commandLine.hasSwitch('disable-gpu-compositing'));
 if (uiRendering.snapshot().active === 'stable') app.commandLine.appendSwitch('disable-gpu-compositing');
 
@@ -223,6 +223,26 @@ function secretCodec(profile: string): { codec: SecretCodec; secure: boolean } {
   };
 }
 
+async function openProfile(db: string, codec: SecretCodec) {
+  const deadline = Date.now() + (process.platform === 'win32' ? 7_000 : 0);
+  for (;;) {
+    let store: Store | undefined;
+    try {
+      store = new Store(db, codec);
+      store.cachePurge();
+      const settings = new SettingsService(store);
+      settings.applySeasonalTheme();
+      return { store, settings };
+    } catch (error) {
+      store?.close();
+      const sqlite = Number((error as { errcode?: number } | null)?.errcode) & 0xff;
+      if ((sqlite !== 5 && sqlite !== 6) || Date.now() >= deadline) throw error;
+      // Wait asynchronously while a short-lived writer owns the profile.
+      await delay(180);
+    }
+  }
+}
+
 async function bootstrap() {
   const paths = resolvePaths();
   const securityManifest=JSON.parse(readFileSync(path.join(__dirname,'security-manifest.json'),'utf8')) as {sha256:string};
@@ -233,10 +253,7 @@ async function bootstrap() {
   app.userAgentFallback = browserUserAgent();
 
   const credentials = secretCodec(profileId(path.dirname(paths.db)));
-  const store = new Store(paths.db, credentials.codec);
-  store.cachePurge();
-  const settings = new SettingsService(store);
-  settings.applySeasonalTheme();
+  const { store, settings } = await openProfile(paths.db, credentials.codec);
   setInterval(()=>settings.applySeasonalTheme(),60_000).unref();
   const changelog = new ChangelogService(store, app.getVersion());
   const workspace = new WorkspaceService(store);
@@ -275,6 +292,7 @@ async function bootstrap() {
   );
   const mp4DownloadKey = 'windows:mp4-download-folder';
   const mp4DownloadFolder = () => store.getKv<string | null>(mp4DownloadKey, null);
+  const mp4 = new SourceMp4Download(security, mp4DownloadFolder, (progress) => emit('mp4.progress', progress));
   sessions = new SessionManager(
     registry,
     adblock,
@@ -286,6 +304,7 @@ async function bootstrap() {
     () => store.isIncognito(),
     (guest, destination) => navigator.navigationBlocked(guest, destination),
     mp4DownloadFolder,
+    mp4,
   );
   const comments = new CommentsService(anilist, apiFetch, store, () => settings.get(), youtube, () => oauthClientIds().mal);
   const providers = { anilist: new AniListSync(anilist), mal: new MalSync(apiFetch, anilist) };
@@ -323,6 +342,7 @@ async function bootstrap() {
   });
 
   const migration = new MigrationBridge(paths, updates, () => store.isIncognito() ? [] : registry.list());
+  const quantum = new SiteQuantumAudio(paths.renderer);
   const protocols = new MediaProtocols(paths.renderer, paths.profileDir,security);
   protocols.install();
   const catalogue=new SourceCatalogue(()=>sessions.sourceList(),sessions,security,protocols.artwork,anilist);
@@ -425,12 +445,21 @@ async function bootstrap() {
       store.setPin(sourceId, mediaId, url);
     },
 
-    'site.openEpisode': (req) => {const guest=guestFor(req.webContentsId,req.sourceId);return navigator.openEpisode(guest,sessions.sourceForSession(guest.session)??registry.get(req.sourceId),req);},
-    'site.focus': async ({ webContentsId, on }) => ({ focused: await navigator.focus(guestFor(webContentsId), on, null) }),
+    'site.openEpisode': async (req) => {
+      const guest = guestFor(req.webContentsId, req.sourceId);
+      await quantum.stop(guest);
+      return navigator.openEpisode(guest, sessions.sourceForSession(guest.session) ?? registry.get(req.sourceId), req);
+    },
+    'site.focus': async ({ webContentsId, on }) => {
+      const guest = guestFor(webContentsId);
+      if (!on) await quantum.stop(guest);
+      return { focused: await navigator.focus(guest, on, null) };
+    },
     'site.options': ({ webContentsId }) => navigator.options(guestFor(webContentsId)),
     'site.episodes':({webContentsId})=>navigator.episodeCards(guestFor(webContentsId)),
-    'site.choose': ({ webContentsId, sourceId, kind, value }) => {
+    'site.choose': async ({ webContentsId, sourceId, kind, value }) => {
       const guest = guestFor(webContentsId, sourceId);
+      await quantum.stop(guest);
       return navigator.choose(guest, sessions.sourceForSession(guest.session) ?? registry.get(sourceId), kind, value);
     },
     'site.forget': ({ sourceId, mediaId }) => {
@@ -577,6 +606,28 @@ async function bootstrap() {
       return mp4DownloadFolder();
     },
 
+    'player.saveMp4': ({ url, sourceId }) => {
+      if (process.platform !== 'win32' || store.isIncognito() || !mainWindow) return false;
+      const source = sourceId ? registry.get(sourceId) : null;
+      if (source && (!source.enabled || source.kind !== 'web')) return false;
+      return mp4.saveDirect(mainWindow.webContents, url, source?.url);
+    },
+    'player.saveSiteMp4': ({ webContentsId }) => {
+      if (process.platform !== 'win32' || store.isIncognito()) return false;
+      const guest = guestFor(webContentsId);
+      const source = sessions.sourceForSession(guest.session);
+      if (!source?.enabled || source.kind !== 'web' || !source.partition.startsWith('persist:')) return false;
+      const current = navigator.currentEpisodeScope(guest, source.id);
+      if (!current) return false;
+      return mp4.saveActive(guest, () => current() && sessions.sourceForSession(guest.session)?.url === source.url);
+    },
+    'player.quantum': (input) => process.platform === 'win32'
+      ? quantum.request(guestFor(input.webContentsId), input) : { state: 'off' },
+    'sources.hoverAudio': ({ sourceId, mediaId }) => {
+      if (store.isPrivate(mediaId) || !registry.list().some(source => source.id === sourceId && source.enabled && source.kind === 'web')) return null;
+      return sourceAudio.get(sourceId, mediaId);
+    },
+
     'cast.mirrorPrepare': ({ webContentsId, deviceId, title, upscale }) => mirror!.prepare(webContentsId, deviceId, title, upscale, settings.get().player.upscale),
     'cast.mirrorChunk': ({ ticket, sequence, bytes }) => mirror!.push(ticket, sequence, bytes),
     'cast.mirrorStop': ({ ticket }) => mirror!.stop(ticket),
@@ -597,6 +648,7 @@ async function bootstrap() {
 
     'adblock.stats': () => adblock.snapshot(),
     'adblock.update': () => adblock.update(),
+    'app.setGpuPreference': ({ preference }) => gpu.set(preference),
     'app.info': async () => {
       const info = await app.getGPUInfo('complete').catch(() => null);
       const aux = (info as { auxAttributes?: { glRenderer?: string } } | null)?.auxAttributes;
@@ -608,7 +660,8 @@ async function bootstrap() {
         platform: `${process.platform} ${process.arch}`,
         configPath: paths.sitesFile,
         dataPath: paths.dataDir,
-        graphics: { ...summarizeGraphics(info, app.getGPUFeatureStatus(), gpuPreference), renderer: aux?.glRenderer ?? null, uiRendering: uiRendering.snapshot() },
+        gpuAdapterPreference: gpu.snapshot(),
+        graphics: { ...summarizeGraphics(info, app.getGPUFeatureStatus(), gpu.snapshot().applied === 'high-performance' ? 'high-performance' : 'system'), renderer: aux?.glRenderer ?? null, uiRendering: uiRendering.snapshot() },
       };
     },
     'privacy.state': () => store.privacyState(),
@@ -741,11 +794,12 @@ function createWindow(preload: string, sessions: SessionManager, onGuest: (guest
   const standardIcon=path.join(__dirname,'..','..','build','icon.png');
   const festiveIcon=path.join(__dirname,'..','..','build','seasonal-icon.png');
   let festive=seasonal();
+  const available = process.platform === 'win32' ? screen.getPrimaryDisplay().workAreaSize : { width: 1440, height: 900 };
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1000,
-    minHeight: 640,
+    width: Math.min(1440, available.width),
+    height: Math.min(900, available.height),
+    minWidth: Math.min(1000, available.width),
+    minHeight: Math.min(640, available.height),
     show: false,
     focusable: !HEADLESS,
     skipTaskbar: HEADLESS,

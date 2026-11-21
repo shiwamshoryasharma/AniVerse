@@ -12,6 +12,7 @@ const EVENT_NAMES: Record<EventName, true> = {
   'cast.status': true,
   'privacy.changed': true,
   'player.captureEnded': true,
+  'mp4.progress': true,
   'update.status': true,
 };
 const EVENTS: ReadonlySet<string> = new Set(Object.keys(EVENT_NAMES));
@@ -30,6 +31,14 @@ ipcRenderer.on(EVENT_CHANNEL, (_e: IpcRendererEvent, event: string, payload: unk
 
 const bridge: AniverseBridge = {
   platform: process.platform,
+  ...(process.platform === 'win32' ? {
+    modernWindows: true,
+    saveMp4: (url: string, sourceId?: string) => bridge.invoke('player.saveMp4', { url, sourceId }),
+    saveSiteMp4: (webContentsId: number) => bridge.invoke('player.saveSiteMp4', { webContentsId }),
+    onMp4Progress: (listener: (progress: import('../app/shared/rpc').EventContract['mp4.progress']) => void) => bridge.on('mp4.progress', listener),
+    hoverSourceAudio: (sourceId: string, mediaId: number) => bridge.invoke('sources.hoverAudio', { sourceId, mediaId }),
+  } : {}),
+
   async invoke(method, input) {
     const res = (await ipcRenderer.invoke(RPC_CHANNEL, method, input)) as { ok: true; data: never } | { ok: false; error: RpcError };
     if (!res.ok) throw new BridgeError(res.error.code, res.error.message);

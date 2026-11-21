@@ -1,13 +1,15 @@
 import { ChevronLeft, ChevronRight, Info, Play, Star } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { MediaCard as Media } from '../../../app/shared/types';
 import { ErrorState } from '../components/common';
 import { HoverPreview } from '../components/HoverCard';
-import { CardRail, MediaCard, SkeletonCards } from '../components/MediaCard';
+import { CardRail, HomeSkeleton, MediaCard, SkeletonCards } from '../components/MediaCard';
 import { cx, formatLabel, pendingRelease, seasonLabel, timeAgo, titleOf } from '../lib/format';
 import { useDismissContinue, useContinue, useHome, useSettings } from '../lib/queries';
 import { LatestGrid } from '../components/LatestGrid';
+import { modernWindows } from '../lib/bridge';
+import '../styles/home-startup.css';
 
 export function HomePage() {
   const { data, error, refetch, isLoading } = useHome();
@@ -24,8 +26,8 @@ export function HomePage() {
   }
 
   return (
-    <div className="page">
-      {data ? <Hero items={data.spotlight} /> : <div className="hero skeleton" />}
+    <div className="page home-page">
+      {data ? <Hero items={data.spotlight} /> : <HomeSkeleton className="hero" />}
 
       <div className="home-grid">
         <div style={{ minWidth: 0 }}>
@@ -62,7 +64,7 @@ export function HomePage() {
                 View all <ChevronRight size={14} />
               </button>
             </div>
-            <div className="grid six">{isLoading ? <SkeletonCards count={12} /> : data?.popularSeason.slice(0, 12).map((m) => <MediaCard key={m.id} media={m} />)}</div>
+            <div className="grid six">{isLoading ? <SkeletonCards count={12} shimmerFirst /> : data?.popularSeason.slice(0, 12).map((m) => <MediaCard key={m.id} media={m} />)}</div>
           </section>
         </div>
       </div>
@@ -117,30 +119,78 @@ function snapshotToCard(s: { id: number; idMal: number | null; title: string; co
 }
 
 function Hero({ items }: { items: Media[] }) {
-  const [index, setIndex] = useState(0);
+  const [{ index, previous }, selectSlide] = useState({ index: 0, previous: -1 });
   const [paused, setPaused] = useState(false);
+  const [visible, setVisible] = useState(true);
+  const [loadedArt, setLoadedArt] = useState<string[]>([]);
+  const spotlight = useRef<HTMLElement>(null);
+  const setIndex = useCallback((choose: number | ((current: number) => number)) => {
+    selectSlide(current => {
+      const next = typeof choose === 'number' ? choose : choose(current.index);
+      return next === current.index ? current : { index: next, previous: current.index };
+    });
+  }, []);
   const navigate = useNavigate();
   const lang = useSettings().appearance.titleLanguage;
   const count = items.length;
+  const hasSlides = count > 0;
 
   useEffect(() => {
-    if (paused || count < 2) return;
+    const target = spotlight.current;
+    if (!modernWindows || !hasSlides || !target) return;
+    let inViewport = true;
+    const syncVisibility = () => setVisible(inViewport && !document.hidden && document.hasFocus());
+    const observer = new IntersectionObserver(([entry]) => {
+      inViewport = entry.isIntersecting;
+      syncVisibility();
+    });
+    observer.observe(target);
+    document.addEventListener('visibilitychange', syncVisibility);
+    window.addEventListener('focus', syncVisibility);
+    window.addEventListener('blur', syncVisibility);
+    syncVisibility();
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', syncVisibility);
+      window.removeEventListener('focus', syncVisibility);
+      window.removeEventListener('blur', syncVisibility);
+    };
+  }, [hasSlides]);
+
+  useEffect(() => {
+    if (paused || !visible || count < 2) return;
     const t = setInterval(() => setIndex((i) => (i + 1) % count), 7000);
     return () => clearInterval(t);
-  }, [paused, count]);
+  }, [paused, visible, count, setIndex]);
 
+  useEffect(() => {
+    if (!modernWindows || previous < 0) return;
+    // The hidden full-size image is needed only for the 700 ms crossfade.
+    const timer = window.setTimeout(() => selectSlide(current =>
+      current.index === index && current.previous === previous ? { index, previous: -1 } : current), 750);
+    return () => window.clearTimeout(timer);
+  }, [index, previous]);
   if (!count) return null;
-  const current = items[index % count];
+  const active = index % count;
+  const current = items[active];
+  const next = visible && loadedArt.includes(current.banner ?? current.cover) ? (active + 1) % count : -1;
 
   return (
-    <section className="hero" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} aria-roledescription="carousel">
-      {items.map((m, i) => (
-        <div key={m.id} className={cx('hero-slide', i === index && 'active')} aria-hidden={i !== index}>
-          <img src={m.banner ?? m.cover} alt="" />
-        </div>
-      ))}
+    <section ref={spotlight} className="hero" data-spotlight-visible={modernWindows ? visible : undefined} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} aria-roledescription="carousel">
+      {items.map((m, i) => {
+        const art = m.banner ?? m.cover;
+        return (
+          <div key={m.id} className={cx('hero-slide', i === active && 'active', modernWindows && i === previous && 'outgoing')} aria-hidden={i !== active}>
+            {(!modernWindows || i === active || i === previous || i === next) && (
+              <img src={art} alt="" decoding={modernWindows ? 'async' : undefined}
+                fetchPriority={modernWindows ? (i === active ? 'high' : 'low') : undefined}
+                onLoad={modernWindows ? () => setLoadedArt(loaded => loaded.includes(art) ? loaded : [...loaded.slice(-2), art]) : undefined} />
+            )}
+          </div>
+        );
+      })}
       <div className="hero-body">
-        <span className="hero-kicker">#{index + 1} Spotlight</span>
+        <span className="hero-kicker">#{active + 1} Spotlight</span>
         <h1 className="hero-title clamp-2">{titleOf(current, lang)}</h1>
         <div className="row wrap">
           {current.score && (
@@ -174,8 +224,8 @@ function Hero({ items }: { items: Media[] }) {
       <div className="hero-nav">
         <div className="hero-thumbs">
           {items.slice(0, 7).map((m, i) => (
-            <button key={m.id} className={cx('hero-thumb', i === index && 'active')} onClick={() => setIndex(i)} aria-label={`Show ${titleOf(m, lang)}`}>
-              <img src={m.cover} alt="" />
+            <button key={m.id} className={cx('hero-thumb', i === active && 'active')} onClick={() => setIndex(i)} aria-label={`Show ${titleOf(m, lang)}`}>
+              <img src={m.cover} alt="" loading={modernWindows ? 'lazy' : undefined} decoding={modernWindows ? 'async' : undefined} />
             </button>
           ))}
         </div>
@@ -185,7 +235,7 @@ function Hero({ items }: { items: Media[] }) {
           </button>
           <div className="hero-dots">
             {items.map((m, i) => (
-              <button key={m.id} className={cx(i === index && 'active')} aria-label={`Slide ${i + 1}`} onClick={() => setIndex(i)} />
+              <button key={m.id} className={cx(i === active && 'active')} aria-label={`Slide ${i + 1}`} onClick={() => setIndex(i)} />
             ))}
           </div>
           <button className="icon-btn bordered" aria-label="Next" onClick={() => setIndex((i) => (i + 1) % count)}>
@@ -222,7 +272,7 @@ function TopCharts({ trending, popular, top }: { trending: Media[]; popular: Med
         ))}
       </div>
       <div className="rank-list">
-        {list.length === 0 && Array.from({ length: 6 }, (_, i) => <div key={i} className="skeleton" style={{ height: 78 }} />)}
+        {list.length === 0 && Array.from({ length: 6 }, (_, i) => (i === 0 ? <HomeSkeleton key={i} style={{ height: 78 }} /> : <div key={i} className="skeleton" style={{ height: 78 }} />))}
         {list.map((m, i) => (
           <HoverPreview key={m.id} media={m}>
           <div className="rank-item" onClick={() => navigate(`/anime/${m.id}`)} role="link" tabIndex={0}>

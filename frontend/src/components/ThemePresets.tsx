@@ -5,6 +5,7 @@ import { call, errorText } from '../lib/bridge';
 import { keys } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { ErrorState } from './common';
+import { setAniVerse2Layout } from '../lib/interfaceLayout';
 
 export function ThemePresets() {
   const [name, setName] = useState('My theme');
@@ -65,6 +66,7 @@ export function ThemePresets() {
                 void run(async () => {
                   const settings = await call('themes.apply', { id: t.id });
                   qc.setQueryData(keys.settings, settings);
+                  setAniVerse2Layout(null);
                 })
               }
             >

@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { BrowseQuery, CommentsQuery, DeepPartial, ListStatus, MediaRef, MediaSnapshot, ProgressSave, Settings, SourceOverridePatch } from '../../../app/shared/types';
-import { call, onEvent } from './bridge';
+import { call, modernWindows, onEvent } from './bridge';
 import { DEFAULT_SETTINGS_FALLBACK } from './settingsFallback';
 
 export const keys = {
@@ -201,6 +201,11 @@ export function useBridgeEvents(qc: QueryClient) {
         }
       }),
     ];
-    return () => offs.forEach((off) => off());
+    const refreshSources = () => void qc.invalidateQueries({ queryKey: keys.sources });
+    if (modernWindows) window.addEventListener('focus', refreshSources);
+    return () => {
+      offs.forEach((off) => off());
+      if (modernWindows) window.removeEventListener('focus', refreshSources);
+    };
   }, [qc]);
 }

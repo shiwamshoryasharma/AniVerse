@@ -194,6 +194,22 @@ img {
 .topbar.win {
   padding-right: 150px;
 }
+.tauri-topbar { padding-right: 0; }
+.tauri-topbar [data-tauri-drag-region] { app-region: drag; user-select: none; }
+.tauri-topbar .word b { pointer-events: none; }
+.tauri-window-controls { display: flex; align-self: stretch; flex: 0 0 auto; }
+.tauri-window-controls button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.tauri-window-controls button:hover { background: var(--surface-2); }
+.tauri-window-controls button:last-child:hover { background: #c42b1c; color: #fff; }
+.tauri-window-controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .topbar > * {
   -webkit-app-region: no-drag;
 }
@@ -2584,6 +2600,8 @@ button.chip.off {
 /* Episode cards keep the same list/grid controls and spoiler rules. */
 .ep-list:not(.grid-mode) { gap:9px; padding:10px; }
 .ep-row { grid-template-columns:minmax(72px,32%) minmax(0,1fr); min-height:94px; padding:10px; gap:12px; border:1px solid var(--line-2); border-radius:12px; background:var(--bg-2); position:relative; overflow:hidden; }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .ep-list:not(.grid-mode) > .ep-row { flex-shrink: 0; }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.layout-cinema, .layout-dock) .ep-list:not(.grid-mode) > .ep-row { align-self: start; }
 .ep-row.active { box-shadow:inset 4px 0 var(--accent); }
 .ep-row.unavailable { opacity:.65; }
 .ep-thumb { position:relative; display:grid; place-items:center; aspect-ratio:16/9; border-radius:8px; overflow:hidden; background:linear-gradient(145deg,var(--surface-3),var(--bg)); color:var(--text-3); }

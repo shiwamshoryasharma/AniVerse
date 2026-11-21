@@ -1,0 +1,222 @@
+/* The shared desktop tokens still supply the full palette. These aliases are fixed
+   at the root so nested colour layers can keep their own text and controls. */
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) {
+  --av2-base-bg: var(--bg);
+  --av2-base-bg-2: var(--bg-2);
+  --av2-base-surface: var(--surface);
+  --av2-base-surface-2: var(--surface-2);
+  --av2-base-surface-3: var(--surface-3);
+  --av2-base-hover: var(--surface-hover);
+  --av2-base-text: var(--text);
+  --av2-base-text-2: var(--text-2);
+  --av2-base-text-3: var(--text-3);
+  --av2-base-accent: var(--accent);
+  --av2-base-accent-2: var(--accent-2);
+  --av2-base-accent-ink: var(--accent-ink);
+  --av2-base-accent-soft: var(--accent-soft);
+  --av2-base-line: var(--line);
+  --av2-base-line-2: var(--line-2);
+  --av2-base-ok: var(--ok);
+  --av2-base-warn: var(--warn);
+  --av2-base-err: var(--err);
+  --av2-base-info: var(--info);
+  --av2-glyph: var(--av2-icon-on-pages);
+}
+
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) :where(.topbar, .rail, .settings-nav, .side-panel, .ep-panel, .home-grid>aside,
+  .main, .card, .rank-item, .ep-row, .mcard, .hovercard, .ctx-menu, .menu, .select-pop, .suggest, .player-menu,
+  .modal, .release-dialog, .episode-cast-dialog, .toast, .seek-tip) {
+  --av2-region-tone: color-mix(in srgb, var(--av2-region) 86%, var(--av2-region-edge));
+  --av2-region-lift: color-mix(in srgb, var(--av2-region) 70%, var(--av2-region-edge));
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-custom] :is(.topbar, .rail, .settings-nav, .side-panel, .ep-panel, .home-grid>aside,
+  .main, .card:not(.settings-nav, .side-panel, .ep-panel, .modal, .midnight-preview, .festival-preview), .rank-item, .ep-row, .mcard, .hovercard, .ctx-menu, .menu,
+  .select-pop, .suggest, .player-menu, .modal, .release-dialog, .episode-cast-dialog, .toast, .seek-tip) {
+  --bg: var(--av2-region, var(--av2-base-bg));
+  --bg-2: var(--av2-region-tone, var(--av2-base-bg-2));
+  --surface: var(--av2-region, var(--av2-base-surface));
+  --surface-2: var(--av2-region-tone, var(--av2-base-surface-2));
+  --surface-3: var(--av2-region-lift, var(--av2-base-surface-3));
+  --surface-hover: var(--av2-region-lift, var(--av2-base-hover));
+  --text: var(--av2-region-ink, var(--av2-base-text));
+  --text-2: var(--av2-region-ink, var(--av2-base-text-2));
+  --text-3: var(--av2-region-ink, var(--av2-base-text-3));
+  --accent: var(--av2-region-ink, var(--av2-base-accent));
+  --accent-2: var(--av2-region-ink, var(--av2-base-accent-2));
+  --accent-ink: var(--av2-region-edge, var(--av2-base-accent-ink));
+  --accent-soft: var(--av2-region-tone, var(--av2-base-accent-soft));
+  --line: var(--av2-region-border, var(--av2-base-line));
+  --line-2: var(--av2-region-border, var(--av2-base-line-2));
+  --ok: var(--av2-region-ok, var(--av2-base-ok));
+  --warn: var(--av2-region-warn, var(--av2-base-warn));
+  --err: var(--av2-region-err, var(--av2-base-err));
+  --info: var(--av2-region-info, var(--av2-base-info));
+  --av2-region-border: color-mix(in srgb, var(--av2-region-ink) 26%, transparent);
+  color: var(--text);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .topbar {
+  --av2-region: var(--av2-header);
+  --av2-region-ink: var(--av2-header-ink);
+  --av2-region-edge: var(--av2-header-edge);
+  --av2-region-ok: var(--av2-header-ok);
+  --av2-region-warn: var(--av2-header-warn);
+  --av2-region-err: var(--av2-header-err);
+  --av2-region-info: var(--av2-header-info);
+  --av2-glyph: var(--av2-icon-on-header);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .rail {
+  --av2-region: var(--av2-navigation);
+  --av2-region-ink: var(--av2-navigation-ink);
+  --av2-region-edge: var(--av2-navigation-edge);
+  --av2-region-ok: var(--av2-navigation-ok);
+  --av2-region-warn: var(--av2-navigation-warn);
+  --av2-region-err: var(--av2-navigation-err);
+  --av2-region-info: var(--av2-navigation-info);
+  --av2-glyph: var(--av2-icon-on-navigation);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .main {
+  --av2-region: var(--av2-pages);
+  --av2-region-ink: var(--av2-pages-ink);
+  --av2-region-edge: var(--av2-pages-edge);
+  --av2-region-ok: var(--av2-pages-ok);
+  --av2-region-warn: var(--av2-pages-warn);
+  --av2-region-err: var(--av2-pages-err);
+  --av2-region-info: var(--av2-pages-info);
+  --av2-glyph: var(--av2-icon-on-pages);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.card:not(.settings-nav, .side-panel, .ep-panel, .modal, .midnight-preview, .festival-preview), .rank-item, .ep-row, .mcard) {
+  --av2-region: var(--av2-cards);
+  --av2-region-ink: var(--av2-cards-ink);
+  --av2-region-edge: var(--av2-cards-edge);
+  --av2-region-ok: var(--av2-cards-ok);
+  --av2-region-warn: var(--av2-cards-warn);
+  --av2-region-err: var(--av2-cards-err);
+  --av2-region-info: var(--av2-cards-info);
+  --av2-glyph: var(--av2-icon-on-cards);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.settings-nav, .side-panel, .ep-panel, .home-grid>aside) {
+  --av2-region: var(--av2-sidebar);
+  --av2-region-ink: var(--av2-sidebar-ink);
+  --av2-region-edge: var(--av2-sidebar-edge);
+  --av2-region-ok: var(--av2-sidebar-ok);
+  --av2-region-warn: var(--av2-sidebar-warn);
+  --av2-region-err: var(--av2-sidebar-err);
+  --av2-region-info: var(--av2-sidebar-info);
+  --av2-glyph: var(--av2-icon-on-sidebar);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.hovercard, .ctx-menu, .menu, .select-pop, .suggest, .player-menu, .modal,
+  .release-dialog, .episode-cast-dialog, .toast, .seek-tip) {
+  --av2-region: var(--av2-menu);
+  --av2-region-ink: var(--av2-menu-ink);
+  --av2-region-edge: var(--av2-menu-edge);
+  --av2-region-ok: var(--av2-menu-ok);
+  --av2-region-warn: var(--av2-menu-warn);
+  --av2-region-err: var(--av2-menu-err);
+  --av2-region-info: var(--av2-menu-info);
+  --av2-glyph: var(--av2-icon-on-menu);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-header] .topbar { background: var(--av2-header); }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-navigation] .rail { background: var(--av2-navigation); }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-pages] .main { background: var(--av2-pages); }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-cards] :is(.card:not(.settings-nav, .side-panel, .ep-panel, .modal, .midnight-preview, .festival-preview), .rank-item, .ep-row, .mcard) {
+  background-color: var(--av2-cards);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-sidebar] :is(.settings-nav, .side-panel, .ep-panel, .home-grid>aside) {
+  background-color: var(--av2-sidebar);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-menu] :is(.hovercard, .ctx-menu, .menu, .select-pop, .suggest, .player-menu,
+  .modal, .release-dialog, .episode-cast-dialog, .toast, .seek-tip) {
+  background-color: var(--av2-menu);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-buttons] :is(.btn:not(.ghost, .danger), .cta:not(.outline), .player-bigplay, .select-trigger) {
+  --av2-glyph: var(--av2-icon-on-buttons);
+  background: var(--av2-buttons);
+  color: var(--av2-buttons-ink);
+  transition-property: transform;
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-buttons] :is(.btn:not(.ghost, .danger), .cta:not(.outline), .player-bigplay, .select-trigger):hover {
+  background: color-mix(in srgb, var(--av2-buttons) 88%, var(--av2-buttons-edge));
+  color: var(--av2-buttons-ink);
+  transition-property: transform;
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-icons] .player { --av2-glyph: var(--av2-icon-on-player); }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-icons] :is(.btn.primary, .cta:not(.outline), .player-bigplay) { --av2-glyph: var(--av2-icon-on-buttons); }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-av2-icons] :is(.rail-item, .settings-nav button, .tauri-window-controls button, .icon-btn,
+  .btn:not(.danger), .cta, .player-bigplay, .select-trigger, .ctx-item:not(.danger), .menu button, .menu a) svg {
+  color: var(--av2-glyph, currentColor);
+}
+
+/* One static gradient per painted surface, with motion only on short-lived overlays. */
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-style]:not([data-aniverse2-theme='legacy']):not([data-desktop-theme='midnight']):not([data-av2-pages]) .main { background: var(--av2-page-wash), var(--bg); }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-style]:not([data-aniverse2-theme='legacy']):not([data-desktop-theme='midnight']) :is(.rail-item, .settings-nav button) {
+  border-radius: var(--av2-nav-radius);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-style]:not([data-aniverse2-theme='legacy']):not([data-desktop-theme='midnight']) :is(.rail-item.active, .settings-nav button.active) {
+  box-shadow: var(--av2-nav-shadow);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-style]:not([data-aniverse2-theme='legacy']):not([data-desktop-theme='midnight']) :is(.rail-item, .settings-nav button) svg { stroke-width: var(--av2-icon-stroke); }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-style]:not([data-aniverse2-theme='legacy']):not([data-desktop-theme='midnight']) :is(.card, .rank-item, .ep-row, .mcard) {
+  border-radius: var(--av2-card-radius);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-style]:not([data-aniverse2-theme='legacy']):not([data-desktop-theme='midnight']) :is(.card:not(.settings-nav, .side-panel, .ep-panel, .modal, .midnight-preview, .festival-preview), .rank-item) {
+  box-shadow: var(--av2-card-shadow);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-style]:not([data-aniverse2-theme='legacy']):not([data-desktop-theme='midnight']) :is(.ctx-menu, .menu, .select-pop, .suggest, .player-menu, .modal,
+  .release-dialog, .episode-cast-dialog) {
+  border-radius: var(--av2-menu-radius);
+  box-shadow: var(--av2-menu-shadow);
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-style]:not([data-aniverse2-theme='legacy']):not([data-desktop-theme='midnight']) :is(.ctx-menu, .menu, .select-pop, .suggest, .player-menu) {
+  animation-name: var(--av2-menu-motion);
+  animation-duration: var(--av2-menu-duration);
+  animation-timing-function: var(--ease);
+  animation-fill-mode: both;
+}
+@keyframes av2-menu-ion { from { opacity: 0; transform: translateY(4px); } }
+@keyframes av2-menu-copper { from { opacity: 0; transform: scale(.97); } }
+@keyframes av2-menu-wisteria { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+@keyframes av2-menu-verdant { from { opacity: 0; transform: translateX(5px); } }
+@keyframes av2-menu-nocturne { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) { --av2-menu-motion: none !important; }
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-motion='reduce'] { --av2-menu-motion: none !important; }
+
+.av2-appearance { margin-bottom: 16px; }
+.av2-appearance-head, .av2-theme-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.av2-appearance-head h3 { margin: 0; }
+.av2-theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr)); gap: 10px; }
+.av2-theme-option {
+  text-align: start; min-width: 0; padding: 10px; display: grid; gap: 6px; cursor: pointer;
+  border: 1px solid var(--line-2); border-radius: var(--av2-card-radius, 12px);
+  background: var(--surface); color: var(--text);
+}
+.av2-theme-option[aria-pressed='true'], .av2-theme-option:hover { border-color: var(--accent); }
+.av2-theme-option small { font-size: var(--fs-xs); color: var(--text-2); }
+.av2-theme-strip {
+  min-height: 40px; display: grid; grid-template-columns: 16% repeat(3, 1fr); gap: 4px; align-items: end; padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--theme-color) 45%, transparent); border-radius: 7px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-color) 15%, var(--theme-surface)), var(--theme-surface));
+}
+.av2-theme-strip i { min-height: 13px; border-radius: 2px; background: color-mix(in srgb, var(--theme-color) 28%, var(--theme-surface)); }
+.av2-theme-strip i:first-child { min-height: 22px; background: color-mix(in srgb, var(--theme-color) 64%, var(--theme-surface)); }
+.av2-theme-label svg { flex: none; color: var(--accent); }
+.av2-colour-editor { border-top: 1px solid var(--line); padding-top: 10px; }
+.av2-colour-editor summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 32px; font-weight: 650; }
+.av2-colour-editor summary::-webkit-details-marker { display: none; }
+.av2-colour-editor summary svg:last-child { margin-inline-start: auto; }
+.av2-colour-editor[open] summary svg:last-child { transform: rotate(180deg); }
+.av2-colour-content { display: grid; gap: 12px; padding-top: 10px; }
+.av2-colour-layers, .av2-colour-options, .av2-swatches { display: flex; flex-wrap: wrap; gap: 7px; }
+.av2-colour-options { align-items: center; gap: 12px; }
+.av2-colour-layers button[aria-pressed='true'] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.av2-swatch, .av2-colour-dot { background: var(--swatch); }
+.av2-swatch {
+  display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px;
+  color: var(--swatch-ink); border: 1px solid var(--line-2); cursor: pointer;
+}
+.av2-swatch[aria-pressed='true'] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.av2-colour-dot { width: 8px; height: 8px; border-radius: 50%; }
+.av2-colour-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.av2-colour-pick input { width: 36px; height: 30px; border: 1px solid var(--line-2); border-radius: 6px; padding: 2px; cursor: pointer; }
+.av2-appearance :is(button,summary,input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

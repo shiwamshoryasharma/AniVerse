@@ -1,12 +1,13 @@
 import { AlertTriangle, RotateCw, SearchX } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { SourceInfo } from '../../../app/shared/types';
-import { errorText } from '../lib/bridge';
+import { errorText, isAniVerse2 } from '../lib/bridge';
 import {useSeasonalVisuals} from '../lib/seasonal';
 import { cx } from '../lib/format';
 
 export function Logo({ size = 26 }: { size?: number }) {
   const seasonal=useSeasonalVisuals();
+  if (isAniVerse2) return <img src="./aniverse2-mark.png" width={size} height={size} alt="" aria-hidden />;
   if(seasonal)return <img className="seasonal-logo" src="./festival-icon.svg" width={size} height={size} alt="" aria-hidden/>;
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>

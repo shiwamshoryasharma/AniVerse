@@ -1,6 +1,10 @@
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
+  Copy,
+  Minus,
+  Square,
+  X,
   PanelsTopLeft,
   Clapperboard,
   Compass,
@@ -10,6 +14,8 @@ import {
   Library,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Search,
   Settings as SettingsIcon,
   Shuffle,
@@ -20,19 +26,20 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import { call, platform, onEvent } from '../lib/bridge';
+import { call, isAniVerse2, modernWindows, platform, onEvent } from '../lib/bridge';
 import { cx, formatLabel, titleOf } from '../lib/format';
 import { useAccounts, useAdblockStats, useBridgeEvents, useSearch, useSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { Logo, Spinner } from './common';
 import { ContextMenuProvider } from './ContextMenu';
-import { interfaceStyle } from '../../../app/shared/interface';
+import { useInterfaceLayout } from '../lib/interfaceLayout';
 import { seasonalVisuals } from '../../../app/shared/seasonal';
 import { useMidnightTheme } from '../lib/desktopTheme';
 import { DesktopSeasonalVisuals } from '../lib/seasonal';
 import { IncognitoButton } from './Privacy';
 import { ReleaseAnnouncements } from './Changelog';
 import { UpdateBadge } from './Updates';
+import { DesktopSearch } from './DesktopSearch';
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -57,9 +64,13 @@ export function Shell() {
   const qc = useQueryClient();
   useBridgeEvents(qc);
   const settings = useSettings();
-  const [open, setOpen] = useState(readRailPref);
+  const [open, setOpen] = useState(() => !modernWindows && readRailPref());
   const midnight = useMidnightTheme();
-  const layout = interfaceStyle(settings.appearance.style).layout;
+  const layout = useInterfaceLayout(settings.appearance.style);
+  const canToggleRail = layout === 'classic' || (modernWindows && (layout === 'studio' || layout === 'atlas'));
+  const RailToggleIcon = layout === 'atlas'
+    ? (open ? PanelRightClose : PanelRightOpen)
+    : (open ? PanelLeftClose : PanelLeftOpen);
   const navigate = useNavigate();
   const toast = useToast();
   const location = useLocation();
@@ -69,12 +80,12 @@ export function Shell() {
     const root = document.documentElement;
     root.dataset.desktopTheme = midnight ? 'midnight' : 'standard';
     root.dataset.style = settings.appearance.style;
-    root.dataset.layout = interfaceStyle(settings.appearance.style).layout;
+    root.dataset.layout = layout;
     root.dataset.accent = settings.appearance.accent;
     root.dataset.density = settings.appearance.density;
     root.dataset.font = settings.appearance.fontFamily;
     root.dataset.motion = settings.appearance.reduceMotion ? 'reduce' : 'full';
-  }, [settings.appearance, midnight]);
+  }, [settings.appearance, layout, midnight]);
 
   useEffect(()=>{
     const icon=document.querySelector<HTMLLinkElement>('link[rel="icon"]');
@@ -83,7 +94,7 @@ export function Shell() {
       const root = document.documentElement;
       if (root.dataset.seasonal === String(on)) return;
       root.dataset.seasonal = String(on);
-      if (icon) icon.href = on ? './festival-icon.svg' : './favicon.svg';
+      if (icon) icon.href = isAniVerse2 ? './aniverse2-mark.png' : on ? './festival-icon.svg' : './favicon.svg';
     };
     refresh();
     if (midnight || settings.appearance.accent !== 'festival') return;
@@ -97,6 +108,7 @@ export function Shell() {
 
   const toggleRail = () => {
     setOpen((v) => {
+      if (modernWindows) return !v;
       try {
         localStorage.setItem('aniverse.rail', v ? 'closed' : 'open');
       } catch {
@@ -119,28 +131,30 @@ export function Shell() {
 
   return (
     <DesktopSeasonalVisuals.Provider value={!midnight}>
-    <div className={cx('app', layout === 'classic' && open && 'rail-open', 'layout-' + layout)}>
-      <header className={cx('topbar', platform === 'win32' && 'win')}>
+    <div className={cx('app', canToggleRail && open && 'rail-open', 'layout-' + layout)}>
+      <header className={cx('topbar', platform === 'win32' && !isAniVerse2 && 'win', isAniVerse2 && 'tauri-topbar')}>
         <div className="brand">
-          {layout === 'classic' && <button className="icon-btn" aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'} onClick={toggleRail}>
-            {open ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+          {canToggleRail && <button className="icon-btn" aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-expanded={open} aria-controls="main-navigation" onClick={toggleRail}>
+            <RailToggleIcon size={18} />
           </button>}
           <Logo />
-          <span className="word">
-            Ani<b>Verse</b>
+          <span className="word" data-tauri-drag-region={isAniVerse2 ? "" : undefined}>
+            Ani<b>Verse{isAniVerse2 ? '2' : ''}</b>
           </span>
         </div>
-        <SearchBox />
-        <div className="spacer" />
+        {modernWindows ? <DesktopSearch /> : <SearchBox />}
+        <div className="spacer" data-tauri-drag-region={isAniVerse2 ? "" : undefined} />
         <IncognitoButton />
         <ReleaseAnnouncements />
         <UpdateBadge />
         <RefreshButton />
         <AdblockBadge />
         <ProfileMenu />
+        {isAniVerse2 && <WindowControls />}
       </header>
 
-      <nav className="rail" aria-label="Main">
+      <nav id="main-navigation" className="rail" aria-label="Main">
         {layout === 'studio' && <div className="studio-nav-heading"><span>YOUR WORKSPACE</span><h2>Anime studio</h2><p>Discover, plan and continue.</p></div>}
         {NAV.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cx('rail-item', isActive && 'active')} title={item.label}>
@@ -167,6 +181,34 @@ export function Shell() {
       </main>
     </div>
     </DesktopSeasonalVisuals.Provider>
+  );
+}
+
+function WindowControls() {
+  const toast = useToast();
+  const [maximized, setMaximized] = useState(false);
+  const controls = window.aniverse?.windowControls;
+  useEffect(() => {
+    if (!controls) return;
+    const sync = () => void controls.isMaximized().then(setMaximized, () => undefined);
+    sync();
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
+  }, [controls]);
+  if (!controls) return null;
+
+  const run = (action: 'minimize' | 'toggleMaximize' | 'close') => {
+    void controls[action]().catch((error) => toast.push({ level: 'error', message: String(error) }));
+  };
+  const resizeLabel = maximized ? 'Restore window' : 'Maximize window';
+  return (
+    <div className="tauri-window-controls" aria-label="Window controls" role="group">
+      <button type="button" aria-label="Minimize window" title="Minimize" onClick={() => run('minimize')}><Minus size={14} /></button>
+      <button type="button" aria-label={resizeLabel} title={resizeLabel} onClick={() => run('toggleMaximize')}>
+        {maximized ? <Copy size={12} /> : <Square size={12} />}
+      </button>
+      <button type="button" aria-label="Close window" title="Close" onClick={() => run('close')}><X size={15} /></button>
+    </div>
   );
 }
 

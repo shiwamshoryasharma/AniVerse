@@ -150,6 +150,11 @@ export interface RpcContract {
   'player.openFile': [void, { url: string; name: string } | null];
   'player.mp4Folder': [{ action: 'get' | 'choose' | 'reset' }, string | null];
 
+  'player.saveMp4': [{ url: string; sourceId?: string }, boolean];
+  'player.saveSiteMp4': [{ webContentsId: number }, boolean];
+  'player.quantum': [{ webContentsId: number; action: 'enable' | 'off' | 'level' | 'status'; intensity?: number }, { state: 'off' | 'waiting' | 'active' | 'unavailable' }];
+  'sources.hoverAudio': [{ sourceId: string; mediaId: number }, { sub: number | null; dub: number | null; total: number | null } | null];
+
   'cast.mirrorPrepare': [{ webContentsId: number; deviceId: string; title: string; upscale: boolean }, { ticket: string }];
   'cast.mirrorChunk': [{ ticket: string; sequence: number; bytes: Uint8Array }, void];
   'cast.mirrorStop': [{ ticket: string }, void];
@@ -175,6 +180,7 @@ export interface RpcContract {
   'privacy.title': [{mediaId:number;on:boolean}, import('./types').PrivacyState];
   'privacy.watchSources': [{mediaId:number}, {leaseId:string|null;sources:SourceInfo[]}];
   'privacy.releaseSources': [{leaseId:string}, void];
+  'app.setGpuPreference': [{ preference: import('./graphics').DesktopGpuPreference }, import('./graphics').DesktopGpuState];
   'app.info': [void, AppInfo];
   'app.openGraphicsSettings': [void, void];
   'app.setUiRendering': [{ mode: import('./graphics').UiRenderingMode }, import('./graphics').UiRenderingState];
@@ -196,6 +202,7 @@ export type RpcInput<M extends RpcMethod> = RpcContract[M][0];
 export type RpcOutput<M extends RpcMethod> = RpcContract[M][1];
 
 export interface EventContract {
+  'mp4.progress': { received: number; total: number | null };
   'sources.changed': SourceInfo[];
   'privacy.changed': import('./types').PrivacyState;
   'cloudflare.status': CloudflareEvent;
@@ -217,6 +224,20 @@ export interface RpcError {
 
 /** Surface exposed by the preload script on `window.aniverse`. */
 export interface AniverseBridge {
+  readonly modernWindows?: boolean;
+  readonly edition?: 'aniverse2';
+  readonly releasePlayerFile?: (url: string) => Promise<void>;
+  readonly saveMp4?: (url: string, sourceId?: string) => Promise<boolean>;
+  readonly saveSiteMp4?: (webContentsId: number) => Promise<boolean>;
+  readonly onMp4Progress?: (listener: (progress: { received: number; total: number | null }) => void) => () => void;
+  readonly hoverSourceAudio?: (sourceId: string, mediaId: number) => Promise<{ sub: number | null; dub: number | null; total: number | null } | null>;
+  readonly windowControls?: {
+    minimize(): Promise<void>;
+    toggleMaximize(): Promise<void>;
+    isMaximized(): Promise<boolean>;
+    close(): Promise<void>;
+  };
+
   invoke<M extends RpcMethod>(method: M, input: RpcInput<M>): Promise<RpcOutput<M>>;
   on<E extends EventName>(event: E, listener: (payload: EventContract[E]) => void): () => void;
   platform: string;

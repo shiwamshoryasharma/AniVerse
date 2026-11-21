@@ -25,30 +25,66 @@ export function shaderConfig(options: UpscaleSettings, enlarge = true, inputHeig
 }
 
 /** Filters the existing decoded element. Keeps its audio and media clock authoritative. */
-export function attachAnime4K(video: HTMLVideoElement, canvas: HTMLCanvasElement, options: UpscaleSettings, report: (state: UpscaleStatus) => void): () => void {
+export function attachAnime4K(video: HTMLVideoElement, canvas: HTMLCanvasElement, options: UpscaleSettings, report: (state: UpscaleStatus) => void, fitToSurface = false): () => void {
   let stopped=false,handle=0,engine:ImageUpscaler|null=null;
   let dimensions='',inputDimensions='',lighter=false,lateFrames=0;
+  let gl: WebGLRenderingContext | null = null, max = 0;
+  let cssWidth = 0, cssHeight = 0;
+  const measure = () => {
+    const rect = canvas.getBoundingClientRect();
+    cssWidth = rect.width;
+    cssHeight = rect.height;
+  };
+  const observer = fitToSurface && options.enabled ? new ResizeObserver(measure) : null;
+  if (observer) {
+    measure();
+    observer.observe(canvas);
+    window.addEventListener('resize', measure);
+  }
+  const stopMeasuring = () => {
+    observer?.disconnect();
+    window.removeEventListener('resize', measure);
+  };
   const frameCallbacks=typeof video.requestVideoFrameCallback==='function';
   canvas.style.visibility='hidden';
   const disposeEngine=()=>{engine?.detachSource();engine=null;};
-  const fail=(message:string)=>{stopped=true;disposeEngine();canvas.style.visibility='hidden';report({state:'unavailable',message});};
+  const fail=(message:string)=>{stopped=true;stopMeasuring();disposeEngine();canvas.style.visibility='hidden';report({state:'unavailable',message});};
   const schedule=()=>{if(!stopped)handle=frameCallbacks?video.requestVideoFrameCallback(draw):requestAnimationFrame(draw);};
   const draw=(_now?:number,metadata?:VideoFrameCallbackMetadata)=>{
     if(stopped||!options.enabled)return;
     if(video.readyState>=2&&video.videoWidth){
       const mediaTime=metadata?.mediaTime??video.currentTime;
       try{
-        const gl=canvas.getContext('webgl',{premultipliedAlpha:false,stencil:false,depth:false});
-        if(!gl||!gl.getExtension('OES_texture_float')||!gl.getExtension('OES_texture_float_linear')||gl.isContextLost()){
-          fail('Anime4K requires a working WebGL GPU with floating-point textures.');return;
+        const surface = observer ? {
+          width: Math.floor(cssWidth * window.devicePixelRatio),
+          height: Math.floor(cssHeight * window.devicePixelRatio),
+        } : undefined;
+        if (surface && (!surface.width || !surface.height)) {
+          if (engine) {
+            disposeEngine();
+            canvas.width=canvas.height=1;
+            dimensions='';
+            report({state:'waiting',message:'Waiting for the video surface to be visible…'});
+          }
+          schedule();return;
         }
-        gl.getExtension('WEBGL_color_buffer_float');
-        const max=Number(gl.getParameter(gl.MAX_TEXTURE_SIZE)),size=upscaleSize(video.videoWidth,video.videoHeight,max);
+        if(!gl){
+          gl=canvas.getContext('webgl',{premultipliedAlpha:false,stencil:false,depth:false});
+          if(!gl||!gl.getExtension('OES_texture_float')||!gl.getExtension('OES_texture_float_linear')||gl.isContextLost()){
+            fail('Anime4K requires a working WebGL GPU with floating-point textures.');return;
+          }
+          gl.getExtension('WEBGL_color_buffer_float');
+          max=Number(gl.getParameter(gl.MAX_TEXTURE_SIZE));
+        }
+        const size=upscaleSize(video.videoWidth,video.videoHeight,max,surface);
         if(!size){schedule();return;}
-        const input=video.videoWidth+'x'+video.videoHeight;
+        // The pinned CNN shaders only enlarge when both target axes exceed 1.2×.
+        const enlarge=fitToSurface
+          ? size.width / video.videoWidth > 1.2 && size.height / video.videoHeight > 1.2
+          : video.videoHeight<size.height;
+        const input=video.videoWidth+'x'+video.videoHeight+(enlarge?'x2':'');
         if(!engine||input!==inputDimensions){
           disposeEngine();
-          const enlarge=video.videoHeight<size.height;
           if(enlarge&&Math.max(video.videoWidth,video.videoHeight)*2>max){fail('This GPU cannot allocate the required Anime4K textures.');return;}
           engine=new ImageUpscaler(shaderConfig(options,enlarge,video.videoHeight,lighter));
           engine.attachSource(video,canvas);inputDimensions=input;
@@ -91,6 +127,6 @@ export function attachAnime4K(video: HTMLVideoElement, canvas: HTMLCanvasElement
   return()=>{
     stopped=true;
     if(handle){if(frameCallbacks)video.cancelVideoFrameCallback(handle);else cancelAnimationFrame(handle);}
-    canvas.removeEventListener('webglcontextlost',lost);disposeEngine();canvas.style.visibility='hidden';
+    canvas.removeEventListener('webglcontextlost',lost);stopMeasuring();disposeEngine();canvas.style.visibility='hidden';
   };
 }

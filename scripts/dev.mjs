@@ -2,6 +2,7 @@
 // main/preload bundles, and an Electron process restarted on main changes.
 import { context } from 'esbuild';
 import { createServer } from 'vite';
+import { readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -9,11 +10,26 @@ import path from 'node:path';
 import {prepareSecurity} from './prepare-security.mjs';
 import { mainOptions, preloadOptions } from './build.mjs';
 
+import { prepareQuantumAudio, copyQuantumAudio } from './quantum-assets.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronBinary = createRequire(import.meta.url)('electron');
 
 prepareSecurity();
+const quantumDir = path.join(root, 'dist/renderer');
+if (process.platform === 'win32') {
+  prepareQuantumAudio();
+  await copyQuantumAudio(quantumDir);
+}
 const server = await createServer({ configFile: path.join(root, 'frontend/vite.config.ts'), mode: 'development' });
+server.middlewares.use((request, response, next) => {
+  const file = request.url?.slice(1);
+  if (process.platform !== 'win32' || (file !== 'quantum-worklet.js' && file !== 'quantum-audio.wasm')) return next();
+  readFile(path.join(quantumDir, file)).then((data) => {
+    response.setHeader('Content-Type', file.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
+    response.end(data);
+  }, next);
+});
 await server.listen();
 const devUrl = server.resolvedUrls.local[0];
 console.log(`[dev] renderer at ${devUrl}`);

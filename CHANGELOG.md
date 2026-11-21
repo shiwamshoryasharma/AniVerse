@@ -2,6 +2,14 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.3.0 Windows (Electron) · 2026-11-22
+
+- Add the AniVerse2 appearance, search, blocking report, graphics and player tools to the Electron edition.
+- Add Quantum Audio and MP4 Save As with clear HLS remuxing.
+- Keep the existing AniVerse profile and signed Electron updater.
+
+[Windows release notes](docs/releases/2.3.0.md) · [Feature comparison](docs/ANIVERSE-FEATURE-PARITY.md)
+
 ## 2.2.4 Windows — 2026-11-20
 
 - Add **Update AniVerse to AniVerse2** in Settings → About → Updates.

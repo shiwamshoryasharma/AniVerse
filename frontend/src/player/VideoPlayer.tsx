@@ -27,6 +27,7 @@ import { Range } from '../components/controls';
 import { clock, cx } from '../lib/format';
 import { Anime4KPanel, Anime4KSurface } from '../components/Anime4K';
 import { SubtitleStudio } from './SubtitleStudio';
+import { QuantumAudioControl } from './QuantumAudioControl';
 
 export interface PlayerSource {
   type: 'hls' | 'dash' | 'mp4';
@@ -51,6 +52,7 @@ interface Props {
   startAt?: number;
   prefs: Settings['player'];
   theater?: boolean;
+  labelQuantumAudio?: boolean;
   controlsRef?: RefObject<PlayerControls | null>;
   hasPrev?: boolean;
   hasNext?: boolean;
@@ -72,7 +74,7 @@ interface Level {
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 /** Custom player for HLS (hls.js), DASH (dash.js) and progressive MP4/WebM. */
-export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, theater, controlsRef, hasPrev, hasNext, onPrev, onNext, onTheater, onProgress, onEnded, onVolume }: Props) {
+export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, theater, labelQuantumAudio, controlsRef, hasPrev, hasNext, onPrev, onNext, onTheater, onProgress, onEnded, onVolume }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const engine = useRef<{ hls: Hls | null; dash: MediaPlayerClass | null }>({ hls: null, dash: null });
@@ -400,7 +402,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
       onMouseLeave={() => playing && setIdle(true)}
       aria-label="Video player"
     >
-      <video ref={video} playsInline crossOrigin={source.subtitles.length || source.url.startsWith('media:') ? 'anonymous' : undefined} onClick={toggle} onDoubleClick={toggleFs}>
+      <video ref={video} playsInline crossOrigin={source.subtitles.length || source.url.startsWith('media:') || source.url.startsWith('https://localmedia.localhost/') ? 'anonymous' : undefined} onClick={toggle} onDoubleClick={toggleFs}>
         {source.subtitles.map((s, i) => (
           <track key={s.url} kind="subtitles" src={s.url} srcLang={s.lang} label={s.label} default={i === 0} />
         ))}
@@ -517,6 +519,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
               <Range value={muted ? 0 : volume} step={0.02} onChange={changeVolume} ariaLabel="Volume" width={76} />
             </div>
           </div>
+          <QuantumAudioControl key={source.url} video={video} url={source.url} labelled={labelQuantumAudio} />
           <span className="player-time">
             {clock(time)} / {clock(duration)}
           </span>

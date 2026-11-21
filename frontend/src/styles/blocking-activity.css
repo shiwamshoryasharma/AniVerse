@@ -1,0 +1,69 @@
+.blocking-report {
+  padding: 16px;
+  margin-block: 14px 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.blocking-report-heading,
+.blocking-report-heading h3,
+.blocking-report-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.blocking-report-heading { justify-content: space-between; }
+.blocking-report-heading h3 { margin: 0; font-size: 15px; }
+.blocking-report-heading svg { color: var(--accent); }
+.blocking-report p { margin: 5px 0 0; color: var(--text-2); }
+.blocking-report-content { margin-top: 16px; }
+.blocking-report-filters > div { display: grid; gap: 5px; font-size: var(--fs-sm); }
+.blocking-report .blocking-report-total { margin: 16px 0 10px; color: var(--text); }
+.blocking-report-total strong { font-size: var(--fs-xl); }
+.blocking-report-legend,
+.blocking-report-chart ul { padding: 0; list-style: none; }
+.blocking-report-legend { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 0 0 16px; }
+.blocking-report-legend li { display: flex; align-items: baseline; gap: 6px; color: var(--text-2); font-size: var(--fs-sm); }
+.blocking-report-legend strong { color: var(--text); }
+.blocking-report [data-category="blocked"] { --report-bar: var(--accent); }
+.blocking-report [data-category="securityBlocked"] { --report-bar: var(--warn); }
+.blocking-report [data-category="popupsBlocked"] { --report-bar: var(--info); }
+.blocking-report-legend i { flex: 0 0 8px; height: 8px; border-radius: 2px; background: var(--report-bar); }
+.blocking-report-chart {
+  --report-name-width: min(27%, 150px);
+  margin: 14px 0;
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.blocking-report-chart figcaption { font-weight: 650; }
+.blocking-report-chart ul { margin: 8px 0 2px; }
+.blocking-report-chart li, .blocking-report-axis {
+  display: grid;
+  grid-template-columns: var(--report-name-width) minmax(24px, 1fr) minmax(34px, max-content);
+  align-items: center;
+  gap: 8px;
+}
+.blocking-report-chart li { margin-block: 6px; }
+.blocking-report-chart li > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blocking-report-track {
+  display: flex;
+  height: 12px;
+  background: repeating-linear-gradient(90deg, var(--line-2) 0 1px, transparent 1px 25%);
+  border-right: 1px solid var(--line-2);
+}
+.blocking-report-track i { display: block; height: 100%; background: var(--report-bar); }
+.blocking-report-axis > div {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+}
+.blocking-report-table { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.blocking-report table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.blocking-report :is(th, td) { padding: 8px; text-align: end; border-bottom: 1px solid var(--line); }
+.blocking-report th:first-child { text-align: start; overflow-wrap: anywhere; }
+.blocking-report tbody th { font-weight: normal; }

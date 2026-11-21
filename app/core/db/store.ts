@@ -156,8 +156,13 @@ export class Store {
     private codec: SecretCodec = plainCodec,
   ) {
     this.db = new DatabaseSync(path);
-    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;');
-    this.migrate();
+    try {
+      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;');
+      this.migrate();
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
 
   close() {
