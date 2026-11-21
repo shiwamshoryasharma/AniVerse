@@ -1,11 +1,11 @@
 {
-  "version": "3.0.7",
-  "pub_date": "2026-11-21T16:41:12.7591369+00:00",
-  "notes": "# AniVerse2 3.0.7 for Windows x64\n\n- Adds Dock and Atlas, bringing the layout picker to five options, and expands the dark theme collection.\n- Adds ten colour swatches, custom colours, and individual controls for the header, navigation, sidebar, pages, cards, buttons, icons, and floating menus.\n- Restyles the title preview and header search. The search field suggests unwatched anime based on recent watch history and genres. Typed results still include watched titles and label completed series.\n- Reuses verified source layouts and recent SUB/DUB observations in Rust, with a fresh lookup when a saved pattern stops fitting.\n- Adds a filterable session report under **Settings → Privacy & blocking**.\n- Adds an AniVerse2-branded Windows setup with a skippable MP4 intro for manual installs.\n- Enables AniList and MyAnimeList sign-in using the existing AniVerse client configuration. Restores MyAnimeList token refresh for migrated profiles and reports sync errors per provider.\n\nExisting AniVerse2 installs can update from **Settings → About → Updates**.",
+  "version": "3.0.8",
+  "pub_date": "2026-11-21T17:15:51.7838638+00:00",
+  "notes": "# AniVerse2 3.0.8 for Windows x64\n\n- Floats the Classic, Studio, and Atlas vertical navigation menus, with room for the app content and scrolling in short windows.\n- Adds Dark, Light, GitHub Dimmed, and VS Code Dark+ colour palettes to **Settings → Interface themes**.\n- Applies the palettes throughout the AniVerse2 interface, including menus and dialogs. The Light palette keeps text readable on artwork and player controls.\n- Keeps existing theme, layout and individual colour preferences available.\n\nExisting AniVerse2 installations can update from **Settings → About → Updates**.",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSHFCcml3U2VSejJVSWNrT3NhU3lXbUdyOFVDZnF6ZkpER0R4QVpYUnJZWHBsT2NZSStyVmlXYUZkYmVQbFk2Qy9lSGpJdS91ZFkreVlvem1zZFk2NkFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1Mjc5MjcyCWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjcteDY0LmV4ZQl2ZXJzaW9uOjMuMC43ClNHNU9HbjZsRkVndHYzQUdUMXVpMmd4bDFyOUxUdzByUC9IS2NXNjdjZzVsbU51MDlPaVk4NERodGZoNDlRNGlTbitGamp6ZzhwUWJzY1k4ZlByOUR3PT0K",
-      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.7/AniVerse-Tauri-Setup-3.0.7-x64.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSG9Ud2t2ZjZFNzlGRXh6c2lrdUFpRW1sKzFaQlFhTTVmUElWTjhadVJNdDFQcmRxUnJhV0lwMG9BNkNlVjJkSW1RSGd0K2ZGNUVGSXd5dUhHQkc0akFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjgxMzUxCWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjgteDY0LmV4ZQl2ZXJzaW9uOjMuMC44CnlCQVd1TXc3VkJkQjJjZTh2T29JdWNKRXkvQnJza3pTTm5YODViajQyelI4a3ZlL0ZvdVpWMjFKdjY2T1N0cnF1L3pnNE1iNkEzL3J6dHl2VTl2RERnPT0K",
+      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.8/AniVerse-Tauri-Setup-3.0.8-x64.exe"
     }
   }
 }
