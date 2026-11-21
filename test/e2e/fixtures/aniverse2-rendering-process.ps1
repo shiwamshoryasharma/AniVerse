@@ -8,3 +8,9 @@ $proof=@(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" | W
 })
 if ($proof.Count -ne 1) {throw 'The isolated browser process was not found.'}
 if ($proof[0].CommandLine -match '(?:^|\s)--disable-gpu-compositing(?:\s|$)') {'stable'} else {'accelerated'}
+if ($env:ANIVERSE2_CHECK_GPU -eq '1') {
+    $arguments=$proof[0].CommandLine
+    if ($arguments -match '(?:^|\s)--force_high_performance_gpu(?:\s|$)') {'high-performance'}
+    elseif ($arguments -match '(?:^|\s)--force_low_power_gpu(?:\s|$)') {'power-saving'}
+    else {'system'}
+}

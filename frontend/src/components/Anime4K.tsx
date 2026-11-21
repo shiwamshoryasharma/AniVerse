@@ -32,7 +32,7 @@ export function Anime4KSurface({ video, sourceKey, disabled }: { video: RefObjec
     if (!element || !target || !options.enabled || disabled) { setStatus({ state: 'off', message: 'Anime4K is off' }); return; }
     let cancelled = false, dispose: (() => void) | undefined;
     void import('../../../app/shared/upscaleRuntime').then(({ attachAnime4K }) => {
-      if (!cancelled) dispose = attachAnime4K(element, target, options, setStatus);
+      if (!cancelled) dispose = attachAnime4K(element, target, options, setStatus, isAniVerse2);
     }).catch(() => setStatus({ state: 'unavailable', message: 'Anime4K could not be loaded.' }));
     return () => { cancelled = true; dispose?.(); };
   }, [video, sourceKey, options, disabled, attempt]);

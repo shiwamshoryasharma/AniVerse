@@ -1,6 +1,7 @@
 import { useEffect,useRef } from 'react';
 import type { UpscaleSettings,UpscaleStatus } from '../../../app/shared/upscale';
 import type { PlayerCaptureSession } from '../lib/playerCapture';
+import { isAniVerse2 } from '../lib/bridge';
 export function CompatibilityUpscale({capture,options,onStatus,preview=false}:{capture:PlayerCaptureSession;options:UpscaleSettings;onStatus:(status:UpscaleStatus)=>void;preview?:boolean}){
   const video=useRef<HTMLVideoElement>(null),canvas=useRef<HTMLCanvasElement>(null);
   useEffect(()=>{
@@ -8,7 +9,7 @@ export function CompatibilityUpscale({capture,options,onStatus,preview=false}:{c
     let cancelled=false,dispose:(()=>void)|undefined;
     element.srcObject=capture.stream;
     void element.play().then(()=>import('../../../app/shared/upscaleRuntime')).then(({attachAnime4K})=>{
-      if(!cancelled)dispose=attachAnime4K(element,target,options,status=>onStatus({...status,message:'Compatibility · '+status.message}));
+      if(!cancelled)dispose=attachAnime4K(element,target,options,status=>onStatus({...status,message:'Compatibility · '+status.message}),isAniVerse2);
     }).catch(()=>{if(!cancelled)onStatus({state:'unavailable',message:'Compatibility capture could not start. Keep the source player visible and try again.'});});
     return()=>{cancelled=true;dispose?.();element.pause();element.srcObject=null;};
   },[capture,options,onStatus]);

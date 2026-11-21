@@ -1,17 +1,23 @@
 import { AudioLines } from 'lucide-react';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Range } from '../components/controls';
 import { isAniVerse2 } from '../lib/bridge';
 import { canUseQuantumAudio, initialQuantumIntensity, openQuantumAudio, saveQuantumIntensity } from './quantumAudio';
 
-export function QuantumAudioUnavailable() {
+export function QuantumAudioUnavailable({ labelled = false }: { labelled?: boolean } = {}) {
+  const hint = useId();
   if (!isAniVerse2) return null;
-  return <button className="btn ghost sm" type="button" disabled
-    aria-label="AniVerse Quantum Audio unavailable for this source"
-    title="This source plays with its original audio."><AudioLines size={17} /></button>;
+  return <>
+    <button className="btn ghost sm" type="button" disabled={!labelled} aria-disabled={true}
+      aria-label="AniVerse Quantum Audio unavailable for this source" aria-describedby={hint}
+      title="This source plays with its original audio.">
+      <AudioLines size={16} aria-hidden />{labelled && <span className="quantum-audio-label">Quantum Audio</span>}
+    </button>
+    <span id={hint} className="sr-only">This source plays with its original audio.</span>
+  </>;
 }
 
-export function QuantumAudioControl({ video, url }: { video: RefObject<HTMLVideoElement | null>; url: string }) {
+export function QuantumAudioControl({ video, url, labelled }: { video: RefObject<HTMLVideoElement | null>; url: string; labelled?: boolean }) {
   const graph = useRef<Awaited<ReturnType<typeof openQuantumAudio>> | null>(null);
   const generation = useRef(0);
   const [open, setOpen] = useState(false);
@@ -52,11 +58,13 @@ export function QuantumAudioControl({ video, url }: { video: RefObject<HTMLVideo
   };
 
   if (!isAniVerse2) return null;
-  if (!supported) return <QuantumAudioUnavailable />;
+  if (!supported) return <QuantumAudioUnavailable labelled={labelled} />;
   return <div className="quantum-audio-control">
     <button className={'btn ghost sm' + (enabled ? ' on' : '')} type="button"
       aria-label="AniVerse Quantum Audio" aria-expanded={open}
-      title="AniVerse Quantum Audio" onClick={() => setOpen(value => !value)}><AudioLines size={17} /></button>
+      title="AniVerse Quantum Audio" onClick={() => setOpen(value => !value)}>
+      <AudioLines size={17} aria-hidden />{labelled && <span className="quantum-audio-label">Quantum Audio</span>}
+    </button>
     {open && <div className="player-menu quantum-audio-menu" aria-label="AniVerse Quantum Audio controls">
       <strong>AniVerse Quantum Audio</strong>
       <button className="btn sm" type="button" aria-label="Enable Quantum Audio" aria-pressed={enabled}

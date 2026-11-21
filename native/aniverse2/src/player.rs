@@ -44,7 +44,7 @@ struct Source {
     search: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Copy, Deserialize)]
 struct Bounds {
     x: f64,
     y: f64,
@@ -53,14 +53,23 @@ struct Bounds {
 }
 
 impl Bounds {
-    fn valid(&self) -> bool {
+    fn dimensions_valid(&self) -> bool {
         [self.x, self.y, self.width, self.height]
             .iter()
             .all(|n| n.is_finite() && n.abs() <= 32_768.0)
-            && self.x >= 0.0
-            && self.y >= 0.0
             && self.width >= 1.0
             && self.height >= 1.0
+    }
+
+    fn valid(&self) -> bool {
+        self.dimensions_valid() && self.x >= 0.0 && self.y >= 0.0
+    }
+
+    fn contains(&self, visible: &Self) -> bool {
+        self.x <= visible.x
+            && self.y <= visible.y
+            && self.x + self.width >= visible.x + visible.width
+            && self.y + self.height >= visible.y + visible.height
     }
 }
 
@@ -183,9 +192,12 @@ impl Service {
     pub(crate) fn reset_source_sessions(&self) {
         self.privacy_epoch.fetch_add(1, Ordering::AcqRel);
         self.clear_catalogue_cache();
-        let mut views = self.views();
-        self.private_views.clear();
-        for (_, session) in views.drain() {
+        let sessions = {
+            let mut views = self.views();
+            self.private_views.clear();
+            std::mem::take(&mut *views)
+        };
+        for session in sessions.into_values() {
             session.close();
         }
     }
@@ -491,6 +503,12 @@ impl Service {
             .clone()
             .try_acquire_owned()
             .map_err(|_| failure("Close another source page before opening this one."))?;
+        // The source view may issue requests as soon as it is attached.
+        // Join the one-time restore before creating it, even at cold startup.
+        owner
+            .state::<crate::adblocker::Service>()
+            .ensure_ready()
+            .await;
         let id = self.last_id.fetch_add(1, Ordering::Relaxed);
         let state = Arc::new(GuestState::default());
         let guard = state.clone();
@@ -596,19 +614,27 @@ impl Service {
         match action {
             "place" => {
                 let bounds = read_bounds(input)?;
-                session
-                    .view
-                    .set_position(LogicalPosition::new(bounds.x, bounds.y))
-                    .map_err(|_| failure("Could not position the source page."))?;
-                session
-                    .view
-                    .set_size(LogicalSize::new(bounds.width, bounds.height))
-                    .map_err(|_| failure("Could not resize the source page."))?;
                 let visible = input["visible"].as_bool().ok_or_else(invalid)?;
-                session.visible.store(visible, Ordering::Release);
                 if visible {
-                    let _ = session.view.show();
-                } else {
+                    let viewport = if let Some(raw) = input.get("viewport") {
+                        serde_json::from_value::<Bounds>(raw.clone())
+                            .ok()
+                            .filter(|viewport| viewport.dimensions_valid() && viewport.contains(&bounds))
+                            .ok_or_else(invalid)?
+                    } else {
+                        bounds
+                    };
+                    if let Err(error) = native::place(&session.view, viewport, bounds).await {
+                        session.visible.store(false, Ordering::Release);
+                        capture::revoke(&session.view, &session.capture, None);
+                        let _ = session.view.hide();
+                        return Err(error);
+                    }
+                    if !session.visible.swap(true, Ordering::AcqRel) {
+                        let _ = session.view.show();
+                    }
+                } else if session.visible.swap(false, Ordering::AcqRel) {
+                    // Leaving the viewport should not resize the hidden site's layout.
                     capture::revoke(&session.view, &session.capture, None);
                     let _ = session.view.hide();
                 }

@@ -178,6 +178,7 @@ export interface RpcContract {
   'app.info': [void, AppInfo];
   'app.openGraphicsSettings': [void, void];
   'app.setUiRendering': [{ mode: import('./graphics').UiRenderingMode }, import('./graphics').UiRenderingState];
+  'app.setGpuPreference': [{ preference: import('./graphics').DesktopGpuPreference }, import('./graphics').DesktopGpuState];
   'app.restart': [void, void];
   'app.openExternal': [{ url: string }, void];
   'app.cacheClear': [void, void];

@@ -1,5 +1,5 @@
 import { AudioLines } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { Range } from '../components/controls';
 import { isAniVerse2 } from '../lib/bridge';
@@ -21,6 +21,7 @@ async function request(input: SiteQuantumRequest): Promise<{state: SiteQuantumSt
 }
 
 export function SiteQuantumAudioControl({ id, ready }: { id: number | null; ready: boolean }) {
+  const controlsId = useId();
   const [open, setOpen] = useState(false);
   const [armed, setArmed] = useState(false);
   const [state, setState] = useState<SiteQuantumState>('off');
@@ -61,10 +62,12 @@ export function SiteQuantumAudioControl({ id, ready }: { id: number | null; read
 
   if (!isAniVerse2) return null;
   return <div className="site-quantum-audio">
-    <button className={'btn ghost sm' + (active ? ' on' : '')} type="button"
+    <button className={'btn sm' + (active ? ' on' : '')} type="button"
       aria-label="AniVerse Quantum Audio" title="AniVerse Quantum Audio"
-      aria-expanded={open} onClick={() => setOpen(value => !value)}><AudioLines size={17} /></button>
-    {open && <div className="site-quantum-settings" aria-label="AniVerse Quantum Audio controls">
+      aria-expanded={open} aria-controls={open ? controlsId : undefined} onClick={() => setOpen(value => !value)}>
+      <AudioLines size={16} aria-hidden /> Quantum Audio
+    </button>
+    {open && <div id={controlsId} className="site-quantum-settings" role="group" aria-label="AniVerse Quantum Audio controls">
       <button className="btn sm" type="button" aria-label="Enable Quantum Audio" aria-pressed={active}
         disabled={!id || (!ready && !armed)} onClick={() => {
           if (!id) return;
@@ -80,7 +83,7 @@ export function SiteQuantumAudioControl({ id, ready }: { id: number | null; read
           if (active && id) void request({webContentsId:id, action:'level', intensity:value / 100}).catch(() => {});
         }} />
       <small role="status">{active ? 'Quantum Audio active' : armed ? 'Waiting for website audio…' :
-        state === 'unavailable' ? 'Playing original audio. Try again when the website player is ready.' : 'Website audio'}</small>
+        state === 'unavailable' ? 'Playing original audio. Try again when the website player is ready.' : ready ? 'Website audio' : 'Open an episode to use Quantum Audio.'}</small>
     </div>}
   </div>;
 }

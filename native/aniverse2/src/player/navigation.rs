@@ -868,7 +868,7 @@ pub(super) async fn choose(
         .and_then(|context| *context);
     if let Some((id, episode)) = episode {
         let origin = session.source.base.origin().ascii_serialization();
-        let mut cards = episodes(owner, session).await;
+        let mut cards = read_episodes(owner, session, false).await;
         insert_audio(&mut cards, episode, &state);
         owner.state::<patterns::Service>().observe_audio(
             &session.source.id,
@@ -882,11 +882,22 @@ pub(super) async fn choose(
 }
 
 pub(super) async fn episodes(owner: &Webview, session: &Session) -> Value {
+    read_episodes(owner, session, true).await
+}
+
+async fn read_episodes(owner: &Webview, session: &Session, artwork: bool) -> Value {
     let context = session.active_episode.lock().ok().and_then(|state| *state);
-    let result = page(session, json!({"op":"episodeCards","slug":null}))
-        .await
-        .unwrap_or_default();
-    // Only card/audio metadata leaves the guest. Session-owned artwork is not exposed as URLs.
+    let thumbnail_near = context
+        .filter(|_| artwork && !session.browsing_private())
+        .map(|(_, episode)| episode);
+    let result = page(
+        session,
+        json!({"op":"episodeCards","slug":null,"thumbnailNear":thumbnail_near}),
+    )
+    .await
+    .unwrap_or_default();
+    // Only bounded JPEG previews of readable DOM images can cross this bridge.
+    let mut previews = 0;
     let rows = result
         .as_array()
         .into_iter()
@@ -902,7 +913,14 @@ pub(super) async fn episodes(owner: &Webview, session: &Session) -> Value {
                 .filter(|choice| matches!(*choice, "sub" | "dub"))
                 .take(2)
                 .collect::<Vec<_>>();
-            Some(json!({"episode":n,"thumbnail":null,"audio":audio}))
+            let thumbnail = card["thumbnail"].as_str().filter(|value| {
+                if thumbnail_near.is_none() || previews >= 16 || !valid_episode_thumbnail(value) {
+                    return false;
+                }
+                previews += 1;
+                true
+            });
+            Some(json!({"episode":n,"thumbnail":thumbnail,"audio":audio}))
         })
         .take(500)
         .collect::<Vec<_>>();
@@ -918,6 +936,19 @@ pub(super) async fn episodes(owner: &Webview, session: &Session) -> Value {
         );
     }
     cards
+}
+
+fn valid_episode_thumbnail(value: &str) -> bool {
+    value.len() <= 10_240
+        && value
+            .strip_prefix("data:image/jpeg;base64,")
+            .is_some_and(|jpeg| {
+                jpeg.starts_with("/9j/")
+                    && jpeg.len() % 4 == 0
+                    && jpeg.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=')
+                    })
+            })
 }
 
 fn insert_audio(cards: &mut Value, episode: usize, controls: &Value) {
@@ -965,7 +996,7 @@ pub(super) async fn focus(session: &Session, on: bool) -> Result<bool, RpcError>
         if (!prior) sheet.replaceSync({css});
         if (!document.adoptedStyleSheets.includes(sheet)) document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
         globalThis.__avSiteFocusSheet = sheet;
-        const result = globalThis.__avSitePage({{op:"markPlayer",keep:true}});
+        const result = globalThis.__avSitePage({{op:"markPlayer",keep:true,sticky:true}});
         const player = document.querySelector('[data-aniverse-player]');
         if (!result?.found || !player) return false;
         const box = player.getBoundingClientRect();

@@ -227,6 +227,19 @@
 }
 
 /* Keep the floating docks in their grid columns so they never cover the page. */
+:root[data-aniverse-edition='2'] .app:is(.layout-classic, .layout-studio, .layout-atlas) {
+  --rail: 60px;
+  --expanded-rail: 188px;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+}
+:root[data-aniverse-edition='2'] .app.layout-atlas {
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+}
+:root[data-aniverse-edition='2'] .app.layout-studio { --expanded-rail: 208px; }
+:root[data-aniverse-edition='2'] .app.rail-open:is(.layout-classic, .layout-studio, .layout-atlas) {
+  --rail: min(var(--expanded-rail), 31vw);
+}
+:root[data-aniverse-edition='2'] .layout-studio .brand { min-width: 0; }
 :root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail {
   align-self: center;
   min-inline-size: 0;
@@ -243,6 +256,13 @@
 }
 :root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail > .rail-item {
   flex-shrink: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  height: 40px;
+  min-height: 40px;
+  padding-inline: 10px;
+  font-size: var(--fs-md);
 }
 :root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail > :is(.grow, .sep) {
   flex: none;
@@ -259,22 +279,22 @@
   left: auto;
   right: 2px;
 }
-:root[data-aniverse-edition='2'] .layout-classic:not(.rail-open) > .rail > .rail-item {
+:root[data-aniverse-edition='2'] .app:not(.rail-open):is(.layout-classic, .layout-studio, .layout-atlas) > .rail > .rail-item {
   justify-content: center;
   padding-inline: 0;
 }
-:root[data-aniverse-edition='2'] .layout-classic:not(.rail-open) > .rail .rail-label {
+:root[data-aniverse-edition='2'] .app:not(.rail-open):is(.layout-classic, .layout-studio, .layout-atlas) > .rail .rail-label,
+:root[data-aniverse-edition='2'] .layout-studio:not(.rail-open) > .rail > .studio-nav-heading {
   display: none;
+}
+:root[data-aniverse-edition='2'] .app.rail-open:is(.layout-classic, .layout-studio, .layout-atlas) > .rail .rail-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 :root[data-aniverse-edition='2'] .layout-studio > .rail > .studio-nav-heading {
   padding: 8px 8px 10px;
   margin-bottom: 3px;
-}
-@media (max-width: 960px) {
-  :root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio) > .rail > .rail-item {
-    justify-content: center;
-    padding-inline: 0;
-  }
 }
 @media (max-height: 640px) {
   :root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail > .rail-item {

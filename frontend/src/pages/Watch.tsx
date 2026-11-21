@@ -36,7 +36,7 @@ import { EpisodePanel } from '../components/EpisodePanel';
 import { ReleasePanel } from '../components/ReleasePanel';
 import { PlaybackRescue } from '../components/PlaybackRescue';
 import { WebSession, type WebSessionControls } from '../components/WebSession';
-import { call, errorText, onEvent } from '../lib/bridge';
+import { call, errorText, isAniVerse2, onEvent } from '../lib/bridge';
 import { availableEpisodes, countdown, cx, formatLabel, mediaRefOf, pendingRelease, snapshotOf, statusLabel, titleOf } from '../lib/format';
 import { keys, useDetails, useLibraryState, useMarkWatched, useMatch, useSaveProgress, useSettings, useStreams, useToggleFavourite, useUpdateSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
@@ -44,6 +44,7 @@ import { useCollectionPlayback } from '../lib/collectionPlayback';
 import { useInterfaceLayout } from '../lib/interfaceLayout';
 import { EpisodeCast } from '../components/EpisodeCast';
 import { SiteQuantumAudioControl } from '../player/SiteQuantumAudioControl';
+import { QuantumAudioUnavailable } from '../player/QuantumAudioControl';
 import { DownloadMp4Button } from '../components/DownloadMp4Button';
 import { SiteAnime4K } from '../components/Anime4K';
 import { VideoPlayer, type PlayerControls } from '../player/VideoPlayer';
@@ -161,8 +162,9 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const webContentsId = webContents?.partition===(source?.partition??null) ? webContents.id : null;
   const setWebContentsId = (id:number|null) => setWebContents({partition:source?.partition??null,id});
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
-  const [download, setDownload] = useState<{ sourceId: string | null; url: string } | null>(null);
-  const offeredDownload = download?.sourceId === sourceId ? download?.url : null;
+  const downloadScope = [sourceId, source?.partition, media.id, episode].join(':');
+  const [download, setDownload] = useState<{ scope: string; url: string } | null>(null);
+  const offeredDownload = download?.scope === downloadScope ? download.url : null;
   const player = useRef<PlayerControls | null>(null);
   const screenHost = useRef<HTMLDivElement | null>(null);
   const progressAt = useRef<{ position: number; duration: number } | null>(null);
@@ -408,10 +410,12 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const siteGroup = enabled.filter((s) => s.kind === 'web');
 
   let screen;
+  let nativePlayer = false;
   if (localId) {
+    nativePlayer = !!local.data && !local.error;
     const resume=state?.progress.find(p=>p.episode===episode && !p.completed);
     screen = local.error ? <ErrorState error={local.error} onRetry={()=>void local.refetch()} /> : !local.data ? <Loading label="Opening local video…" /> :
-      <VideoPlayer key={local.data.url} source={{type:'mp4',url:local.data.url,subtitles:[]}} title={local.data.name} prefs={settings.player} controlsRef={player}
+      <VideoPlayer key={local.data.url} source={{type:'mp4',url:local.data.url,subtitles:[]}} title={local.data.name} prefs={settings.player} labelQuantumAudio controlsRef={player}
         startAt={settings.player.resume ? resume?.position : undefined} theater={theater} onTheater={()=>setTheater(t=>!t)}
         onProgress={record} onEnded={()=>settings.player.autoNext && next()} hasNext={hasNext} hasPrev={hasPrev} onNext={next} onPrev={prev} />;
   } else if (!source) {
@@ -429,7 +433,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   } else if (mode === 'web') {
     screen = (
       <>
-        <WebSession key={source.partition} source={source} mediaId={media.id} src="about:blank" toolbar={false} suspended={(siteBusy && !needsUser) || !!choosing} onDirectMp4={(url) => setDownload(url ? { sourceId, url } : null)} onSurfaceError={(error) => setAttachError(error ? siteKey : null)} controls={siteControls} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />
+        <WebSession key={source.partition} source={source} mediaId={media.id} src="about:blank" toolbar={false} suspended={(siteBusy && !needsUser) || !!choosing} onDirectMp4={(url) => setDownload(url ? { scope: downloadScope, url } : null)} onSurfaceError={(error) => setAttachError(error ? siteKey : null)} controls={siteControls} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />
         {((siteBusy && !needsUser) || choosing) && (
           <CatLoader label={choosing ?? siteStatus ?? `Loading episode ${episode}…`} hint={slowKey === navKey && !choosing ? `${source.name} is taking a while.` : undefined}>
             {slowKey === navKey && !choosing && (
@@ -458,6 +462,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   } else if (stream.type === 'web') {
     screen = <WebSession key={source.partition} source={source} mediaId={media.id} src={stream.url} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />;
   } else {
+    nativePlayer = true;
     const resume = settings.player.resume ? state?.progress.find((p) => p.episode === episode && !p.completed) : undefined;
     screen = (
       <VideoPlayer
@@ -467,6 +472,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         poster={media.banner ?? media.cover}
         startAt={resume && resume.duration - resume.position > 30 ? resume.position : undefined}
         prefs={settings.player}
+        labelQuantumAudio
         theater={theater}
         controlsRef={player}
         hasNext={hasNext}
@@ -513,13 +519,19 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
       {privatePlayback&&<div className="privacy-banner" role="status">Private playback · no new history, progress, insights or account sync. Website storage is temporary. Existing remote records are not removed.</div>}
       <div className="watch-heading"><div><span className="eyebrow">NOW WATCHING</span><h1 className="ellipsis">{title}<span>Episode {episode}</span></h1></div>
         <PrivateTitleButton mediaId={media.id}/>
-        {offeredDownload && <DownloadMp4Button url={offeredDownload} sourceId={sourceId ?? undefined} />}
-        {isSite && <SiteQuantumAudioControl id={webContentsId} ready={!!navKey && navReady === navKey && !siteBusy && !choosing} />}
         <EpisodeCast key={media.id + ':' + episode + ':' + (sourceId ?? localId)} native={player} webContentsId={webContentsId} title={`${title} · Episode ${episode}`} />
       </div>
       <div className={cx('watch', theater && 'theater')}>
         <div className="stage" style={{ minWidth: 0 }}>
           <div ref={screenHost} className={cx('screen', isSite && !focused && (!siteBusy || needsUser) && !choosing && 'site')}>{screen}</div>
+
+          {isAniVerse2 && <div className="toolbar watch-media-actions" role="group" aria-label="Playback tools">
+            {!nativePlayer && (isSite
+              ? <SiteQuantumAudioControl id={webContentsId} ready={!!navKey && navReady === navKey && !siteBusy && !choosing} />
+              : <QuantumAudioUnavailable labelled />)}
+            <DownloadMp4Button url={offeredDownload} sourceId={sourceId ?? undefined}
+              unavailableReason="This source has no public MP4 available to download." />
+          </div>}
 
           <div className="toolbar">
             <button className="btn ghost" disabled={!hasPrev} onClick={prev}>

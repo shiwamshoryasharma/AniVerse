@@ -74,7 +74,7 @@ pub(super) async fn apply(session: &Session, input: &Value) -> Result<Value, Rpc
     }
     let generation = session.page_generation.load(Ordering::Acquire);
     let call = format!(
-        "globalThis.__avSiteUpscale?.apply({}) ?? null",
+        "globalThis.__avSiteUpscale?.apply({}, true) ?? null",
         serde_json::to_string(&options).map_err(|_| invalid())?
     );
     let mut value = native::evaluate_without_activation(session, call.clone()).await?;

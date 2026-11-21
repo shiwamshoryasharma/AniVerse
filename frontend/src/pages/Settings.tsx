@@ -555,7 +555,7 @@ function PrivacySection() {
           title="Block ads, trackers and promotions"
           desc={
             stats
-              ? `${stats.ready ? `${blocked.toLocaleString()} requests blocked this session` : 'Downloading filter lists…'}${stats.listsUpdatedAt ? ` · lists updated ${timeAgo(Math.floor(stats.listsUpdatedAt / 1000))}` : ''}. Uses EasyList, EasyPrivacy, annoyance lists and config/filters.txt.`
+              ? `${stats.ready ? `${blocked.toLocaleString()} requests blocked this session` : isAniVerse2 && !stats.updating ? 'Filters load when a source opens' : 'Downloading filter lists…'}${stats.listsUpdatedAt ? ` · lists updated ${timeAgo(Math.floor(stats.listsUpdatedAt / 1000))}` : ''}. Uses EasyList, EasyPrivacy, annoyance lists and config/filters.txt.`
               : undefined
           }
         >

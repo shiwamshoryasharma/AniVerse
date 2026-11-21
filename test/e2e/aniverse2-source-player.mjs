@@ -24,6 +24,7 @@ const checkIncognito = process.env.ANIVERSE2_CHECK_INCOGNITO === '1';
 const checkCapture = process.env.ANIVERSE2_CHECK_PLAYER_CAPTURE === '1';
 const checkMirror = process.env.ANIVERSE2_MIRROR_FIXTURE === '1';
 const checkSearchFlow = process.env.ANIVERSE2_CHECK_SEARCH_FLOW === '1';
+const checkArtwork = process.env.ANIVERSE2_CHECK_EPISODE_ARTWORK === '1';
 const searchTerms = [];
 const fixtureTitle = checkSearchFlow ? 'Fixture Show: Special Edition' : 'Fixture Show';
 const privateRequests = [];
@@ -36,7 +37,7 @@ const html = `<!doctype html><meta charset="utf-8"><title>${fixtureTitle}</title
 <style>body{margin:8px;background:#25303d;color:white}button{padding:12px}video{display:block;width:640px;height:360px}</style>
 <h1>${fixtureTitle}</h1><main><video controls muted autoplay loop playsinline src="/sub.mp4"></video>
 <div class="servers"><button aria-pressed="true">SUB</button><button aria-pressed="false">DUB</button></div>
-<div class="episode"><button data-episode="1" aria-selected="true">Episode 1</button></div></main>
+<div class="episode"><button data-episode="1" aria-selected="true">Episode 1${checkArtwork?'<img src="/episode-art.svg" alt="">':''}</button></div></main>
 <script>
 const video = document.querySelector('video');
 const buttons = [...document.querySelectorAll('.servers button')];
@@ -50,6 +51,11 @@ for (const button of buttons) button.addEventListener('click', () => {
 function serve(req, res) {
   const [route] = (req.url ?? '').split('?');
   if (focusFixture?.serve(req,res,route)) return;
+  if (checkArtwork && route === '/episode-art.svg') {
+    res.writeHead(200, {'Content-Type':'image/svg+xml'});
+    res.end('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#176383"/></svg>');
+    return;
+  }
   if (checkUpscale && route === '/upscale-fixture-status') {
     const fields = new URL(req.url,'http://fixture.test').searchParams;
     upscaleStates.push(Object.fromEntries(fields));
@@ -234,6 +240,20 @@ try {
   assert.equal(opened.ok, true, JSON.stringify(opened));
   assert.equal(searchRequested,true,'The source did not receive the search shown by its rendered link');
   report.checks.correctRenderedEpisode = true;
+  if (checkArtwork) {
+    const card = await poll(async () => (await rpc('site.episodes',{webContentsId}))
+      .find(entry => entry.episode === 1 && entry.thumbnail));
+    assert.ok(card?.thumbnail?.startsWith('data:image/jpeg;base64,/9j/'));
+    assert.ok(card.thumbnail.length <= 10240);
+    const size = await page.evaluate(async (url) => {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      return [image.naturalWidth, image.naturalHeight];
+    }, card.thumbnail);
+    assert.deepEqual(size, [192, 108]);
+    report.checks.boundedEpisodeArtwork = true;
+  }
   if (checkSearchFlow) {
     assert.deepEqual(searchTerms.slice(0,2), ['Fixture Show Special Edition','Fixture Show']);
     report.checks.shortQueryAndFullResultsOpened = true;

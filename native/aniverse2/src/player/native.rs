@@ -1,4 +1,4 @@
-use super::{failure, fixture_source, frames, GuestState, Session, AUDIO, PAGE};
+use super::{failure, fixture_source, frames, Bounds, GuestState, Session, AUDIO, PAGE};
 use crate::{
     adblocker::{self, Denial},
     RpcError,
@@ -22,6 +22,79 @@ use windows::{
     core::{w, Interface, HSTRING, PWSTR},
     Win32::System::Com::IStream,
 };
+
+use windows_sys::Win32::{
+    Foundation::HWND,
+    Graphics::Gdi::{CreateRectRgn, DeleteObject, SetWindowRgn},
+    UI::{
+        HiDpi::GetDpiForWindow,
+        WindowsAndMessaging::{GetClassNameW, GetParent, SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER},
+    },
+};
+
+pub(super) async fn place(view: &Webview, viewport: Bounds, visible: Bounds) -> Result<(), RpcError> {
+    let placement_error = || failure("Could not place the source page inside the player.");
+    let owner = view.window().hwnd().map_err(|_| placement_error())?.0 as isize;
+    let (send, receive) = oneshot::channel();
+    view.with_webview(move |platform| {
+        let result = place_child(&platform.controller(), owner as HWND, viewport, visible);
+        let _ = send.send(result);
+    })
+    .map_err(|_| placement_error())?;
+    if receive.await.unwrap_or(false) {
+        Ok(())
+    } else {
+        Err(placement_error())
+    }
+}
+
+fn place_child(controller: &ICoreWebView2Controller, owner: HWND, viewport: Bounds, visible: Bounds) -> bool {
+    use windows::Win32::Foundation::{HWND as ControllerHwnd, RECT};
+
+    let mut parent = ControllerHwnd::default();
+    unsafe {
+        if controller.ParentWindow(&mut parent).is_err() || parent.0.is_null() || parent.0 == owner || GetParent(parent.0) != owner {
+            return false;
+        }
+        // Wry creates its own container, which is the WebView2 controller parent.
+        // Never set a region on AniVerse's main HWND or an unrelated window.
+        let mut class = [0u16; 32];
+        let length = GetClassNameW(parent.0, class.as_mut_ptr(), class.len() as i32);
+        if length != 11 || !class[..11].iter().copied().eq("WRY_WEBVIEW".encode_utf16()) {
+            return false;
+        }
+        let dpi = GetDpiForWindow(parent.0);
+        if dpi == 0 {
+            return false;
+        }
+        let scale = f64::from(dpi) / 96.0;
+        let px = |css: f64| (css * scale).round() as i32;
+        let x = px(viewport.x);
+        let y = px(viewport.y);
+        let width = px(viewport.width).max(1);
+        let height = px(viewport.height).max(1);
+        // Round clipping edges inward so fractional DPI cannot paint outside the host.
+        let left = ((visible.x * scale).ceil() as i32 - x).clamp(0, width);
+        let top = ((visible.y * scale).ceil() as i32 - y).clamp(0, height);
+        let right = (((visible.x + visible.width) * scale).floor() as i32 - x).clamp(left, width);
+        let bottom = (((visible.y + visible.height) * scale).floor() as i32 - y).clamp(top, height);
+        let region = CreateRectRgn(left, top, right, bottom);
+        if region.is_null() {
+            return false;
+        }
+        if SetWindowRgn(parent.0, region, 1) == 0 {
+            let _ = DeleteObject(region);
+            return false;
+        }
+        // SetWindowRgn takes ownership of the region on success.
+        let mut current = RECT::default();
+        let desired = RECT { left: 0, top: 0, right: width, bottom: height };
+        if (controller.Bounds(&mut current).is_err() || current != desired) && controller.SetBounds(desired).is_err() {
+            return false;
+        }
+        SetWindowPos(parent.0, std::ptr::null_mut(), x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER) != 0
+    }
+}
 
 const EVAL_LIMIT: usize = 512 * 1024;
 const DNS_TTL: Duration = Duration::from_secs(20);

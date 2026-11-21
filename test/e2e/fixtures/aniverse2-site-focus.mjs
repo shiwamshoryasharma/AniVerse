@@ -4,7 +4,12 @@ const html = '<!doctype html><link rel="stylesheet" href="/focus.css"><script de
   '<header>Fixture source header</header><main><div id="player"></div><aside>Episode list<div class="servers"><button aria-pressed="true">SUB</button><button aria-pressed="false">DUB</button></div><div id="chat">Chat</div></aside></main>';
 const css = 'body{margin:12px}header,aside,#chat{min-height:30px}main{display:grid;grid-template-columns:380px 300px}video{display:block;width:360px;height:202px}';
 const script = "(() => {" +
-  "let video; const player = document.querySelector('#player');" +
+  "let video; let compact = false; const player = document.querySelector('#player'); const main = player.parentElement;" +
+  "window.addEventListener('resize', () => {" +
+  "  if (!video) return;" +
+  "  if (innerHeight < 160 && !compact) { compact = true; player.remove(); }" +
+  "  if (innerHeight >= 240 && compact) { compact = false; main.prepend(player); void video.play(); }" +
+  "});" +
   "const choices=Array.from(document.querySelectorAll('.servers button'));" +
   "choices.forEach(button=>button.onclick=()=>choices.forEach(choice=>choice.setAttribute('aria-pressed',String(choice===button))));" +
   "const visible = id => document.querySelector(id).checkVisibility({checkVisibilityCSS:true,checkOpacity:true});" +
@@ -12,13 +17,14 @@ const script = "(() => {" +
   "  const mark = document.querySelector('[data-aniverse-player]'); const box = mark?.getBoundingClientRect();" +
   "  const values = new URLSearchParams({header:visible('header'),episodes:visible('aside'),chat:visible('#chat')," +
   "    marker:!!mark,fit:!!box&&Math.abs(box.x)<3&&Math.abs(box.y)<3&&Math.abs(box.width-innerWidth)<3&&Math.abs(box.height-innerHeight)<3," +
-  "    frames:video?.getVideoPlaybackQuality().totalVideoFrames??0});" +
+  "    cover:getComputedStyle(document.documentElement,'::after').backgroundColor==='rgb(0, 0, 0)'," +
+  "    compact,width:innerWidth,height:innerHeight,frames:video?.getVideoPlaybackQuality().totalVideoFrames??0});" +
   "  const response = await fetch('/focus-observe?'+values).catch(()=>null);" +
   "  if (response?.status === 200 && !video) {" +
   "    video = Object.assign(document.createElement('video'),{src:'/sub.mp4',autoplay:true,muted:true,controls:true,loop:true});" +
   "    player.appendChild(video);" +
   "  }" +
-  "},150); setTimeout(()=>clearInterval(timer),22000); })()";
+  "},150); setTimeout(()=>clearInterval(timer),36000); })()";
 
 export function createSiteFocusFixture() {
   let reveal = false;
@@ -55,6 +61,28 @@ export function createSiteFocusFixture() {
       assert.equal(selection.options.types.find(type=>type.active)?.value,'dub');
       assert.equal(selection.focused,true);
       assert.ok(await poll(()=>chrome(false)&&latest.fit==='true',5000), 'Audio switching revealed the website chrome');
+      // Repeated scroll clipping can replace the live media at a responsive breakpoint.
+      for (const height of [130, 105, 128]) {
+        const clipped = {...bounds, y:bounds.y + 25, height};
+        await rpc('site.surface',{action:'place',webContentsId,bounds:clipped,visible:true});
+        assert.ok(await poll(()=>latest.compact==='true'&&latest.marker==='false'&&latest.cover==='true',3000),
+          'Player-only mode exposed the source site during a clipped viewport');
+        await rpc('site.surface',{action:'place',webContentsId,bounds,visible:false});
+        await rpc('site.surface',{action:'place',webContentsId,bounds,visible:true});
+        assert.ok(await poll(()=>latest.compact==='false'&&latest.marker==='true'&&latest.fit==='true'&&chrome(false),5000),
+          'An enlarged viewport did not recover player-only mode');
+      }
+      const fullSize = [latest.width, latest.height];
+      for (const height of [115, 96, 145]) {
+        const viewport = {...bounds, y:-180};
+        const visible = {...bounds, y:bounds.y + 25, height};
+        const frames = Number(latest.frames);
+        await rpc('site.surface',{action:'place',webContentsId,bounds:visible,viewport,visible:true});
+        assert.ok(await poll(()=>Number(latest.frames)>frames,4000), 'Playback stopped while partially scrolled');
+        assert.deepEqual([latest.width,latest.height], fullSize, 'Partial scrolling resized the video viewport');
+        assert.ok(latest.marker==='true'&&latest.fit==='true'&&chrome(false), 'Native clipping exposed the source site');
+      }
+      await rpc('site.surface',{action:'place',webContentsId,bounds,visible:true});
       const initialFrames=Number(latest.frames);
       assert.deepEqual(await rpc('site.focus',{webContentsId,on:false}), {focused:false});
       assert.ok(await poll(()=>chrome(true)&&latest.marker==='false'&&Number(latest.frames)>initialFrames,5000),

@@ -54,6 +54,8 @@ pub(crate) struct Service {
     engine: RwLock<Option<Engine>>,
     source_prefs: RwLock<HashMap<String, bool>>,
     enabled: AtomicBool,
+    restored: tokio::sync::OnceCell<()>,
+    first_use: tokio::sync::Notify,
     refresh: tokio::sync::Mutex<()>,
 }
 
@@ -63,18 +65,26 @@ impl Service {
             .ok()
             .and_then(|settings| settings["privacy"]["adblock"].as_bool())
             .unwrap_or(true);
-        let source_prefs = profile::request(root, "sources.list", Value::Null)
-            .ok()
-            .and_then(|sources| sources.as_array().cloned())
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|source| {
-                Some((
-                    source["id"].as_str()?.to_owned(),
-                    source["adblock"].as_bool()?,
-                ))
-            })
-            .collect();
+        // Preferences are keyed by source ID. Startup need not parse the website
+        // list, discovery records or recipes to recover an explicit opt-out.
+        let db = profile::open(root).ok().flatten();
+        let source_prefs = profile::rows(
+            db.as_ref(),
+            "SELECT id,data FROM source_overrides",
+            [],
+            |row| {
+                let id: String = row.get(0)?;
+                let saved: String = row.get(1)?;
+                let enabled = serde_json::from_str::<Value>(&saved)
+                    .ok()
+                    .and_then(|prefs| prefs["adblock"].as_bool());
+                Ok(enabled.map(|enabled| (id, enabled)))
+            },
+        )
+        .unwrap_or_default()
+        .into_iter()
+        .flatten()
+        .collect();
         Self {
             root: root.to_owned(),
             stats: Mutex::new(Stats {
@@ -85,6 +95,8 @@ impl Service {
             engine: RwLock::new(None),
             source_prefs: RwLock::new(source_prefs),
             enabled: AtomicBool::new(enabled),
+            restored: Default::default(),
+            first_use: Default::default(),
             refresh: Default::default(),
         }
     }
@@ -178,6 +190,11 @@ impl Service {
         });
     }
 
+    pub(crate) async fn ensure_ready(&self) {
+        self.restored.get_or_init(|| self.restore()).await;
+        self.first_use.notify_one();
+    }
+
     async fn restore(&self) {
         let path = self.cache_path();
         let custom = self.custom_path();
@@ -202,6 +219,7 @@ impl Service {
     }
 
     async fn refresh(&self, force: bool) -> Result<Stats, RpcError> {
+        self.ensure_ready().await;
         let _refresh = self.refresh.lock().await;
         let current = self.snapshot();
         if !force
@@ -247,7 +265,8 @@ impl Service {
             let (index, list): (usize, String) = result.map_err(|_| fetch_error())??;
             lists[index] = list;
         }
-        let lists = lists.join("\n");
+        let combined = lists.join("\n");
+        drop(lists);
         let path = self.cache_path();
         let custom_path = self.custom_path();
         let (engine, stamp) =
@@ -260,12 +279,12 @@ impl Service {
                         )
                     })?
                     .unwrap_or_default();
-                let engine = compile(lists.clone(), custom);
                 let mut file =
                     tempfile::NamedTempFile::new_in(path.parent().ok_or_else(fetch_error)?)
                         .map_err(|_| fetch_error())?;
-                file.write_all(lists.as_bytes())
+                file.write_all(combined.as_bytes())
                     .map_err(|_| fetch_error())?;
+                let engine = compile(combined, custom);
                 file.as_file().sync_all().map_err(|_| fetch_error())?;
                 file.persist(&path).map_err(|_| fetch_error())?;
                 Ok((engine, modification(&path)))
@@ -278,21 +297,20 @@ impl Service {
 }
 
 pub(crate) fn start(app: &AppHandle) {
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let service = handle.state::<Service>();
-        {
-            let _refresh = service.refresh.lock().await;
-            service.restore().await;
-        }
-        if cfg!(feature = "isolated-test") {
-            return;
-        }
-        loop {
-            let _ = service.refresh(false).await;
-            tokio::time::sleep(Duration::from_secs(3600)).await;
-        }
-    });
+    if !cfg!(feature = "isolated-test") {
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let service = handle.state::<Service>();
+            let interval = Duration::from_secs(3600);
+            // Opening a source or requesting a refresh starts maintenance. An app
+            // left on Home still checks the lists at the normal hourly interval.
+            let _ = tokio::time::timeout(interval, service.first_use.notified()).await;
+            loop {
+                let _ = service.refresh(false).await;
+                tokio::time::sleep(interval).await;
+            }
+        });
+    }
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let service = handle.state::<Service>();

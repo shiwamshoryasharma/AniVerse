@@ -1,0 +1,10 @@
+/* Animate one visible placeholder per Home section so loading keeps its shimmer without repainting the whole grid. */
+:root[data-aniverse-edition='2'] .home-page .skeleton:not([data-home-shimmer]) {
+  background: var(--surface-2);
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-aniverse-edition='2'] .home-page .skeleton {
+    animation: none;
+  }
+}

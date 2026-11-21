@@ -274,6 +274,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'app.info': none,
   'app.openGraphicsSettings': none,
   'app.setUiRendering': z.object({ mode: z.enum(['stable', 'accelerated']) }).strict(),
+  'app.setGpuPreference': z.object({ preference: z.enum(['system', 'high-performance', 'power-saving']) }).strict(),
   'app.restart': none,
   'app.openExternal': z.object({ url }),
   'app.cacheClear': none,

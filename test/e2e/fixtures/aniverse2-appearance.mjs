@@ -59,33 +59,60 @@ export async function checkAppearance(context, page) {
     evidence.themeAndCustomHeaderPersist = true;
     await chooseTheme('light', 'Light');
 
-    await chooseLayout('classic', 'classic');
-    const expand = page.getByRole('button', { name: 'Expand sidebar' });
-    const collapse = page.getByRole('button', { name: 'Collapse sidebar' });
-    if (await collapse.isVisible()) await collapse.click();
-    await expand.waitFor();
-    evidence.verticalNavigation.classic = await measureVerticalRail(page, 'left');
-    await expand.click();
-    await collapse.waitFor();
-    await page.waitForFunction(() => document.querySelector('.app.layout-classic .rail').getBoundingClientRect().width >= 100);
-    evidence.verticalNavigation.classicExpanded = await measureVerticalRail(page, 'left');
-    assert.ok(evidence.verticalNavigation.classicExpanded > evidence.verticalNavigation.classic * 1.5);
-    await collapse.click();
-
-    for (const [id, layout, side] of [['aurora', 'studio', 'left'], ['atlas', 'atlas', 'right']]) {
+    const verticalLayouts = [
+      ['classic', 'classic', 'left', 188], ['aurora', 'studio', 'left', 208], ['atlas', 'atlas', 'right', 188],
+    ];
+    const expand = page.getByRole('button', { name: 'Expand sidebar', exact: true });
+    const collapse = page.getByRole('button', { name: 'Collapse sidebar', exact: true });
+    const assertRailState = async (open) => {
+      const toggle = open ? collapse : expand;
+      await toggle.waitFor();
+      assert.equal(await toggle.getAttribute('aria-expanded'), String(open));
+      const label = rail.locator('.rail-label').first();
+      await label.waitFor({ state: open ? 'visible' : 'hidden' });
+      if (open) assert.equal(await label.evaluate(node => getComputedStyle(node).opacity), '1');
+      assert.equal(await rail.getByRole('link', { name: 'Settings', exact: true }).count(), 1);
+    };
+    // Older versions may have left an expanded sidebar preference on disk.
+    await page.evaluate(() => localStorage.setItem('aniverse.rail', 'open'));
+    await page.reload();
+    for (const [id, layout, side, maxWidth] of verticalLayouts) {
       await chooseLayout(id, layout);
-      evidence.verticalNavigation[layout] = await measureVerticalRail(page, side);
+      await assertRailState(false);
+      const collapsed = await measureVerticalRail(page, side);
+      assert.ok(collapsed <= 60, layout + ' should start icon-only');
+      await expand.click();
+      await assertRailState(true);
+      const expanded = await measureVerticalRail(page, side);
+      assert.ok(expanded > 150 && expanded <= maxWidth, layout + ' expanded width ' + expanded);
+      await collapse.click();
+      await assertRailState(false);
+      await expand.click();
+      await assertRailState(true);
+      await page.reload();
+      await page.locator('.app.layout-' + layout).waitFor();
+      await assertRailState(false);
+      assert.ok(Math.abs(await measureVerticalRail(page, side) - collapsed) < 1);
+      evidence.verticalNavigation[layout] = { collapsed, expanded, resetOnReload: true };
     }
     for (const [id, layout] of [['paper', 'cinema'], ['dock', 'dock']]) {
       await chooseLayout(id, layout);
       await measureHorizontalRail(page, layout);
+      assert.equal(await expand.count() + await collapse.count(), 0);
       evidence.horizontalNavigation[layout] = true;
     }
 
     await resize(640, 480);
-    for (const [id, layout, side] of [['classic', 'classic', 'left'], ['aurora', 'studio', 'left'], ['atlas', 'atlas', 'right']]) {
+    for (const [id, layout, side] of verticalLayouts) {
       await chooseLayout(id, layout);
-      await measureVerticalRail(page, side);
+      await assertRailState(false);
+      const collapsed = await measureVerticalRail(page, side);
+      await expand.click();
+      await assertRailState(true);
+      const expanded = await measureVerticalRail(page, side);
+      assert.ok(expanded > collapsed && expanded <= 200, layout + ' compact expanded width ' + expanded);
+      await collapse.click();
+      await assertRailState(false);
     }
     await resize(640, 320);
     await chooseLayout('classic', 'classic');

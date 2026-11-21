@@ -14,6 +14,8 @@ import {
   Library,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Search,
   Settings as SettingsIcon,
   Shuffle,
@@ -62,9 +64,13 @@ export function Shell() {
   const qc = useQueryClient();
   useBridgeEvents(qc);
   const settings = useSettings();
-  const [open, setOpen] = useState(readRailPref);
+  const [open, setOpen] = useState(() => !isAniVerse2 && readRailPref());
   const midnight = useMidnightTheme();
   const layout = useInterfaceLayout(settings.appearance.style);
+  const canToggleRail = layout === 'classic' || (isAniVerse2 && (layout === 'studio' || layout === 'atlas'));
+  const RailToggleIcon = layout === 'atlas'
+    ? (open ? PanelRightClose : PanelRightOpen)
+    : (open ? PanelLeftClose : PanelLeftOpen);
   const navigate = useNavigate();
   const toast = useToast();
   const location = useLocation();
@@ -102,6 +108,7 @@ export function Shell() {
 
   const toggleRail = () => {
     setOpen((v) => {
+      if (isAniVerse2) return !v;
       try {
         localStorage.setItem('aniverse.rail', v ? 'closed' : 'open');
       } catch {
@@ -124,11 +131,12 @@ export function Shell() {
 
   return (
     <DesktopSeasonalVisuals.Provider value={!midnight}>
-    <div className={cx('app', layout === 'classic' && open && 'rail-open', 'layout-' + layout)}>
+    <div className={cx('app', canToggleRail && open && 'rail-open', 'layout-' + layout)}>
       <header className={cx('topbar', platform === 'win32' && !isAniVerse2 && 'win', isAniVerse2 && 'tauri-topbar')}>
         <div className="brand">
-          {layout === 'classic' && <button className="icon-btn" aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'} onClick={toggleRail}>
-            {open ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+          {canToggleRail && <button className="icon-btn" aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-expanded={open} aria-controls="main-navigation" onClick={toggleRail}>
+            <RailToggleIcon size={18} />
           </button>}
           <Logo />
           <span className="word" data-tauri-drag-region={isAniVerse2 ? "" : undefined}>
@@ -146,7 +154,7 @@ export function Shell() {
         {isAniVerse2 && <WindowControls />}
       </header>
 
-      <nav className="rail" aria-label="Main">
+      <nav id="main-navigation" className="rail" aria-label="Main">
         {layout === 'studio' && <div className="studio-nav-heading"><span>YOUR WORKSPACE</span><h2>Anime studio</h2><p>Discover, plan and continue.</p></div>}
         {NAV.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cx('rail-item', isActive && 'active')} title={item.label}>

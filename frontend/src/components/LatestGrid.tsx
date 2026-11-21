@@ -3,7 +3,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { AiringItem } from '../../../app/shared/types';
-import { call, platform } from '../lib/bridge';
+import { call, isAniVerse2, platform } from '../lib/bridge';
 import { cx, timeAgo, titleOf } from '../lib/format';
 import {SourceCatalogueResults} from './SourceCatalogueResults';
 import {AudioFilter,type AudioChoice} from './AudioFilter';
@@ -139,7 +139,7 @@ export function LatestGrid() {
       ) : (
         <div className={cx('grid six', isPlaceholderData && 'fading')}>
           {!data
-            ? <SkeletonCards count={36} />
+            ? <SkeletonCards count={isAniVerse2 ? 12 : 36} shimmerFirst />
             : items.map((a) => (
                 <MediaCard
                   key={a.id}

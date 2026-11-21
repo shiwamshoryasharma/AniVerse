@@ -35,4 +35,13 @@ describe('1.5.2 appearance and Anime4K settings', () => {
     expect(upscaleSize(1920, 1080, 2048)).toEqual({ width: 2048, height: 1152 });
     expect(upscaleSize(0, 1080, 8192)).toBeNull();
   });
+
+  it('fits decoded video into the visible physical pixels without changing aspect ratio', () => {
+    expect(upscaleSize(1920, 1080, 8192, { width: 960, height: 600 })).toEqual({ width: 960, height: 540 });
+    expect(upscaleSize(1440, 1080, 8192, { width: 1280, height: 720 })).toEqual({ width: 960, height: 720 });
+    expect(upscaleSize(1920, 1080, 8192, { width: 3840, height: 2160 })).toEqual({ width: 3840, height: 2160 });
+    expect(upscaleSize(1920, 1080, 8192, { width: 5000, height: 3000 })).toEqual({ width: 3840, height: 2160 });
+    expect(upscaleSize(1920, 1080, 1024, { width: 3840, height: 2160 })).toEqual({ width: 1024, height: 576 });
+    expect(upscaleSize(1920, 1080, 8192, { width: 0, height: 0 })).toBeNull();
+  });
 });

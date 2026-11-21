@@ -24,13 +24,20 @@ function position(host: HTMLElement, suspended: boolean) {
   const x = Math.max(box.left, 0, scroll?.left ?? 0);
   const y = Math.max(box.top, 0, scroll?.top ?? 0);
   const visible = !suspended && box.bottom > y && box.right > x && bottom > y && right > x;
+  const left = Math.floor(box.left);
+  const top = Math.floor(box.top);
+  const viewport: Bounds = {
+    x: left, y: top,
+    width: Math.max(1, Math.ceil(box.right) - left),
+    height: Math.max(1, Math.ceil(box.bottom) - top),
+  };
   const bounds: Bounds = {
     x: Math.floor(x),
     y: Math.floor(y),
     width: Math.max(1, Math.floor(Math.min(box.right, right) - x)),
     height: Math.max(1, Math.floor(Math.min(box.bottom, bottom) - y)),
   };
-  return { bounds, visible };
+  return { bounds, viewport, visible };
 }
 
 export function TauriWebSession({ source, src, mediaId, toolbar = true, extra, onNavigate, onWebContents, controls, onDirectMp4, onSurfaceError, suspended = false }: WebSessionProps) {
@@ -46,6 +53,12 @@ export function TauriWebSession({ source, src, mediaId, toolbar = true, extra, o
   const [backSteps, setBackSteps] = useState(0);
   const requested = useRef<string | null>(null);
   const base = useRef(src);
+  const placementHidden = useRef(suspended || !!failure);
+  const schedulePlacement = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    placementHidden.current = suspended || !!failure;
+    schedulePlacement.current?.();
+  }, [suspended, failure]);
 
   useEffect(() => {
     const element = host.current;
@@ -112,15 +125,32 @@ export function TauriWebSession({ source, src, mediaId, toolbar = true, extra, o
     if (guest === null || !element) return;
     let last = '';
     let raf = 0;
+    let placing = false;
+    let pending = false;
+    let closed = false;
     const measure = () => {
       raf = 0;
-      const region = position(element, suspended || !!failure || document.hidden);
-      const key = JSON.stringify(region);
+      const region = position(element, placementHidden.current || document.hidden);
+      const key = region.visible ? JSON.stringify(region) : 'hidden';
       if (key === last) return;
       last = key;
-      void rpc({ action: 'place', webContentsId: guest, ...region }).catch(() => undefined);
+      placing = true;
+      void rpc({ action: 'place', webContentsId: guest, ...region })
+        .catch(() => { last = ''; })
+        .finally(() => {
+          placing = false;
+          if (!closed && pending) {
+            pending = false;
+            queue();
+          }
+        });
     };
-    const queue = () => { if (!raf) raf = requestAnimationFrame(measure); };
+    const queue = () => {
+      // Native window bounds must be applied in order, even during fast scrolling.
+      if (placing) pending = true;
+      else if (!raf) raf = requestAnimationFrame(measure);
+    };
+    schedulePlacement.current = queue;
     const resize = new ResizeObserver(queue);
     resize.observe(element);
     document.addEventListener('scroll', queue, true);
@@ -128,13 +158,15 @@ export function TauriWebSession({ source, src, mediaId, toolbar = true, extra, o
     window.addEventListener('resize', queue);
     queue();
     return () => {
+      closed = true;
+      schedulePlacement.current = null;
       if (raf) cancelAnimationFrame(raf);
       resize.disconnect();
       document.removeEventListener('scroll', queue, true);
       document.removeEventListener('visibilitychange', queue);
       window.removeEventListener('resize', queue);
     };
-  }, [guest, suspended, failure]);
+  }, [guest]);
 
   const act = (action: string, target?: string) => {
     if (guest === null) {

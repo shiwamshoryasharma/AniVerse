@@ -467,6 +467,7 @@ export interface AppInfo {
   configPath: string;
   dataPath: string;
   uiRendering?: import('./graphics').UiRenderingState;
+  gpuAdapterPreference?: import('./graphics').DesktopGpuState;
   graphics?: import('./graphics').GraphicsSummary & { renderer: string | null; uiRendering: import('./graphics').UiRenderingState };
 }
 

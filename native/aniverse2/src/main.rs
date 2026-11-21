@@ -4,6 +4,7 @@ mod adblocker;
 mod cast;
 mod desktop;
 mod downloads;
+mod gpu_preference;
 #[cfg(feature = "installer-handoff")]
 mod incoming;
 mod integrations;
@@ -44,6 +45,23 @@ impl RpcError {
             message: message.into(),
         }
     }
+}
+
+fn ensure_sandbox_arguments() -> Result<(), RpcError> {
+    let browser_args = std::env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+    let unsafe_switch = browser_args.to_string_lossy().split_ascii_whitespace().any(|token| {
+        matches!(
+            token.trim_matches('"').split('=').next(),
+            Some("--no-sandbox" | "--disable-gpu-sandbox" | "--disable-web-security" | "--disable-site-isolation-trials")
+        )
+    });
+    if unsafe_switch {
+        return Err(RpcError::new(
+            "config",
+            "Remove WebView2 overrides that disable browser isolation before starting AniVerse2.",
+        ));
+    }
+    Ok(())
 }
 
 fn app_origin(url: &Url) -> bool {
@@ -271,12 +289,16 @@ async fn desktop_rpc(
         "app.setUiRendering" => {
             return ui_rendering::request(&window, input.unwrap_or_default()).await
         }
+        "app.setGpuPreference" => {
+            return gpu_preference::request(&window, input.unwrap_or_default()).await
+        }
         "app.info" => {
             return Ok(serde_json::json!({
                 "version": app.package_info().version.to_string(), "tauri": tauri::VERSION,
                 "webview2": tauri::webview_version().ok(),
                 "platform": "win32",
                 "uiRendering": window.state::<ui_rendering::Service>().snapshot(),
+                "gpuAdapterPreference": window.state::<gpu_preference::Service>().snapshot(),
                 "dataPath": root,
                 "configPath": root.join("config/streaming-sites.txt"),
             }))
@@ -385,6 +407,8 @@ fn run(context: tauri::Context<tauri::Wry>, checking: bool) -> Result<(), tauri:
             }
             let webview = root.join("webview");
             app.manage(updates::Service::new(app.handle(), &root, &data)?);
+            ensure_sandbox_arguments()?;
+            app.manage(gpu_preference::Service::startup(&data));
             let (rendering, rendering_arguments) = ui_rendering::Service::startup(&data);
             app.manage(rendering);
             app.manage(patterns::Service::new(&data));
@@ -416,7 +440,15 @@ fn run(context: tauri::Context<tauri::Wry>, checking: bool) -> Result<(), tauri:
                 .use_https_scheme(true)
                 .initialization_script(startup)
                 .data_directory(dunce::simplified(&webview).to_owned())
+                .browser_extensions_enabled(false)
                 .on_navigation(move |url| app_origin(url) || (checking && url.as_str() == "about:blank"))
+                .on_page_load(|window, payload| {
+                    // On Windows ContentLoading runs for a new document, so
+                    // hash-router navigation keeps its currently owned views.
+                    if payload.event() == tauri::webview::PageLoadEvent::Started {
+                        window.state::<player::Service>().reset_source_sessions();
+                    }
+                })
                 .on_new_window(|_, _| NewWindowResponse::Deny)
                 .build()?;
             drop(rendering_arguments);

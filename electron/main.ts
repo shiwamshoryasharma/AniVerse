@@ -627,6 +627,7 @@ async function bootstrap() {
     'privacy.watchSources': ({mediaId}) => store.isIncognito()?{leaseId:null,sources:sessions.sourceList()}:store.isPrivate(mediaId)?sessions.privateLease():{leaseId:null,sources:registry.list()},
     'privacy.releaseSources': ({leaseId}) => sessions.releasePrivate(leaseId),
     'app.setUiRendering': ({ mode }) => uiRendering.set(mode),
+    'app.setGpuPreference': () => { throw new Error('This preference is available in AniVerse2.'); },
     'app.restart': () => { app.relaunch(); app.quit(); },
     'app.openGraphicsSettings': async () => {
       if (process.platform === 'win32') await shell.openExternal('ms-settings:display-advancedgraphics');

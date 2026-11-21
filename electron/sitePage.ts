@@ -10,7 +10,7 @@ import {seriesMarkers} from '../app/core/sources/text';
  */
 export type PageOp = (
   | { op: 'findTitle'; titles: string[]; season: number; selector?: string }
-  | { op: 'episodeCards'; slug:string|null }
+  | { op: 'episodeCards'; slug:string|null; thumbnailNear?:number|null }
   | { op: 'findEpisode'; episode: number; slug: string | null; selector?: string }
   | { op: 'watchLink'; slug: string | null; selector?: string }
   | { op: 'openSearch'; attempt: number; selector?: string }
@@ -18,7 +18,7 @@ export type PageOp = (
   | { op: 'viewAll' }
   | { op: 'episodesTab' }
   | { op: 'click'; pick: string }
-  | { op: 'markPlayer'; selector?: string; keep?: boolean }
+  | { op: 'markPlayer'; selector?: string; keep?: boolean; sticky?: boolean }
   | { op: 'releasePlayer' }
   | { op: 'titleCheck'; titles: string[]; season: number }
   | { op: 'siteOptions' }
@@ -318,6 +318,8 @@ export function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
 
   if(A.op==='episodeCards'){
     const found=new Map<number,{episode:number;thumbnail:string|null;audio:('sub'|'dub')[]}>();
+    const previewNear=A.thumbnailNear;
+    const loadedImages=new Map<number,HTMLImageElement>();
     const nodes=document.querySelectorAll('a[href],button,[role="button"],[data-episode],[data-episode-number],[data-number],[data-num],[data-ep]');
     for(const el of nodes){
       if(found.size>=500)break;
@@ -335,8 +337,14 @@ export function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
         card=parent;
       }
       const image=card.querySelector('img');
-      const src=image?.getAttribute('data-src')||image?.getAttribute('data-original')||(image as HTMLImageElement|null)?.currentSrc||image?.getAttribute('src');
-      const thumbnail=src?abs(src)?.href??null:null;
+      const lazySrc=image?.getAttribute('data-src')||image?.getAttribute('data-original');
+      const src=lazySrc||image?.currentSrc||image?.getAttribute('src');
+      const thumbnail=previewNear===undefined&&src?abs(src)?.href??null:null;
+      const scopedCard=episodeList ? card!==episodeList&&episodeList.contains(card) : card===el&&Boolean(marker||explicit);
+      if(typeof previewNear==='number'&&scopedCard&&image?.complete&&image.naturalWidth>=64&&image.naturalHeight>=36&&
+        (!lazySrc||abs(lazySrc)?.href===(image.currentSrc||image.src))&&!loadedImages.has(episode)){
+        loadedImages.set(episode,image);
+      }
       const labels=[text(card),...Array.from(card.querySelectorAll('span,b,strong,small,em,[title],[aria-label],[data-type]')).slice(0,40).map(node=>[text(node),node.getAttribute('title'),node.getAttribute('aria-label'),node.getAttribute('data-type')].filter(Boolean).join(' '))].join(' ').slice(0,2000);
       const audio:('sub'|'dub')[]=[];
       if(/\b(?:sub|subbed|subtitled)\b/i.test(labels))audio.push('sub');
@@ -344,7 +352,27 @@ export function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
       const previous=found.get(episode);
       found.set(episode,{episode,thumbnail:previous?.thumbnail??thumbnail,audio:[...new Set([...(previous?.audio??[]),...audio])]});
     }
-    return [...found.values()].sort((a,b)=>a.episode-b.episode);
+    const cards=[...found.values()].sort((a,b)=>a.episode-b.episode);
+    if(typeof previewNear==='number'&&loadedImages.size){
+      const canvas=document.createElement('canvas');
+      const context=canvas.getContext('2d');
+      const nearest=cards.filter(card=>loadedImages.has(card.episode))
+        .sort((a,b)=>Math.abs(a.episode-previewNear)-Math.abs(b.episode-previewNear)).slice(0,24);
+      let previews=0;
+      for(const card of nearest){
+        if(!context||previews>=16)break;
+        const image=loadedImages.get(card.episode)!;
+        const scale=Math.min(1,192/image.naturalWidth,108/image.naturalHeight);
+        canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
+        canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+        try{
+          context.drawImage(image,0,0,canvas.width,canvas.height);
+          const jpeg=canvas.toDataURL('image/jpeg',0.65);
+          if(jpeg.startsWith('data:image/jpeg;base64,')&&jpeg.length<=10240){card.thumbnail=jpeg;previews++;}
+        }catch{/* Configured sources may restrict access to the image pixels. */}
+      }
+    }
+    return cards;
   }
 
   if (A.op === 'findEpisode') {
@@ -564,34 +592,62 @@ export function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
   };
 
   // Lives in this page's isolated world for as long as the page does.
-  const keeper = window as unknown as { __aniverseKeeper?: MutationObserver; __aniverseKeeperSelector?: string };
+  const keeper = window as unknown as {
+    __aniverseKeeperCleanup?: () => void; __aniverseKeeperSelector?: string; __avSiteFocusSheet?: CSSStyleSheet;
+  };
 
   if (A.op === 'markPlayer') {
-    const tag = markPlayer(A.selector);
+    const apply = (selector?: string) => {
+      const tag = markPlayer(selector);
+      // Once focus succeeds, cover the site while a replacement player is loading.
+      if (tag && A.sticky) document.documentElement.setAttribute('data-aniverse-player-only', '');
+      return tag;
+    };
+    const tag = apply(A.selector);
     if (A.keep) {
-      // Sites swap their player element in place (server switch, next episode, ad slot):
-      // re-mark it whenever the marked one is gone, so player-only mode never drops.
       keeper.__aniverseKeeperSelector = A.selector;
-      if (!keeper.__aniverseKeeper) {
+      if (!keeper.__aniverseKeeperCleanup) {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const check = () => {
-          if(!keeper.__aniverseKeeper)return;
+          const sheet = A.sticky && keeper.__avSiteFocusSheet;
+          if (sheet && !document.adoptedStyleSheets.includes(sheet)) {
+            document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+          }
           const current = document.querySelector('[data-aniverse-player]');
-          if (!current || !current.isConnected || area(current) < 240 * 135 || !document.querySelector('[data-aniverse-media]')) markPlayer(keeper.__aniverseKeeperSelector);
+          // A responsive site may reparent the same marked player after its
+          // previous ancestor markers were cleared. Rebuild that chain.
+          let intact = !!(current && (current.matches('[data-aniverse-media]') || current.querySelector('[data-aniverse-media]')));
+          if (A.sticky && current) {
+            for (let parent = current.parentElement; parent && parent !== document.documentElement; parent = parent.parentElement) {
+              if (!parent.hasAttribute('data-aniverse-chain')) {
+                intact = false;
+                break;
+              }
+            }
+          }
+          if (!intact || (!A.sticky && current && area(current) < 240 * 135)) apply(keeper.__aniverseKeeperSelector);
         };
-        keeper.__aniverseKeeper = new MutationObserver(() => {
+        const queue = () => {
           clearTimeout(timer);
           timer = setTimeout(check, 150);
-        });
-        keeper.__aniverseKeeper.observe(document.documentElement, { childList: true, subtree: true });
+        };
+        const observer = new MutationObserver(queue);
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        if (A.sticky) window.addEventListener('resize', queue);
+        keeper.__aniverseKeeperCleanup = () => {
+          observer.disconnect();
+          clearTimeout(timer);
+          if (A.sticky) window.removeEventListener('resize', queue);
+        };
       }
     }
     return tag ? { found: true, tag } : { found: false };
   }
 
   if (A.op === 'releasePlayer') {
-    keeper.__aniverseKeeper?.disconnect();
-    keeper.__aniverseKeeper = undefined;
+    keeper.__aniverseKeeperCleanup?.();
+    keeper.__aniverseKeeperCleanup = undefined;
+    document.documentElement.removeAttribute('data-aniverse-player-only');
     document.querySelectorAll('[data-aniverse-player],[data-aniverse-chain],[data-aniverse-media],[data-aniverse-media-chain]').forEach((e) => {
       e.removeAttribute('data-aniverse-player');
       e.removeAttribute('data-aniverse-chain');
@@ -607,6 +663,12 @@ export function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
 
 export const FOCUS_CSS = `
 html:has([data-aniverse-player]), body:has([data-aniverse-player]) { overflow: hidden !important; }
+/* Keep the site covered between player elements without changing its layout or controls. */
+html[data-aniverse-player-only]:not(:has(body[data-aniverse-chain] [data-aniverse-player]))::after,
+html[data-aniverse-player-only]:has(body :not([data-aniverse-chain]) > [data-aniverse-player])::after {
+  content: "" !important; position: fixed !important; inset: 0 !important;
+  display: block !important; background: #000 !important; z-index: 2147483647 !important;
+}
 /* Keep layout/DOM intact so the site's audio/server controls remain discoverable. */
 [data-aniverse-chain] > :not([data-aniverse-chain]):not([data-aniverse-player]),
 [data-aniverse-chain] > :not([data-aniverse-chain]):not([data-aniverse-player]) * {

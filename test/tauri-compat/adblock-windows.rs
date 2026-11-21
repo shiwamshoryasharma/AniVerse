@@ -25,16 +25,27 @@ fn network_rules_and_persisted_opt_outs_are_applied_without_mixing_denial_counts
     )
     .unwrap();
     drop(db);
-    let engine = Service::new(path);
+    std::fs::write(
+        path.join("rust-network-filters.txt"),
+        "||tracker.test^$script,third-party\n@@||tracker.test/allowed.js$script",
+    )
+    .unwrap();
+    std::fs::write(
+        path.join("config/filters.txt"),
+        "||local-rule.test^$image\nfirst.test##.banner",
+    )
+    .unwrap();
+    let engine = std::sync::Arc::new(Service::new(path));
     assert!(!engine.snapshot().enabled);
     assert!(!engine.enabled_for("first-test"));
-    engine.replace(
-        Some(compile(
-            "||tracker.test^$script,third-party\n@@||tracker.test/allowed.js$script".into(),
-            "||local-rule.test^$image\nfirst.test##.banner".into(),
-        )),
-        None,
-    );
+    assert!(!engine.snapshot().ready);
+    tauri::async_runtime::block_on(async {
+        let concurrent = engine.clone();
+        let other = tauri::async_runtime::spawn(async move { concurrent.ensure_ready().await });
+        engine.ensure_ready().await;
+        other.await.unwrap();
+    });
+    assert!(engine.snapshot().ready);
     let blocks = |id, url, kind| engine.blocks(id, "https://first.test/", url, kind, "GET");
     assert!(!blocks(
         "second-test",

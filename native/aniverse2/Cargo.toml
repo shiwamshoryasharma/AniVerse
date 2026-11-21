@@ -1,6 +1,6 @@
 [package]
 name = "aniverse2"
-version = "3.0.8"
+version = "3.0.9"
 edition = "2021"
 publish = false
 
@@ -40,4 +40,4 @@ tokio = { version = "1", features = ["time", "sync", "fs", "io-util", "net"] }
 webview2-com = "0.39"
 dunce = "1"
 windows = "0.62"
-windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Security_Cryptography", "Win32_System_Memory", "Win32_System_Com", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_NetworkManagement_IpHelper"] }
+windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_Graphics_Gdi", "Win32_Security_Cryptography", "Win32_System_Memory", "Win32_System_Com", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_NetworkManagement_IpHelper"] }
