@@ -8,7 +8,7 @@
 
 A browser with anime discovery and isolated website sessions. Windows includes a local workspace; Android tablets have a touch interface and offline travel library.
 
-[AniVerse 1 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/v2.3.0) · [AniVerse 2 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/aniverse2-v3.0.10) · [Android tablet APK](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/android-v0.4.7) · [Getting started](#getting-started) · [Features](#version-221-windows-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
+[AniVerse 1 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/v2.3.1) · [AniVerse 2 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/aniverse2-v3.0.10) · [Android tablet APK](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/android-v0.4.7) · [Getting started](#getting-started) · [Features](#version-221-windows-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
 
 Windows 10 / 11 · Android 15+ tablets · React · Electron / Tauri / Kotlin · GPL-3.0-or-later
 
@@ -22,7 +22,7 @@ AniVerse 1 is the original Electron edition. AniVerse 2 uses Tauri, Rust and Web
 
 | | AniVerse 1 | AniVerse 2 |
 | --- | --- | --- |
-| Install | [AniVerse 1 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/v2.3.0) | [AniVerse 2 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/aniverse2-v3.0.10) |
+| Install | [AniVerse 1 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/v2.3.1) | [AniVerse 2 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/aniverse2-v3.0.10) |
 | Interface | Five layouts, ten palette colours, independent colour controls and adjustable display scale | Five layouts, ten palette colours, independent colour controls and adjustable display scale |
 | Website discovery | Isolated Chromium source sessions, learned navigation and recent SUB/DUB observations | Origin-scoped Rust learning reuses verified page structure and caches recent SUB/DUB availability |
 | Playback | Website and local playback, Quantum Audio and MP4 Save As for compatible clear streams | Website and local playback, Quantum Audio and MP4 Save As for compatible clear streams |
@@ -30,7 +30,7 @@ AniVerse 1 is the original Electron edition. AniVerse 2 uses Tauri, Rust and Web
 
 To move from AniVerse 1, open **Settings → About → Updates → Update AniVerse to AniVerse2** in AniVerse 2.2.5 or later. The migration copies supported profile data, including saved sources and history, and keeps your AniVerse 1 installation available.
 
-[Windows feature comparison](https://github.com/shiwamshoryasharma/AniVerse/blob/v2.3.0/docs/ANIVERSE-FEATURE-PARITY.md)
+[Windows feature comparison](https://github.com/shiwamshoryasharma/AniVerse/blob/v2.3.1/docs/ANIVERSE-FEATURE-PARITY.md)
 
 ## User-selected sources and content
 
