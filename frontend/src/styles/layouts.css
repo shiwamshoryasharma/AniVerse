@@ -225,3 +225,63 @@
   .layout-atlas .rail-item { min-height: 38px; }
   .layout-atlas .hero-desc { -webkit-line-clamp: 2; }
 }
+
+/* Keep the floating docks in their grid columns so they never cover the page. */
+:root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail {
+  align-self: center;
+  min-inline-size: 0;
+  max-block-size: calc(100% - 20px);
+  margin: 10px clamp(4px, 1vw, 8px);
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid var(--line-2);
+  border-radius: clamp(16px, var(--radius-lg, 14px), 24px);
+  background: var(--av2-navigation, var(--bg-2));
+  box-shadow: 0 8px 24px #0003;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+}
+:root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail > .rail-item {
+  flex-shrink: 0;
+}
+:root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail > :is(.grow, .sep) {
+  flex: none;
+}
+:root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail > .rail-item:focus-visible {
+  outline-offset: -3px;
+}
+:root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail > .rail-item.active::before {
+  left: 2px;
+  width: 3px;
+  border-radius: 3px;
+}
+:root[data-aniverse-edition='2'] .layout-atlas > .rail > .rail-item.active::before {
+  left: auto;
+  right: 2px;
+}
+:root[data-aniverse-edition='2'] .layout-classic:not(.rail-open) > .rail > .rail-item {
+  justify-content: center;
+  padding-inline: 0;
+}
+:root[data-aniverse-edition='2'] .layout-classic:not(.rail-open) > .rail .rail-label {
+  display: none;
+}
+:root[data-aniverse-edition='2'] .layout-studio > .rail > .studio-nav-heading {
+  padding: 8px 8px 10px;
+  margin-bottom: 3px;
+}
+@media (max-width: 960px) {
+  :root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio) > .rail > .rail-item {
+    justify-content: center;
+    padding-inline: 0;
+  }
+}
+@media (max-height: 640px) {
+  :root[data-aniverse-edition='2'] :is(.layout-classic, .layout-studio, .layout-atlas) > .rail > .rail-item {
+    height: 34px;
+    min-height: 34px;
+  }
+  :root[data-aniverse-edition='2'] .layout-studio > .rail > .studio-nav-heading {
+    display: none;
+  }
+}

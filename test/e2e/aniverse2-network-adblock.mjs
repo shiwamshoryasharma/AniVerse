@@ -121,6 +121,10 @@ try{
     await checkLayouts(context, page);
     report.checks.appearanceLayouts=true;
   }
+  if (process.env.ANIVERSE2_CHECK_APPEARANCE === '1') {
+    const { checkAppearance } = await import('./fixtures/aniverse2-appearance.mjs');
+    report.checks.appearance = await checkAppearance(context, page);
+  }
   report.passed=true;
 }catch(error){
   report.error=String(error);

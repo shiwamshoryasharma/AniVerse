@@ -372,7 +372,7 @@ fn run(context: tauri::Context<tauri::Wry>, checking: bool) -> Result<(), tauri:
                     const setEdition = () => {{
                         document.documentElement.dataset.aniverseEdition = '2';
                         const saved = localStorage.getItem('aniverse2.palette');
-                        document.documentElement.dataset.aniverse2Theme = ['ion', 'copper', 'wisteria', 'verdant', 'nocturne', 'legacy'].includes(saved)
+                        document.documentElement.dataset.aniverse2Theme = ['dark', 'light', 'github-dimmed', 'vscode', 'ion', 'copper', 'wisteria', 'verdant', 'nocturne', 'legacy'].includes(saved)
                             ? saved : localStorage.getItem('aniverse.desktop-theme') === 'midnight' ? 'legacy' : 'ion';
                         document.title = 'AniVerse2';
                     }};

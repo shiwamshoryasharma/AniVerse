@@ -1,4 +1,4 @@
-/* Five Windows theme families. Original colours retain the existing layout palette. */
+/* Windows theme palettes. Original colours retain the existing layout palette. */
 :root[data-aniverse-edition='2'][data-style]:not([data-aniverse2-theme='legacy']):not([data-desktop-theme='midnight']) {
   color-scheme: dark;
   --bg: #0a1020;
@@ -137,3 +137,90 @@
   --av2-menu-duration: 125ms;
 }
 
+:root[data-aniverse-edition='2'][data-style][data-aniverse2-theme='dark']:not([data-desktop-theme='midnight']) {
+  --bg: #101217;
+  --bg-2: #151820;
+  --surface: #181b22;
+  --surface-2: #22262f;
+  --surface-3: #2a303a;
+  --surface-hover: #343b47;
+  --text: #f1f3f8;
+  --text-2: #c3cad7;
+  --text-3: #a5afc0;
+  --accent: #b59cfa;
+  --accent-2: #d6c7ff;
+  --accent-ink: #201631;
+  --line: #39404d;
+  --line-2: #505b6c;
+  --av2-page-wash: radial-gradient(ellipse at 80% 0%, #59447929, transparent 60%);
+  --av2-nav-shadow: inset 0 0 0 1px #b59cfa36;
+}
+
+:root[data-aniverse-edition='2'][data-style][data-aniverse2-theme='light']:not([data-desktop-theme='midnight']) {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --bg-2: #eef2f7;
+  --surface: #ffffff;
+  --surface-2: #eaf0f7;
+  --surface-3: #e2e9f2;
+  --surface-hover: #d8e5f5;
+  --text: #172334;
+  --text-2: #3f4f66;
+  --text-3: #4d6079;
+  --accent: #2458b3;
+  --accent-2: #1c478f;
+  --accent-ink: #ffffff;
+  --line: #c1cddb;
+  --line-2: #9fb0c4;
+  --ok: #16653e;
+  --warn: #774508;
+  --err: #a52239;
+  --info: #215b9e;
+  --sub: #16653e;
+  --shadow: 0 18px 40px -18px #23395265;
+  --av2-page-wash: radial-gradient(ellipse at 72% 0%, #b9d1ef4a, transparent 58%);
+  --av2-nav-shadow: inset 0 0 0 1px #2458b340;
+  --av2-card-shadow: 0 9px 24px -19px #2d486a4d;
+  --av2-menu-shadow: 0 18px 38px -18px #263b5e7a;
+}
+
+:root[data-aniverse-edition='2'][data-style][data-aniverse2-theme='github-dimmed']:not([data-desktop-theme='midnight']) {
+  --bg: #22272e;
+  --bg-2: #1c2128;
+  --surface: #2d333b;
+  --surface-2: #343b44;
+  --surface-3: #3b434e;
+  --surface-hover: #424c58;
+  --text: #d6dee8;
+  --text-2: #bcc9d6;
+  --text-3: #b2c0cf;
+  --accent: #8dc2ff;
+  --accent-2: #a7ceff;
+  --accent-ink: #132b46;
+  --line: #444c56;
+  --line-2: #596575;
+  --av2-page-wash: none;
+  --av2-nav-shadow: inset 0 0 0 1px #8dc2ff38;
+  --av2-card-shadow: none;
+}
+
+:root[data-aniverse-edition='2'][data-style][data-aniverse2-theme='vscode']:not([data-desktop-theme='midnight']) {
+  --bg: #1e1e1e;
+  --bg-2: #252526;
+  --surface: #292929;
+  --surface-2: #303031;
+  --surface-3: #37373d;
+  --surface-hover: #404047;
+  --text: #ebebeb;
+  --text-2: #d4d4d4;
+  --text-3: #bdbdbd;
+  --accent: #70b5ed;
+  --accent-2: #9cdcfe;
+  --accent-ink: #102536;
+  --line: #454545;
+  --line-2: #606067;
+  --av2-page-wash: none;
+  --av2-nav-radius: 8px;
+  --av2-nav-shadow: inset 0 -2px #70b5ed62;
+  --av2-card-shadow: none;
+}

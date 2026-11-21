@@ -2,6 +2,10 @@ import { isAniVerse2 } from './bridge';
 import { setMidnightTheme } from './desktopTheme';
 
 export const appearanceThemes = [
+  { id: 'dark', name: 'Dark', color: '#b59cfa', surface: '#181b22', detail: 'Charcoal with violet accents' },
+  { id: 'light', name: 'Light', color: '#2458b3', surface: '#ffffff', detail: 'Soft white with blue accents' },
+  { id: 'github-dimmed', name: 'GitHub Dimmed', color: '#8dc2ff', surface: '#2d333b', detail: 'Muted slate and soft blue' },
+  { id: 'vscode', name: 'VS Code Dark+', color: '#70b5ed', surface: '#292929', detail: 'Editor gray and blue' },
   { id: 'ion', name: 'Ion', color: '#66dcf9', surface: '#16213c', detail: 'Cyan on midnight blue' },
   { id: 'copper', name: 'Copper', color: '#f6ac78', surface: '#2a201c', detail: 'Warm amber and soft edges' },
   { id: 'wisteria', name: 'Wisteria', color: '#d7b2ff', surface: '#281f39', detail: 'Lavender glass and round controls' },
