@@ -23,6 +23,7 @@ export async function checkAppearance(context, page) {
     await layouts.locator('button.theme-style.' + id).click();
     await page.locator('.app.layout-' + layout).waitFor();
     await layouts.locator('button.theme-style.' + id + '[aria-pressed="true"]').waitFor();
+    assert.equal(await page.locator('html').evaluate(node => getComputedStyle(node).colorScheme), 'light');
   };
   const cdp = await context.newCDPSession(page);
   const resize = async (width, height) => {
@@ -56,6 +57,7 @@ export async function checkAppearance(context, page) {
     await themes.getByRole('button', { name: 'Ion', exact: true, pressed: true }).waitFor();
     assert.equal(await page.locator('html').getAttribute('data-av2-custom'), null);
     evidence.themeAndCustomHeaderPersist = true;
+    await chooseTheme('light', 'Light');
 
     await chooseLayout('classic', 'classic');
     const expand = page.getByRole('button', { name: 'Expand sidebar' });
@@ -107,13 +109,19 @@ export async function checkAppearance(context, page) {
 }
 
 async function measurePalette(page) {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
     const root = getComputedStyle(document.documentElement);
     const samples = {
       window: '.main .page-title', header: '.topbar .brand .word', rail: '.rail a:not(.active)',
       card: '.av2-appearance h3', aside: '.settings-nav button.active',
       button: '.av2-appearance-head > button', menu: '.topbar .menu button', input: 'input[aria-label="Theme name"]',
     };
+    // Theme switches can transition both text and background colours on buttons.
+    const pending = document.getAnimations().filter(animation => animation instanceof CSSTransition);
+    await Promise.race([
+      Promise.allSettled(pending.map(transition => transition.finished)),
+      new Promise(resolve => setTimeout(resolve, 350)),
+    ]);
     const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
     const light = ([r, g, b]) => [r, g, b].map(value => {
       const x = value / 255;
@@ -142,6 +150,7 @@ async function measurePalette(page) {
 async function measureVerticalRail(page, side) {
   const bounds = await measureBounds(page);
   assert.equal(bounds.orientation, 'column');
+  assert.ok(bounds.width >= 24 && bounds.width <= 350, 'Navigation width ' + bounds.width);
   assert.ok(bounds.radius >= 12 && bounds.shadow !== 'none', 'Vertical rail has floating treatment');
   assert.ok(bounds.top > bounds.headerBottom && bounds.bottom < bounds.appBottom);
   assert.ok(side === 'left' ? bounds.left > 0 && bounds.right < bounds.mainLeft
@@ -157,8 +166,15 @@ async function measureHorizontalRail(page, layout) {
 }
 
 function measureBounds(page) {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
+    const appElement = document.querySelector('.app');
     const rect = (selector) => document.querySelector(selector).getBoundingClientRect();
+    appElement.getBoundingClientRect();
+    const tracks = appElement.getAnimations().filter(animation => animation.transitionProperty === 'grid-template-columns');
+    await Promise.race([
+      Promise.allSettled(tracks.map(animation => animation.finished)),
+      new Promise(resolve => setTimeout(resolve, 350)),
+    ]);
     const nav = rect('.app > .rail');
     const main = rect('.app > .main');
     const app = rect('.app');
