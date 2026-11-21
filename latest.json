@@ -1,11 +1,11 @@
 {
-  "version": "3.0.8",
-  "pub_date": "2026-11-21T17:15:51.7838638+00:00",
-  "notes": "# AniVerse2 3.0.8 for Windows x64\n\n- Floats the Classic, Studio, and Atlas vertical navigation menus, with room for the app content and scrolling in short windows.\n- Adds Dark, Light, GitHub Dimmed, and VS Code Dark+ colour palettes to **Settings → Interface themes**.\n- Applies the palettes throughout the AniVerse2 interface, including menus and dialogs. The Light palette keeps text readable on artwork and player controls.\n- Keeps existing theme, layout and individual colour preferences available.\n\nExisting AniVerse2 installations can update from **Settings → About → Updates**.",
+  "version": "3.0.9",
+  "pub_date": "2026-11-21T18:02:35.6663073+00:00",
+  "notes": "# AniVerse2 3.0.9 for Windows x64\n\n- Vertical navigation starts in icon-only mode and expands into a narrower labelled panel.\n- Website playback keeps its original video size while the Watch page scrolls. The player-only view is preserved, with Show site still available.\n- Download MP4 and AniVerse Quantum Audio are visible beside the playback controls. Episode cards show available source thumbnails and keep their status readable.\n- The blocking report shows a stacked count chart by source, a legend, filters, and exact totals.\n- Home starts less speculative work. Filter rules load when first needed, and Anime4K sizes its render surfaces to the display area.\n- Graphics & GPU offers System, Dedicated GPU preferred, and Power-saving GPU preferred. Compatibility video remains available with supported GPUs.\n- Uses the installed WebView2 Evergreen Runtime when available. The installer includes Microsoft's bootstrapper for computers that need WebView2. Website content runs inside WebView2's renderer sandbox with access to native commands restricted to the AniVerse2 interface.",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSG9Ud2t2ZjZFNzlGRXh6c2lrdUFpRW1sKzFaQlFhTTVmUElWTjhadVJNdDFQcmRxUnJhV0lwMG9BNkNlVjJkSW1RSGd0K2ZGNUVGSXd5dUhHQkc0akFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjgxMzUxCWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjgteDY0LmV4ZQl2ZXJzaW9uOjMuMC44CnlCQVd1TXc3VkJkQjJjZTh2T29JdWNKRXkvQnJza3pTTm5YODViajQyelI4a3ZlL0ZvdVpWMjFKdjY2T1N0cnF1L3pnNE1iNkEzL3J6dHl2VTl2RERnPT0K",
-      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.8/AniVerse-Tauri-Setup-3.0.8-x64.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSGsxcFg5VUdGQ2lFaG9kSEpFZllLVWhkMXJheFkzWHZ6MEkxU1UvUWlKNmtXbWVMNmk2QkoxNXJyWmdNOE5nZEoxWkpsWnF3d1RyZzZiTXp6cUtwcFFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1Mjg0MTU1CWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjkteDY0LmV4ZQl2ZXJzaW9uOjMuMC45CnNza2UzdHBMRktwczRSZHJiTXljVWcxd3hDVXpPQXF3dHdGMEoveXZ5eXhMSzFYUk1OY3hMWXBZc2lKRFVkeFkzSDNjZmlqb2Nqemd0OE1OaUNya0NRPT0K",
+      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.9/AniVerse-Tauri-Setup-3.0.9-x64.exe"
     }
   }
 }
