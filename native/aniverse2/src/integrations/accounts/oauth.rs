@@ -1,6 +1,9 @@
+mod compatibility;
 mod spool;
 
-use super::identity::{self, ANILIST_REDIRECT, MAL_REDIRECT};
+use super::identity::{
+    self, ANILIST_REDIRECT, LEGACY_ANILIST_REDIRECT, LEGACY_MAL_REDIRECT, MAL_REDIRECT,
+};
 use crate::{
     integrations::{invalid, network, url_query, Service},
     runtime_privacy, sources, RpcError,
@@ -37,6 +40,50 @@ struct Attempt<'a> {
     epoch: u64,
 }
 
+struct SignIn {
+    client: &'static str,
+    redirect: &'static str,
+    compatibility: bool,
+}
+
+fn sign_in(
+    provider: &str,
+    native: Option<&'static str>,
+    legacy: Option<&'static str>,
+    owns_scheme: bool,
+) -> Option<SignIn> {
+    let (native_redirect, legacy_redirect) = match provider {
+        "anilist" => (ANILIST_REDIRECT, LEGACY_ANILIST_REDIRECT),
+        "mal" => (MAL_REDIRECT, LEGACY_MAL_REDIRECT),
+        _ => return None,
+    };
+    if let Some(client) = native.filter(|_| owns_scheme) {
+        return Some(SignIn {
+            client,
+            redirect: native_redirect,
+            compatibility: false,
+        });
+    }
+    legacy.map(|client| SignIn {
+        client,
+        redirect: legacy_redirect,
+        compatibility: true,
+    })
+}
+
+fn available_sign_in(provider: &str) -> Option<SignIn> {
+    if cfg!(feature = "isolated-test") {
+        return None;
+    }
+    let native = identity::client_id(provider);
+    sign_in(
+        provider,
+        native,
+        identity::legacy_client_id(provider),
+        native.is_some() && spool::owns_scheme(),
+    )
+}
+
 impl Broker {
     pub(in crate::integrations) fn signing_in(&self, provider: &str) -> bool {
         self.slots.lock().is_ok_and(|all| {
@@ -53,7 +100,7 @@ impl Broker {
     }
 
     pub(in crate::integrations) fn configured(&self, provider: &str) -> bool {
-        identity::client_id(provider).is_some() && spool::owns_scheme()
+        available_sign_in(provider).is_some()
     }
 
     pub(in crate::integrations) async fn connect(
@@ -69,43 +116,33 @@ impl Broker {
                 "Exit incognito before connecting an account.",
             ));
         }
-        let client = identity::client_id(provider).ok_or_else(|| {
+        let sign_in = available_sign_in(provider).ok_or_else(|| {
             RpcError::new(
                 "config",
-                "AniVerse2 sign-in is unavailable without a registered provider client ID.",
+                "No usable OAuth client and callback are configured for this account.",
             )
         })?;
-        if !spool::owns_scheme() {
-            return Err(RpcError::new(
-                "config",
-                "Windows is not routing AniVerse2 callbacks to this installation.",
-            ));
-        }
-        let root = window
-            .app_handle()
-            .path()
-            .app_data_dir()
-            .map_err(|_| network())?;
         let attempt = self.begin(provider)?;
-        std::fs::create_dir_all(&root).map_err(|_| spool::error())?;
         let state = random::<32>()?;
         let verifier = (provider == "mal").then(random::<64>).transpose()?;
-        let mut ticket = spool::Ticket::new(&root, provider, &state).map_err(|_| spool::error())?;
-        let url = authorize(provider, client, &state, verifier.as_deref())?;
+        let url = authorize(
+            provider,
+            sign_in.client,
+            &state,
+            verifier.as_deref(),
+            sign_in.redirect,
+        )?;
         attempt.check()?;
-        sources::open_in_windows(OsStr::new(url.as_str()))
-            .map_err(|_| RpcError::new("unavailable", "Could not open your browser."))?;
-        let grant = loop {
-            attempt.check()?;
-            if let Some(raw) = ticket.response().map_err(|_| spool::error())? {
-                let callback = parse(&raw)
-                    .filter(|callback| {
-                        callback.provider == provider && same_secret(&callback.state, &state)
-                    })
-                    .ok_or_else(spool::error)?;
-                break callback.grant;
-            }
-            tokio::time::sleep(Duration::from_millis(140)).await;
+        let grant = if sign_in.compatibility {
+            compatibility::authorise(window, url, provider, sign_in.redirect, &state, &attempt)
+                .await?
+        } else {
+            let root = window
+                .app_handle()
+                .path()
+                .app_data_dir()
+                .map_err(|_| network())?;
+            browser_grant(&root, url, provider, &state, &attempt).await?
         };
         attempt.check()?;
         let _account = service.account_lock().await;
@@ -115,9 +152,10 @@ impl Broker {
             Grant::Mal(code) => {
                 identity::exchange_mal(
                     service,
-                    client,
+                    sign_in.client,
                     &code,
                     verifier.as_deref().ok_or_else(invalid)?,
+                    sign_in.redirect,
                 )
                 .await?
             }
@@ -130,7 +168,8 @@ impl Broker {
         };
         attempt.check()?;
         let identity = identity::identity(service, provider, &tokens.access).await?;
-        attempt.complete(|| identity::save_signin(data, provider, client, identity, &tokens))
+        attempt
+            .complete(|| identity::save_signin(data, provider, sign_in.client, identity, &tokens))
     }
 
     fn begin<'a>(&'a self, provider: &'a str) -> Result<Attempt<'a>, RpcError> {
@@ -150,6 +189,32 @@ impl Broker {
             started: Instant::now(),
             epoch: runtime_privacy::epoch(),
         })
+    }
+}
+
+async fn browser_grant(
+    root: &Path,
+    url: Url,
+    provider: &str,
+    state: &str,
+    attempt: &Attempt<'_>,
+) -> Result<Grant, RpcError> {
+    std::fs::create_dir_all(root).map_err(|_| spool::error())?;
+    let mut ticket = spool::Ticket::new(root, provider, state).map_err(|_| spool::error())?;
+    attempt.check()?;
+    sources::open_in_windows(OsStr::new(url.as_str()))
+        .map_err(|_| RpcError::new("unavailable", "Could not open your browser."))?;
+    loop {
+        attempt.check()?;
+        if let Some(raw) = ticket.response().map_err(|_| spool::error())? {
+            return parse(&raw)
+                .filter(|callback| {
+                    callback.provider == provider && same_secret(&callback.state, state)
+                })
+                .map(|callback| callback.grant)
+                .ok_or_else(spool::error);
+        }
+        tokio::time::sleep(Duration::from_millis(140)).await;
     }
 }
 
@@ -212,6 +277,7 @@ fn authorize(
     id: &str,
     state: &str,
     verifier: Option<&str>,
+    redirect: &str,
 ) -> Result<Url, RpcError> {
     if provider == "anilist" {
         return url_query(
@@ -230,7 +296,7 @@ fn authorize(
             ("response_type", "code"),
             ("client_id", id),
             ("state", state),
-            ("redirect_uri", MAL_REDIRECT),
+            ("redirect_uri", redirect),
             ("code_challenge", verifier),
             ("code_challenge_method", "plain"),
         ],
@@ -238,6 +304,16 @@ fn authorize(
 }
 
 fn parse(raw: &str) -> Option<Callback> {
+    let route = raw.split(['?', '#']).next()?;
+    let provider = match route {
+        ANILIST_REDIRECT => "anilist",
+        MAL_REDIRECT => "mal",
+        _ => return None,
+    };
+    parse_expected(raw, route, provider)
+}
+
+fn parse_expected(raw: &str, expected: &str, provider: &'static str) -> Option<Callback> {
     if raw.len() > 16_384
         || raw
             .bytes()
@@ -245,11 +321,9 @@ fn parse(raw: &str) -> Option<Callback> {
     {
         return None;
     }
-    let provider = match raw.split(['?', '#']).next()? {
-        ANILIST_REDIRECT => "anilist",
-        MAL_REDIRECT => "mal",
-        _ => return None,
-    };
+    if raw.split(['?', '#']).next()? != expected {
+        return None;
+    }
     let url = Url::parse(raw).ok()?;
     let query = url.query_pairs();
     let fragment = || {

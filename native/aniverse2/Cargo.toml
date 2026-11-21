@@ -1,6 +1,6 @@
 [package]
 name = "aniverse2"
-version = "3.0.6"
+version = "3.0.7"
 edition = "2021"
 publish = false
 
@@ -9,6 +9,7 @@ isolated-test = ["aniverse-desktop-migration?/test-signers"]
 installer-handoff = ["dep:aniverse-desktop-migration", "dep:dirs"]
 
 [build-dependencies]
+serde_json = "1"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]

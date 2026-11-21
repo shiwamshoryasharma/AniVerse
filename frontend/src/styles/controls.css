@@ -1222,3 +1222,40 @@
 .select-check.checked { border-color: var(--accent); background: var(--accent); }
 .select-check.checked svg { opacity: 1; }
 .select-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; padding: 5px 7px 0; margin-top: 4px; border-top: 1px solid var(--line-2); color: var(--text-3); font-size: var(--fs-xs); }
+
+
+/* Desktop floating surfaces share a radius, while placement stays with their components. */
+:root[data-aniverse-edition='2'] :is(.hovercard, .ctx-menu, .menu, .suggest, .player-menu) {
+  border-radius: var(--av2-menu-radius, 18px);
+  box-shadow: var(--av2-menu-shadow, 0 16px 42px #03061160, 0 2px 8px #03061138);
+}
+:root[data-aniverse-edition='2'] .hovercard {
+  background: var(--av2-menu, var(--surface-2));
+  color: var(--av2-menu-ink, var(--text));
+  scrollbar-width: thin;
+  animation: var(--av2-menu-motion, av2-float-in) var(--av2-menu-duration, 170ms) var(--ease);
+}
+:root[data-aniverse-edition='2'] .hovercard-head::after {
+  background: linear-gradient(0deg, var(--av2-menu, var(--surface-2)) 4%, color-mix(in srgb, var(--av2-menu, var(--surface-2)) 26%, transparent));
+}
+:root[data-aniverse-edition='2'] .hovercard :is(dt, .hovercard-desc) { color: var(--av2-menu-ink, var(--text-2)); }
+:root[data-aniverse-edition='2'] .hovercard dd { color: var(--av2-menu-ink, var(--text)); }
+:root[data-aniverse-edition='2'] .hovercard .btn:not(.primary) svg,
+:root[data-aniverse-edition='2'] .ctx-item:not(.danger) .ctx-icon,
+:root[data-aniverse-edition='2'] .menu button > svg { color: var(--av2-icon, var(--accent)); }
+:root[data-aniverse-edition='2'] .hovercard .btn { transition: background-color 130ms var(--ease), transform 130ms var(--ease); }
+:root[data-aniverse-edition='2'] .hovercard .btn:hover { transform: translateY(-1px); }
+:root[data-aniverse-edition='2'] .hovercard .btn:focus-visible {
+  outline: 2px solid var(--av2-menu-ink, var(--text));
+  outline-offset: 2px;
+}
+@keyframes av2-float-in {
+  from { opacity: .45; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-aniverse-edition='2'] .hovercard,
+  :root[data-aniverse-edition='2'] .hovercard .btn { animation: none; transition: none; }
+  :root[data-aniverse-edition='2'] .hovercard .btn:hover { transform: none; }
+}
+:root[data-aniverse-edition='2'][data-motion='reduce'] .hovercard .btn:hover { transform: none; }

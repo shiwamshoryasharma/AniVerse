@@ -200,3 +200,36 @@ fn account_sync_queues_local_edits_atomically_and_respects_privacy_and_pause() {
         "CURRENT"
     );
 }
+
+#[test]
+fn account_status_records_only_the_affected_provider_and_preserves_credentials() {
+    let cache = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test/cache/aniverse2");
+    std::fs::create_dir_all(&cache).unwrap();
+    let root = tempfile::tempdir_in(cache).unwrap();
+    let db = profile::writable(root.path()).unwrap();
+    let original = json!({"token":"protected-fixture","lastSyncAt":100,"lastError":null});
+    db.execute(
+        "INSERT INTO accounts(provider,data) VALUES('anilist',?1),('mal',?1)",
+        [original.to_string()],
+    )
+    .unwrap();
+
+    state::sync_status(
+        root.path(),
+        "mal",
+        None,
+        Some("The service did not respond."),
+    )
+    .unwrap();
+    let failed = read(Some(&db), "mal").unwrap();
+    assert_eq!(failed["lastError"], "The service did not respond.");
+    assert_eq!(failed["lastSyncAt"], 100);
+    assert_eq!(failed["token"], "protected-fixture");
+    assert_eq!(read(Some(&db), "anilist").unwrap(), original);
+
+    state::sync_status(root.path(), "mal", Some(200), None).unwrap();
+    let synced = read(Some(&db), "mal").unwrap();
+    assert!(synced["lastError"].is_null());
+    assert_eq!(synced["lastSyncAt"], 200);
+    assert_eq!(synced["token"], "protected-fixture");
+}

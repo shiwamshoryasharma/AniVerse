@@ -1,3 +1,6 @@
+#[path = "../../native/aniverse2/oauth_build.rs"]
+mod build_config;
+
 use super::*;
 use std::{fs, path::PathBuf};
 
@@ -14,15 +17,23 @@ fn cache() -> PathBuf {
 fn oauth_validates_routes_state_and_provider_specific_credentials() {
     assert!(valid_state(STATE));
     assert_ne!(random::<32>().ok().unwrap(), random::<32>().ok().unwrap());
-    let ani = authorize("anilist", "123", STATE, None).ok().unwrap();
+    let ani = authorize("anilist", "123", STATE, None, ANILIST_REDIRECT)
+        .ok()
+        .unwrap();
     assert_eq!(ani.host_str(), Some("anilist.co"));
     assert_eq!(
         ani.query_pairs().find(|(key, _)| key == "state").unwrap().1,
         STATE
     );
-    let mal = authorize("mal", "private-test-fixture", STATE, Some("test-verifier"))
-        .ok()
-        .unwrap();
+    let mal = authorize(
+        "mal",
+        "private-test-fixture",
+        STATE,
+        Some("test-verifier"),
+        MAL_REDIRECT,
+    )
+    .ok()
+    .unwrap();
     assert_eq!(mal.host_str(), Some("myanimelist.net"));
     assert_eq!(
         mal.query_pairs()
@@ -132,4 +143,94 @@ fn oauth_cancel_and_restart_are_idempotent() {
         .complete::<()>(|| panic!("cancelled account must not persist"))
         .is_err());
     assert!(!broker.signing_in("anilist"));
+}
+
+#[test]
+fn oauth_build_keeps_legacy_clients_separate_from_native_clients() {
+    use serde_json::json;
+    const LEGACY: &str = "a1b2c3d4e5f67890";
+    const NATIVE: &str = "1a2b3c4d5e6f7890";
+    let legacy = json!({"anilist": {"clientId": 101}, "myanimelist": {"clientId": LEGACY}});
+    let result = build_config::credentials(&legacy, [None; 4]).unwrap();
+    assert_eq!(result, ["", "", LEGACY, "101"]);
+
+    let mut config = legacy.clone();
+    config["aniverse2"] = json!({
+        "anilist": {"clientId": 202},
+        "myanimelist": {"clientId": NATIVE},
+    });
+    let result = build_config::credentials(&config, [None; 4]).unwrap();
+    assert_eq!(result, ["202", NATIVE, LEGACY, "101"]);
+    let result = build_config::credentials(&config, [Some(" 303 "), Some(""), None, None]).unwrap();
+    assert_eq!(result, ["303", "", LEGACY, "101"]);
+
+    config["aniverse2"]["anilist"]["clientSecret"] = json!("fixture-forbidden");
+    assert!(build_config::credentials(&config, [None; 4]).is_err());
+    assert_eq!(
+        build_config::credentials(&legacy, [Some("bad\nvalue"), None, None, None]),
+        Err("ANIVERSE2_ANILIST_CLIENT_ID")
+    );
+}
+
+#[test]
+fn oauth_compatibility_uses_exact_legacy_routes_and_provider_origins() {
+    let browser = sign_in("mal", Some("native"), Some("legacy"), true).unwrap();
+    assert!(!browser.compatibility);
+    assert_eq!(browser.redirect, MAL_REDIRECT);
+    let fallback = sign_in("mal", Some("native"), Some("legacy"), false).unwrap();
+    assert!(fallback.compatibility);
+    assert_eq!(fallback.redirect, LEGACY_MAL_REDIRECT);
+    assert_eq!(fallback.client, "legacy");
+    let authorization = authorize(
+        "mal",
+        fallback.client,
+        STATE,
+        Some("fixture-verifier"),
+        fallback.redirect,
+    )
+    .ok()
+    .unwrap();
+    assert!(authorization
+        .query_pairs()
+        .any(|(key, value)| key == "redirect_uri" && value == LEGACY_MAL_REDIRECT));
+
+    let legacy = format!("{LEGACY_MAL_REDIRECT}?state={STATE}&code=fixture-code");
+    assert!(
+        parse(&legacy).is_none(),
+        "The installed native protocol must ignore legacy callbacks"
+    );
+    assert!(matches!(
+        parse_expected(&legacy, LEGACY_MAL_REDIRECT, "mal")
+            .unwrap()
+            .grant,
+        Grant::Mal(_)
+    ));
+    assert!(parse_expected(&legacy, LEGACY_ANILIST_REDIRECT, "anilist").is_none());
+    let token = format!("{LEGACY_ANILIST_REDIRECT}#state={STATE}&access_token=fixture-token");
+    let callback = parse_expected(&token, LEGACY_ANILIST_REDIRECT, "anilist").unwrap();
+    assert!(same_secret(&callback.state, STATE));
+    assert!(!same_secret(&callback.state, OTHER));
+    assert!(matches!(callback.grant, Grant::AniList { .. }));
+
+    for (raw, provider, assets, expected) in [
+        (
+            "https://anilist.co/api/v2/oauth/authorize",
+            "anilist",
+            false,
+            true,
+        ),
+        ("https://cdn.myanimelist.net/image.png", "mal", true, true),
+        ("https://cdn.myanimelist.net/image.png", "mal", false, false),
+        ("https://myanimelist.net@another.test/", "mal", true, false),
+        ("http://anilist.co/", "anilist", true, false),
+        ("https://anilist.co:1234/", "anilist", false, false),
+        ("https://anilist.co.another.test/", "anilist", true, false),
+        ("https://accounts.google.com/", "mal", true, false),
+    ] {
+        assert_eq!(
+            compatibility::allowed(&Url::parse(raw).unwrap(), provider, assets),
+            expected,
+            "{raw}"
+        );
+    }
 }

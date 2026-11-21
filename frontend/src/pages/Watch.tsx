@@ -41,7 +41,7 @@ import { availableEpisodes, countdown, cx, formatLabel, mediaRefOf, pendingRelea
 import { keys, useDetails, useLibraryState, useMarkWatched, useMatch, useSaveProgress, useSettings, useStreams, useToggleFavourite, useUpdateSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { useCollectionPlayback } from '../lib/collectionPlayback';
-import { interfaceStyle } from '../../../app/shared/interface';
+import { useInterfaceLayout } from '../lib/interfaceLayout';
 import { EpisodeCast } from '../components/EpisodeCast';
 import { SiteQuantumAudioControl } from '../player/SiteQuantumAudioControl';
 import { DownloadMp4Button } from '../components/DownloadMp4Button';
@@ -92,7 +92,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const qc = useQueryClient();
   const snapshot = useMemo(() => snapshotOf(media, lang), [media, lang]);
   const title = titleOf(media, lang);
-  const layout = interfaceStyle(settings.appearance.style).layout;
+  const layout = useInterfaceLayout(settings.appearance.style);
+  const episodeShelf = layout === 'cinema' || layout === 'dock';
 
   const localId = Number(search.get('local')) || null;
   const local = useCollectionPlayback(localId);
@@ -570,7 +571,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
             )}
           </div>
 
-          {layout === 'cinema' && episodePanel}
+          {episodeShelf && episodePanel}
           {isSite && webContentsId && <SiteAnime4K key={siteKey + ':anime4k'} webContentsId={webContentsId} surface={screenHost} />}
           {isSite && webContentsId && <PlaybackRescue key={siteKey + ':' + episode} probe={playbackProbe} health={playbackStatus} webContentsId={webContentsId} busy={siteBusy || !!choosing} />}
 
@@ -681,7 +682,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
           <SpoilerGuard key={media.id+':'+episode} label="Comments"><CommentsPanel query={commentsQuery} /></SpoilerGuard>
         </div>
 
-        {layout !== 'cinema' && episodePanel}
+        {!episodeShelf && episodePanel}
       </div>
     </div>
   );

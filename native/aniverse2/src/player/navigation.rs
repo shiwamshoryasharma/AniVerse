@@ -1,5 +1,8 @@
 use super::{allowed_top, destination, failure, invalid, native, navigate, page, status, Session};
-use crate::{patterns, profile, RpcError};
+use crate::{
+    patterns::{self, EpisodeStep},
+    profile, RpcError,
+};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::{
@@ -66,7 +69,7 @@ pub(super) async fn open(
     let mut learned = Vec::<(&str, String)>::new();
     status(owner, session, Some("Looking for the series…"));
     let on_title = alive() && title_matches(session, &titles, season).await;
-    let pin = if is_private {
+    let pin = if session.browsing_private() {
         None
     } else {
         profile::saved_pin(root, &session.source.id, id)?
@@ -91,11 +94,18 @@ pub(super) async fn open(
             &alive,
         )
         .await;
-    let entry = session.view.url().ok();
     let found = if opened && alive() {
         status(owner, session, Some("Opening the episode…"));
-        find_episode(session, episode, &methods, &origin, &mut learned, &alive).await
-            && (session.view.url().ok() == entry || title_matches(session, &titles, season).await)
+        find_episode(
+            session,
+            episode,
+            (&titles, season),
+            &methods,
+            &origin,
+            &mut learned,
+            &alive,
+        )
+        .await
     } else {
         false
     };
@@ -111,16 +121,20 @@ pub(super) async fn open(
         if let Ok(mut context) = session.active_episode.lock() {
             *context = Some((id, episode));
         }
-        for (stage, selector) in learned {
-            methods.remember(&origin, stage, &selector, is_private);
-        }
+        methods.remember_verified(&origin, learned, unlearnable_source(session, &origin));
         let mut cards = episodes(owner, session).await;
         let controls = options(session, None)
             .await
             .map(|opts| opts.0)
             .unwrap_or_else(|_| empty_options());
         insert_audio(&mut cards, episode, &controls);
-        methods.observe_audio(&session.source.id, &origin, id, &cards, is_private);
+        methods.observe_audio(
+            &session.source.id,
+            &origin,
+            id,
+            &cards,
+            unlearnable_source(session, &origin),
+        );
         let focused = if input["focus"].as_bool().unwrap_or(true) {
             focus(session, true).await.unwrap_or(false)
         } else {
@@ -221,7 +235,7 @@ async fn find_title(
         };
         let mut finder = heading.clone();
         finder["selector"] =
-            json!(methods.selector(origin, "titleLink", session.browsing_private()));
+            json!(methods.selector(origin, "titleLink", unlearnable_source(session, origin)));
         let hits = if finder["selector"].is_string() {
             poll(session, &finder, alive, 500).await
         } else {
@@ -255,6 +269,14 @@ async fn find_title(
         }
         if let Some(hits) = hits {
             if try_titles(session, &hits, titles, season, learned, alive).await {
+                if let Some(stale) = finder["selector"].as_str() {
+                    methods.forget(
+                        origin,
+                        "titleLink",
+                        stale,
+                        unlearnable_source(session, origin),
+                    );
+                }
                 return true;
             }
         }
@@ -335,10 +357,10 @@ pub(super) async fn open_search(
     learned: &mut Vec<(&'static str, String)>,
     alive: &impl Fn() -> bool,
 ) -> bool {
-    let fill = json!({"op":"fillSearch","query":query,"selector":methods.selector(origin, "searchInput", session.browsing_private())});
+    let fill = json!({"op":"fillSearch","query":query,"selector":methods.selector(origin, "searchInput", unlearnable_source(session, origin))});
     let mut outcome = page(session, fill.clone()).await.unwrap_or_default();
     if outcome["ok"] != true {
-        let opener = methods.selector(origin, "searchOpener", session.browsing_private());
+        let opener = methods.selector(origin, "searchOpener", unlearnable_source(session, origin));
         if let Some(selector) = opener {
             let result = page(
                 session,
@@ -373,6 +395,7 @@ pub(super) async fn open_search(
 async fn find_episode(
     session: &Session,
     episode: usize,
+    series: (&[&str], u64),
     methods: &patterns::Service,
     origin: &str,
     learned: &mut Vec<(&'static str, String)>,
@@ -385,61 +408,147 @@ async fn find_episode(
     {
         return true;
     }
-    let slug = session.view.url().ok().and_then(|url| slug(&url));
+    let Ok(entry) = session.view.url() else {
+        return false;
+    };
+    let slug = slug(&entry);
     let find = json!({"op":"findEpisode","episode":episode,"slug":slug});
-    if let Some(selector) = methods.selector(origin, "episodeLink", session.browsing_private()) {
-        let mut preferred = find.clone();
-        preferred["selector"] = json!(selector.replace("{n}", &episode.to_string()));
-        if let Some(hit) = poll(session, &preferred, alive, 600).await {
-            if episode_link(session, &hit, &check, alive).await {
-                teach(learned, "episodeLink", &hit);
-                return true;
-            }
-        }
-    }
-    for stage in 0..3 {
-        if !alive() {
+    let selector = methods.selector(origin, "episodeLink", unlearnable_source(session, origin));
+    for step in methods.episode_steps(origin, unlearnable_source(session, origin)) {
+        if !restore_page(session, &entry, alive).await {
             return false;
         }
-        if stage == 1 {
-            let _ = page(session, json!({"op":"episodesTab"})).await;
-        } else if stage == 2 {
-            let generic = json!({"op":"watchLink","slug":slug});
-            let mut preferred = generic.clone();
-            preferred["selector"] =
-                json!(methods.selector(origin, "watchLink", session.browsing_private()));
-            let mut watch = page(session, preferred).await.unwrap_or_default();
-            if watch.is_null() {
-                watch = page(session, generic).await.unwrap_or_default();
+        let watch = match step {
+            EpisodeStep::Direct => None,
+            EpisodeStep::EpisodesTab => {
+                if !page(session, json!({"op":"episodesTab"}))
+                    .await
+                    .is_ok_and(|result| result["clicked"] == true)
+                {
+                    continue;
+                }
+                None
             }
-            if !follow(session, &watch, alive).await {
-                return false;
+            EpisodeStep::WatchLink => {
+                let Some(watch) =
+                    open_watch(session, &entry, series, &slug, methods, origin, alive).await
+                else {
+                    continue;
+                };
+                if page(session, check.clone())
+                    .await
+                    .is_ok_and(|value| value["matches"] == true)
+                {
+                    teach(learned, "watchLink", &watch);
+                    learned.push(("episodeStep", step.name().into()));
+                    return true;
+                }
+                Some(watch)
             }
-            teach(learned, "watchLink", &watch);
-            if page(session, check.clone())
-                .await
-                .is_ok_and(|value| value["matches"] == true)
-            {
-                return true;
+        };
+        let Ok(listing) = session.view.url() else {
+            return false;
+        };
+        let mut found = None;
+        if let Some(selector) = selector.as_ref() {
+            let mut preferred = find.clone();
+            preferred["selector"] = json!(selector.replace("{n}", &episode.to_string()));
+            if let Some(hit) = poll(session, &preferred, alive, 600).await {
+                if episode_link(session, &hit, &check, &entry, series, alive).await {
+                    found = Some(hit);
+                } else if !restore_page(session, &listing, alive).await {
+                    return false;
+                }
             }
         }
-        if let Some(hit) = poll(session, &find, alive, 1700).await {
-            if episode_link(session, &hit, &check, alive).await {
-                teach(learned, "episodeLink", &hit);
-                return true;
+        if found.is_none() {
+            if let Some(hit) = poll(session, &find, alive, 1700).await {
+                if episode_link(session, &hit, &check, &entry, series, alive).await {
+                    if let Some(stale) = selector.as_ref() {
+                        methods.forget(
+                            origin,
+                            "episodeLink",
+                            stale,
+                            unlearnable_source(session, origin),
+                        );
+                    }
+                    found = Some(hit);
+                }
             }
+        }
+        if let Some(hit) = found {
+            if let Some(watch) = watch.as_ref() {
+                teach(learned, "watchLink", watch);
+            }
+            teach(learned, "episodeLink", &hit);
+            learned.push(("episodeStep", step.name().into()));
+            return true;
         }
     }
     false
+}
+
+async fn open_watch(
+    session: &Session,
+    entry: &Url,
+    series: (&[&str], u64),
+    slug: &Option<String>,
+    methods: &patterns::Service,
+    origin: &str,
+    alive: &impl Fn() -> bool,
+) -> Option<Value> {
+    let mut watch = json!({"op":"watchLink","slug":slug});
+    let preferred = methods.selector(origin, "watchLink", unlearnable_source(session, origin));
+    for selector in preferred.iter().map(Some).chain(std::iter::once(None)) {
+        watch["selector"] = json!(selector);
+        let hit = page(session, watch.clone()).await.unwrap_or_default();
+        if follow(session, &hit, alive).await && title_matches(session, series.0, series.1).await {
+            if selector.is_none() {
+                if let Some(stale) = preferred.as_ref() {
+                    methods.forget(
+                        origin,
+                        "watchLink",
+                        stale,
+                        unlearnable_source(session, origin),
+                    );
+                }
+            }
+            return Some(hit);
+        }
+        if !restore_page(session, entry, alive).await {
+            return None;
+        }
+    }
+    None
+}
+
+async fn restore_page(session: &Session, url: &Url, alive: &impl Fn() -> bool) -> bool {
+    alive()
+        && (session.view.url().ok().as_ref() == Some(url)
+            || load(session, url.clone(), alive).await)
 }
 
 async fn episode_link(
     session: &Session,
     hit: &Value,
     check: &Value,
+    entry: &Url,
+    series: (&[&str], u64),
     alive: &impl Fn() -> bool,
 ) -> bool {
-    follow(session, hit, alive).await && poll(session, check, alive, 2300).await.is_some()
+    follow(session, hit, alive).await
+        && poll(session, check, alive, 2300).await.is_some()
+        && alive()
+        && (session.view.url().ok().as_ref() == Some(entry)
+            || title_matches(session, series.0, series.1).await)
+}
+
+fn unlearnable_source(session: &Session, origin: &str) -> bool {
+    session.browsing_private()
+        || !session
+            .view
+            .url()
+            .is_ok_and(|url| url.origin().ascii_serialization() == origin)
 }
 
 async fn title_matches(session: &Session, titles: &[&str], season: u64) -> bool {
@@ -758,14 +867,15 @@ pub(super) async fn choose(
         .ok()
         .and_then(|context| *context);
     if let Some((id, episode)) = episode {
+        let origin = session.source.base.origin().ascii_serialization();
         let mut cards = episodes(owner, session).await;
         insert_audio(&mut cards, episode, &state);
         owner.state::<patterns::Service>().observe_audio(
             &session.source.id,
-            &session.source.base.origin().ascii_serialization(),
+            &origin,
             id,
             &cards,
-            session.browsing_private(),
+            unlearnable_source(session, &origin),
         );
     }
     Ok(json!({"options":state,"focused":focused}))
@@ -798,12 +908,13 @@ pub(super) async fn episodes(owner: &Webview, session: &Session) -> Value {
         .collect::<Vec<_>>();
     let cards = json!(rows);
     if let Some((id, _)) = context {
+        let origin = session.source.base.origin().ascii_serialization();
         owner.state::<patterns::Service>().observe_audio(
             &session.source.id,
-            &session.source.base.origin().ascii_serialization(),
+            &origin,
             id,
             &cards,
-            session.browsing_private(),
+            unlearnable_source(session, &origin),
         );
     }
     cards

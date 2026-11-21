@@ -72,6 +72,21 @@ ANIVERSE_ANILIST_CLIENT_ID=12345 ANIVERSE_MAL_CLIENT_ID=0123456789abcdef01234567
 
 `scripts/oauthConfig.mjs` validates the values and compiles them into the main process (`__ANIVERSE_OAUTH__`) for builds. Development runs (`npm run dev`) read `config/oauth.json` live, so new IDs work without a restart. A build without an ID shows that service's **Connect** button disabled ("isn't available in this build").
 
+### AniVerse2 on Windows
+
+AniVerse2 can reuse the original public IDs in the untracked `config/oauth.json`. Set `anilist.clientId` and `myanimelist.clientId`, or use `ANIVERSE_ANILIST_CLIENT_ID` and `ANIVERSE_MAL_CLIENT_ID`. For builds from another checkout, `ANIVERSE_OAUTH_CONFIG` can point to that file. The Rust build embeds validated public IDs and keeps the configuration file outside the installer.
+
+With the original IDs, AniVerse2 opens a private WebView2 sign-in window for the provider. It accepts its own in-progress authorization response there. AniVerse keeps the Windows `aniverse://` association for its browser sign-ins. The compatibility window accepts the provider's own credentials page, and provider policies may reject embedded sign-in or require an external identity provider.
+
+Register an AniVerse2-specific callback to use the default browser for authorization. Set the public IDs under the following keys, or set the corresponding build variables.
+
+| Provider | AniVerse2 callback | Config key | Build variable |
+| --- | --- | --- | --- |
+| AniList | `aniverse2://oauth/anilist` | `aniverse2.anilist.clientId` | `ANIVERSE2_ANILIST_CLIENT_ID` |
+| MyAnimeList | `aniverse2://oauth/myanimelist` | `aniverse2.myanimelist.clientId` | `ANIVERSE2_MAL_CLIENT_ID` |
+
+The Windows installer registers `aniverse2://` separately. Existing MyAnimeList sessions refresh against the client that issued their credentials.
+
 ## Development setup
 
 - `npm run dev` registers `aniverse://` for the development Electron on start-up (Windows: `HKCU\Software\Classes\aniverse` pointing at `node_modules/electron/dist/electron.exe "<project>"`). The browser's "Open AniVerse?" prompt then reaches the running dev instance through the single-instance lock.

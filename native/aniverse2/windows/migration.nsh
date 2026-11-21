@@ -1,3 +1,24 @@
+!define MUI_CUSTOMFUNCTION_GUIINIT AniVerseSetupIntro
+!define MUI_WELCOMEPAGE_TITLE "Welcome to AniVerse2"
+!define MUI_WELCOMEPAGE_TEXT "Set up AniVerse2 for Windows.$\r$\n$\r$\nClick Next to choose where to install it."
+
+Function AniVerseSetupIntro
+  IfSilent av_intro_done
+  StrCmp $PassiveMode "1" av_intro_done
+  StrCmp $UpdateMode "1" av_intro_done
+  Push $0
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\AniVerse2SetupSplash.exe" "${__FILEDIR__}\..\..\..\dist\aniverse2-installer\AniVerse2SetupSplash.exe"
+  File "/oname=$PLUGINSDIR\aniverse2-intro.mp4" "${__FILEDIR__}\..\..\..\assets\aniverse2\installer\intro.mp4"
+  ShowWindow $HWNDPARENT 0
+  ClearErrors
+  ExecWait '"$PLUGINSDIR\AniVerse2SetupSplash.exe" "$PLUGINSDIR\aniverse2-intro.mp4"' $0
+  ShowWindow $HWNDPARENT 5
+  ClearErrors
+  Pop $0
+  av_intro_done:
+FunctionEnd
+
 ; Hand the signed Electron migration descriptor to the new executable before
 ; opening its window. Failed prep leaves the original AniVerse available.
 !define ANIVERSE2_PROTOCOL "Software\Classes\aniverse2"

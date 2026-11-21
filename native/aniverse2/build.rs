@@ -1,7 +1,10 @@
+mod oauth_build;
+
 use std::{env, fs, path::PathBuf};
 
 fn main() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    oauth_build::prepare(&root);
     let renderer = env::var_os("ANIVERSE2_RENDERER_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("dist/aniverse2"));

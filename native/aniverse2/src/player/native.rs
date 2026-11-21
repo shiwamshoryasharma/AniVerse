@@ -34,6 +34,7 @@ struct Deferred {
     source_id: Arc<str>,
     source: Url,
     uri: String,
+    record_activity: bool,
 }
 thread_local! {
     static DEFERRED: RefCell<HashMap<String, Vec<Deferred>>> = RefCell::new(HashMap::new());
@@ -46,6 +47,7 @@ pub(super) async fn install_guards(
     source_id: String,
     cache: DnsCache,
     hidden: bool,
+    record_activity: bool,
     frame_scope: Option<(u64, Arc<GuestState>)>,
 ) -> Result<(), RpcError> {
     let (send, recv) = oneshot::channel();
@@ -60,6 +62,7 @@ pub(super) async fn install_guards(
                     source_id.into(),
                     cache,
                     hidden,
+                    record_activity,
                 )?;
                 if let Some((id, state)) = frame_scope {
                     let _ = frames::track(&core, id, state);
@@ -83,6 +86,7 @@ unsafe fn install(
     source_id: Arc<str>,
     cache: DnsCache,
     hidden: bool,
+    record_activity: bool,
 ) -> windows::core::Result<()> {
     let settings = webview.Settings()?;
     settings.SetAreDevToolsEnabled(false)?;
@@ -136,7 +140,15 @@ unsafe fn install(
                         return args.SetResponse(&response);
                     }
                 }
-                intercept(&args, &response, &app, &source, &source_id, &cache)?;
+                intercept(
+                    &args,
+                    &response,
+                    &app,
+                    &source,
+                    &source_id,
+                    &cache,
+                    record_activity,
+                )?;
             }
             Ok(())
         })),
@@ -152,6 +164,7 @@ unsafe fn intercept(
     source: &Url,
     source_id: &Arc<str>,
     cache: &DnsCache,
+    record_activity: bool,
 ) -> windows::core::Result<()> {
     let mut raw = PWSTR::null();
     args.Request()?.Uri(&mut raw)?;
@@ -162,7 +175,19 @@ unsafe fn intercept(
     {
         return Ok(());
     }
-    let checked = |allowed| finish_request(args, blocked, app, source_id, source, &uri, allowed);
+    let record_activity = record_activity && !crate::runtime_privacy::active();
+    let checked = |allowed| {
+        finish_request(
+            args,
+            blocked,
+            app,
+            source_id,
+            source,
+            &uri,
+            allowed,
+            record_activity,
+        )
+    };
     let Ok(target) = Url::parse(&uri) else {
         return checked(false);
     };
@@ -218,6 +243,7 @@ unsafe fn intercept(
             source_id: source_id.clone(),
             source: source.clone(),
             uri,
+            record_activity,
         });
         first
     });
@@ -268,6 +294,7 @@ fn complete(app: &AppHandle, host: &str, allowed: bool) {
                 &item.source,
                 &item.uri,
                 allowed,
+                item.record_activity,
             );
             let _ = item.deferral.Complete();
         }
@@ -282,6 +309,7 @@ unsafe fn finish_request(
     source: &Url,
     uri: &str,
     allowed: bool,
+    record_activity: bool,
 ) -> windows::core::Result<()> {
     let service = app.try_state::<adblocker::Service>();
     let denial = if !allowed {
@@ -296,7 +324,9 @@ unsafe fn finish_request(
     };
     if let Some(denial) = denial {
         args.SetResponse(blocked)?;
-        if let Some(service) = service {
+        if let Some(service) =
+            service.filter(|_| record_activity && !crate::runtime_privacy::active())
+        {
             service.count(source_id, denial);
         }
     }

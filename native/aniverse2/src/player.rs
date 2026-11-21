@@ -128,6 +128,7 @@ pub(crate) struct Service {
     capture_slot: Arc<Semaphore>,
     catalogue: Semaphore,
     catalogue_queue: Semaphore,
+    catalogue_cache: Mutex<catalogue::SnapshotCache>,
     private_views: private_views::Registry,
 }
 
@@ -174,16 +175,24 @@ impl Service {
             capture_slot: Arc::new(Semaphore::new(1)),
             catalogue: Semaphore::new(1),
             catalogue_queue: Semaphore::new(8),
+            catalogue_cache: Mutex::default(),
             private_views: private_views::Registry::default(),
         }
     }
 
     pub(crate) fn reset_source_sessions(&self) {
         self.privacy_epoch.fetch_add(1, Ordering::AcqRel);
+        self.clear_catalogue_cache();
         let mut views = self.views();
         self.private_views.clear();
         for (_, session) in views.drain() {
             session.close();
+        }
+    }
+
+    fn clear_catalogue_cache(&self) {
+        if let Ok(mut cache) = self.catalogue_cache.lock() {
+            cache.clear();
         }
     }
 
@@ -258,13 +267,6 @@ impl Service {
         input: Value,
     ) -> Result<Value, RpcError> {
         if method == "sources.catalogue" {
-            let busy = || failure("The source catalogue is busy. Try again shortly.");
-            let _queued = self.catalogue_queue.try_acquire().map_err(|_| busy())?;
-            let _permit =
-                tokio::time::timeout(std::time::Duration::from_secs(12), self.catalogue.acquire())
-                    .await
-                    .map_err(|_| busy())?
-                    .map_err(|_| busy())?;
             return catalogue::load(self, owner, root, &input).await;
         }
         if crate::runtime_privacy::active()
@@ -307,6 +309,7 @@ impl Service {
             }
             legacy_session::forget(root, &session.source)?;
             crate::desktop::clear_browsing_data(&session.view, true).await?;
+            self.clear_catalogue_cache();
             return Ok(Value::Null);
         }
         if method == "sources.discover" {
@@ -555,6 +558,7 @@ impl Service {
             source.id.clone(),
             self.dns.clone(),
             hidden,
+            !hidden && !discovery && lease.is_none(),
             (!hidden).then(|| (id, state.clone())),
         )
         .await

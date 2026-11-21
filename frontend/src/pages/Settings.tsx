@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import type { AccentName, AccountInfo, DeepPartial, Provider, Settings, SourceInfo } from '../../../app/shared/types';
 import { SourceIcon, Spinner, Switch } from '../components/common';
+import { BlockingActivityReport } from '../components/BlockingActivityReport';
 import { Disclaimer } from '../components/Disclaimer';
 import { Anime4KPanel } from '../components/Anime4K';
 import { ChangelogPage } from '../components/Changelog';
@@ -477,13 +478,15 @@ function AccountRow({
   const waiting = state === 'connect' || account.signingIn;
   const title = account.connected ? `${account.userName} · ${name}` : name;
   const detail = waiting
-    ? `Finish signing in to ${name} in your browser, then allow AniVerse to open. This page updates by itself.`
+    ? isAniVerse2
+      ? `Finish signing in to ${name} in the window that opened. This page updates by itself.`
+      : `Finish signing in to ${name} in your browser, then allow AniVerse to open. This page updates by itself.`
     : account.needsReconnect
       ? `Your ${name} session expired or was revoked. Reconnect to resume syncing — ${account.pending ? `${account.pending} change(s) are waiting` : 'nothing is lost'}.`
       : account.connected
         ? [account.lastSyncAt ? `Last sync ${timeAgo(account.lastSyncAt)}` : 'Not synced yet', account.pending ? `${account.pending} pending` : null, account.lastError ? account.lastError : null].filter(Boolean).join(' · ')
         : account.clientIdConfigured
-          ? `Sign in on ${name}’s own page in your browser. AniVerse never sees your password.`
+          ? (isAniVerse2 ? `Sign in on ${name}’s own page.` : `Sign in on ${name}’s own page in your browser. AniVerse never sees your password.`)
           : `${name} sign-in isn’t available in this build (no client ID configured).`;
   return (
     <div className="setting">
@@ -567,6 +570,7 @@ function PrivacySection() {
           <Switch label="Block popups" on={s.blockPopups} onChange={(v) => save({ privacy: { blockPopups: v } })} />
         </Setting>
       </Group>
+      {isAniVerse2 && stats && <BlockingActivityReport stats={stats} />}
       <Group title="Cloudflare">
         <Setting
           title="Automatic Cloudflare verification"
@@ -639,7 +643,7 @@ function UpdatesGroup() {
         )}
       </Setting>
       {platform === 'win32' && !isAniVerse2 && !off && (
-        <Setting title="AniVerse2" desc="Checks the separate Windows release and prepares to carry over your saved sources and history.">
+        <Setting title="AniVerse2" desc="Copies your saved sources, settings, and history to AniVerse2. AniVerse 1 stays installed.">
           <button className="btn sm" disabled={working || u.status === 'downloaded'} onClick={migrate}>
             <ArrowUp size={14} /> Update AniVerse to AniVerse2
           </button>

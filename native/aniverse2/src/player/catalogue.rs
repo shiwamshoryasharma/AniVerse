@@ -1,17 +1,77 @@
 use super::{
     allowed_top, failure, invalid, native, navigation, page, resolve_source, Bounds, Service,
-    Session,
+    Session, Source,
 };
 use crate::{metadata, patterns, profile, RpcError};
 use serde_json::{json, Value};
 use std::{
+    collections::VecDeque,
     path::Path,
-    sync::atomic::Ordering,
+    sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
 };
 use tauri::{Manager, Url, Webview};
 
 const PAGE: &str = include_str!(concat!(env!("OUT_DIR"), "/site-catalogue.js"));
+
+const SNAPSHOT_TTL: Duration = Duration::from_secs(45);
+const MAX_SNAPSHOTS: usize = 12;
+
+#[derive(PartialEq, Eq)]
+struct SnapshotKey {
+    source: String,
+    base: Url,
+    search_template: Option<String>,
+    search: String,
+    audio: String,
+    requested: u64,
+    privacy_epoch: u64,
+}
+
+struct Snapshot {
+    page: Value,
+    number: u64,
+    origin: String,
+}
+
+#[derive(Default)]
+pub(super) struct SnapshotCache {
+    entries: VecDeque<(SnapshotKey, Instant, Arc<Snapshot>)>,
+    generation: u64,
+}
+
+impl SnapshotCache {
+    fn get(&mut self, key: &SnapshotKey) -> Option<Arc<Snapshot>> {
+        self.entries
+            .retain(|(_, checked, _)| checked.elapsed() < SNAPSHOT_TTL);
+        let index = self.entries.iter().position(|(entry, _, _)| entry == key)?;
+        let found = self.entries.remove(index)?;
+        let snapshot = Arc::clone(&found.2);
+        self.entries.push_front(found);
+        Some(snapshot)
+    }
+
+    fn insert(&mut self, generation: u64, key: SnapshotKey, result: &Arc<Snapshot>) {
+        if self.generation != generation
+            || result.number != key.requested
+            || result.origin != key.base.origin().ascii_serialization()
+            || !result.page["items"]
+                .as_array()
+                .is_some_and(|rows| !rows.is_empty())
+        {
+            return;
+        }
+        self.entries.retain(|(entry, _, _)| entry != &key);
+        self.entries
+            .push_front((key, Instant::now(), Arc::clone(result)));
+        self.entries.truncate(MAX_SNAPSHOTS);
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.entries.clear();
+        self.generation = self.generation.wrapping_add(1);
+    }
+}
 
 pub(super) async fn load(
     service: &Service,
@@ -43,78 +103,25 @@ pub(super) async fn load(
             .trim(),
         None => "",
     };
-    let deadline = Instant::now() + Duration::from_secs(35);
-    let target = match (&source.search, search.is_empty()) {
-        (Some(template), false) => {
-            Url::parse(&template.replace("{query}", &navigation::encoded(search)))
-                .map_err(|_| invalid())?
-        }
-        _ => source.base.clone(),
-    };
     let privacy_epoch = crate::runtime_privacy::epoch();
     let private = crate::runtime_privacy::active();
-    let session = service
-        .create_configured_view(
-            owner,
-            source.clone(),
-            Bounds {
-                x: 0.,
-                y: 0.,
-                width: 1100.,
-                height: 750.,
-            },
-            true,
-            private,
-            None,
-        )
-        .await?;
-    if !private {
-        super::legacy_session::restore(&session.view, &source, &service.home.join(&source.id))
-            .await;
-    }
-    let alive = || {
-        privacy_epoch == crate::runtime_privacy::epoch()
-            && Instant::now() < deadline
-            && !session.closed.load(Ordering::Acquire)
-            && session.blocked.lock().is_ok_and(|url| url.is_none())
-    };
-    if !navigation::load(&session, target, &alive).await {
-        return Err(failure("Could not load this source’s catalogue."));
-    }
-    if !search.is_empty() && source.search.is_none() {
-        let methods = owner.state::<patterns::Service>();
-        if !navigation::open_search(
-            &session,
-            search,
-            &methods,
-            &source.base.origin().ascii_serialization(),
-            &mut Vec::new(),
-            &alive,
-        )
-        .await
-        {
-            return Err(failure("Open this source to search its catalogue."));
-        }
-        navigation::key_enter(&session).await?;
-        tokio::time::sleep(Duration::from_millis(450)).await;
-        let _ = page(&session, json!({"op":"viewAll"})).await;
-    }
-    let mut current = settle(&session, audio, !search.is_empty(), &alive, None).await?;
-    let mut number = 1;
-    while number < requested && current["hasNext"] == true && alive() {
-        let before = signature(&current);
-        if operate(&session, "next", audio, !search.is_empty()).await? != true {
-            break;
-        }
-        current = settle(&session, audio, !search.is_empty(), &alive, Some(before)).await?;
-        number += 1;
-    }
-    let visited_origin = session
-        .view
-        .url()
-        .map_err(|_| failure("The catalogue source was closed."))?
-        .origin();
-    drop(session);
+    let snapshot = read_snapshot(
+        service,
+        owner,
+        &source,
+        SnapshotKey {
+            source: source.id.clone(),
+            base: source.base.clone(),
+            search_template: source.search.clone(),
+            search: search.to_owned(),
+            audio: audio.to_owned(),
+            requested,
+            privacy_epoch,
+        },
+        private,
+    )
+    .await?;
+    let current = &snapshot.page;
     let cards = current["items"]
         .as_array()
         .ok_or_else(|| failure("The source’s catalogue is unavailable."))?;
@@ -135,7 +142,7 @@ pub(super) async fn load(
             let title = card["title"].as_str()?;
             let url = Url::parse(card["url"].as_str()?).ok()?;
             if !allowed_top(&url, &source.base)
-                || url.origin() != visited_origin
+                || url.origin().ascii_serialization() != snapshot.origin
                 || !matches_audio(card, audio, category)
                 || (!search.is_empty()
                     && source.search.is_none()
@@ -210,13 +217,23 @@ pub(super) async fn load(
         Some(json!({"title":title,"url":url.as_str(),"media":entry,"cover":entry.and_then(|entry| entry["cover"].as_str()),
             "sub":count(card,"sub"),"dub":count(card,"dub"),"total":count(card,"total")}))
     }).collect::<Vec<_>>();
-    if (!ids.is_empty() || fallback.is_some()) && visited_origin == source.base.origin() {
-        let origin = source.base.origin().ascii_serialization();
-        if let Ok((sources, private)) = profile::audio_context(root) {
-            if sources.get(&source.id) == Some(&origin) {
-                owner
-                    .state::<patterns::Service>()
-                    .observe_catalogue(&source.id, &origin, &items, &private);
+    if privacy_epoch != crate::runtime_privacy::epoch() {
+        return Err(failure("The source catalogue session changed."));
+    }
+    if !private
+        && (!ids.is_empty() || fallback.is_some())
+        && snapshot.origin == source.base.origin().ascii_serialization()
+    {
+        if let Ok((sources, private_titles)) = profile::audio_context(root) {
+            if sources.get(&source.id) == Some(&snapshot.origin)
+                && privacy_epoch == crate::runtime_privacy::epoch()
+            {
+                owner.state::<patterns::Service>().observe_catalogue(
+                    &source.id,
+                    &snapshot.origin,
+                    &items,
+                    &private_titles,
+                );
             }
         }
     }
@@ -224,9 +241,140 @@ pub(super) async fn load(
         items.sort_by_key(|item| std::cmp::Reverse(item["media"]["score"].as_i64().unwrap_or(0)));
     }
     Ok(
-        json!({"items":items,"sourceId":source.id,"sourceName":source.name,"page":number,
+        json!({"items":items,"sourceId":source.id,"sourceName":source.name,"page":snapshot.number,
         "hasNext":current["hasNext"]==true,"audio":audio,"metadataError":metadata_error}),
     )
+}
+
+async fn read_snapshot(
+    service: &Service,
+    owner: &Webview,
+    source: &Source,
+    key: SnapshotKey,
+    private: bool,
+) -> Result<Arc<Snapshot>, RpcError> {
+    let cached = || {
+        if private || key.privacy_epoch != crate::runtime_privacy::epoch() {
+            return None;
+        }
+        service.catalogue_cache.lock().ok()?.get(&key)
+    };
+    if let Some(hit) = cached() {
+        return Ok(hit);
+    }
+    let busy = || failure("The source catalogue is busy. Try again shortly.");
+    let _queued = service.catalogue_queue.try_acquire().map_err(|_| busy())?;
+    let _permit = tokio::time::timeout(Duration::from_secs(12), service.catalogue.acquire())
+        .await
+        .map_err(|_| busy())?
+        .map_err(|_| busy())?;
+    // The first request may have captured this exact rendered page while we waited.
+    if let Some(hit) = cached() {
+        return Ok(hit);
+    }
+    if key.privacy_epoch != crate::runtime_privacy::epoch() {
+        return Err(failure("The source catalogue session changed."));
+    }
+    let generation = service
+        .catalogue_cache
+        .lock()
+        .ok()
+        .map(|cache| cache.generation);
+    let snapshot = Arc::new(capture(service, owner, source, &key, private).await?);
+    if !private && key.privacy_epoch == crate::runtime_privacy::epoch() {
+        if let (Some(generation), Ok(mut cache)) = (generation, service.catalogue_cache.lock()) {
+            cache.insert(generation, key, &snapshot);
+        }
+    }
+    Ok(snapshot)
+}
+
+async fn capture(
+    service: &Service,
+    owner: &Webview,
+    source: &Source,
+    key: &SnapshotKey,
+    private: bool,
+) -> Result<Snapshot, RpcError> {
+    let search = key.search.as_str();
+    let audio = key.audio.as_str();
+    let requested = key.requested;
+    let privacy_epoch = key.privacy_epoch;
+    let deadline = Instant::now() + Duration::from_secs(35);
+    let target = match (&source.search, search.is_empty()) {
+        (Some(template), false) => {
+            Url::parse(&template.replace("{query}", &navigation::encoded(search)))
+                .map_err(|_| invalid())?
+        }
+        _ => source.base.clone(),
+    };
+    let session = service
+        .create_configured_view(
+            owner,
+            source.clone(),
+            Bounds {
+                x: 0.,
+                y: 0.,
+                width: 1100.,
+                height: 750.,
+            },
+            true,
+            private,
+            None,
+        )
+        .await?;
+    if !private {
+        super::legacy_session::restore(&session.view, &source, &service.home.join(&source.id))
+            .await;
+    }
+    let alive = || {
+        privacy_epoch == crate::runtime_privacy::epoch()
+            && Instant::now() < deadline
+            && !session.closed.load(Ordering::Acquire)
+            && session.blocked.lock().is_ok_and(|url| url.is_none())
+    };
+    if !navigation::load(&session, target, &alive).await {
+        return Err(failure("Could not load this source’s catalogue."));
+    }
+    if !search.is_empty() && source.search.is_none() {
+        let methods = owner.state::<patterns::Service>();
+        if !navigation::open_search(
+            &session,
+            search,
+            &methods,
+            &source.base.origin().ascii_serialization(),
+            &mut Vec::new(),
+            &alive,
+        )
+        .await
+        {
+            return Err(failure("Open this source to search its catalogue."));
+        }
+        navigation::key_enter(&session).await?;
+        tokio::time::sleep(Duration::from_millis(450)).await;
+        let _ = page(&session, json!({"op":"viewAll"})).await;
+    }
+    let mut current = settle(&session, audio, !search.is_empty(), &alive, None).await?;
+    let mut number = 1;
+    while number < requested && current["hasNext"] == true && alive() {
+        let before = signature(&current);
+        if operate(&session, "next", audio, !search.is_empty()).await? != true {
+            break;
+        }
+        current = settle(&session, audio, !search.is_empty(), &alive, Some(before)).await?;
+        number += 1;
+    }
+    let visited_origin = session
+        .view
+        .url()
+        .map_err(|_| failure("The catalogue source was closed."))?
+        .origin()
+        .ascii_serialization();
+    Ok(Snapshot {
+        page: current,
+        number,
+        origin: visited_origin,
+    })
 }
 
 fn aliases(entry: &Value) -> impl Iterator<Item = &str> {

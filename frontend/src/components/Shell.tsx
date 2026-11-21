@@ -30,13 +30,14 @@ import { useAccounts, useAdblockStats, useBridgeEvents, useSearch, useSettings }
 import { useToast } from '../lib/useToast';
 import { Logo, Spinner } from './common';
 import { ContextMenuProvider } from './ContextMenu';
-import { interfaceStyle } from '../../../app/shared/interface';
+import { useInterfaceLayout } from '../lib/interfaceLayout';
 import { seasonalVisuals } from '../../../app/shared/seasonal';
 import { useMidnightTheme } from '../lib/desktopTheme';
 import { DesktopSeasonalVisuals } from '../lib/seasonal';
 import { IncognitoButton } from './Privacy';
 import { ReleaseAnnouncements } from './Changelog';
 import { UpdateBadge } from './Updates';
+import { DesktopSearch } from './DesktopSearch';
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -63,7 +64,7 @@ export function Shell() {
   const settings = useSettings();
   const [open, setOpen] = useState(readRailPref);
   const midnight = useMidnightTheme();
-  const layout = interfaceStyle(settings.appearance.style).layout;
+  const layout = useInterfaceLayout(settings.appearance.style);
   const navigate = useNavigate();
   const toast = useToast();
   const location = useLocation();
@@ -73,12 +74,12 @@ export function Shell() {
     const root = document.documentElement;
     root.dataset.desktopTheme = midnight ? 'midnight' : 'standard';
     root.dataset.style = settings.appearance.style;
-    root.dataset.layout = interfaceStyle(settings.appearance.style).layout;
+    root.dataset.layout = layout;
     root.dataset.accent = settings.appearance.accent;
     root.dataset.density = settings.appearance.density;
     root.dataset.font = settings.appearance.fontFamily;
     root.dataset.motion = settings.appearance.reduceMotion ? 'reduce' : 'full';
-  }, [settings.appearance, midnight]);
+  }, [settings.appearance, layout, midnight]);
 
   useEffect(()=>{
     const icon=document.querySelector<HTMLLinkElement>('link[rel="icon"]');
@@ -134,7 +135,7 @@ export function Shell() {
             Ani<b>Verse{isAniVerse2 ? '2' : ''}</b>
           </span>
         </div>
-        <SearchBox />
+        {isAniVerse2 ? <DesktopSearch /> : <SearchBox />}
         <div className="spacer" data-tauri-drag-region={isAniVerse2 ? "" : undefined} />
         <IncognitoButton />
         <ReleaseAnnouncements />

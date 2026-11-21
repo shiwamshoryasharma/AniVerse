@@ -114,20 +114,23 @@ pub(in crate::integrations) async fn run(
         .await;
         match fetched {
             Ok(rest) => active.push((session, rest)),
-            Err(error) => failure(window, &mut report, provider, error),
+            Err(error) => failure(window, root, epoch, &mut report, provider, error),
         }
     }
     privacy(epoch)?;
     state::merge(root, &active, &mut report)?;
     for (session, remote) in active {
         if let Err(error) = flush(service, root, &session, remote.as_ref(), &mut report).await {
-            failure(window, &mut report, session.provider, error);
+            failure(window, root, epoch, &mut report, session.provider, error);
             continue;
         }
         privacy(epoch)?;
-        if mode == Mode::Full {
-            state::mark_synced(root, session.provider, started)?;
-        }
+        state::sync_status(
+            root,
+            session.provider,
+            (mode == Mode::Full).then_some(started),
+            None,
+        )?;
         event(window, session.provider, "ok", "Account list checked.");
     }
     Ok(
@@ -174,7 +177,7 @@ async fn sessions(
                 last_sync: saved["lastSyncAt"].as_i64(),
                 privacy_epoch: epoch,
             }),
-            Err(error) => failure(window, report, provider, error),
+            Err(error) => failure(window, root, epoch, report, provider, error),
         }
     }
     Ok(result)
@@ -317,7 +320,17 @@ fn event(window: &Webview, provider: &'static str, state: &str, message: &str) {
     );
 }
 
-fn failure(window: &Webview, report: &mut Report, provider: &'static str, error: RpcError) {
+fn failure(
+    window: &Webview,
+    root: &Path,
+    epoch: u64,
+    report: &mut Report,
+    provider: &'static str,
+    error: RpcError,
+) {
+    if privacy(epoch).is_ok() {
+        let _ = state::sync_status(root, provider, None, Some(&error.message));
+    }
     report.failed += 1;
     report.errors.push(format!("{provider}: {}", error.message));
     event(window, provider, "error", &error.message);

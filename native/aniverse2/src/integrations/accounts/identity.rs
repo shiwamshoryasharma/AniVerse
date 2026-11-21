@@ -13,6 +13,8 @@ const MAL_TOKEN: &str = "https://myanimelist.net/v1/oauth2/token";
 
 pub(super) const ANILIST_REDIRECT: &str = "aniverse2://oauth/anilist";
 pub(super) const MAL_REDIRECT: &str = "aniverse2://oauth/myanimelist";
+pub(super) const LEGACY_ANILIST_REDIRECT: &str = "aniverse://oauth/anilist";
+pub(super) const LEGACY_MAL_REDIRECT: &str = "aniverse://oauth/myanimelist";
 
 pub(super) fn client_id(provider: &str) -> Option<&'static str> {
     match provider {
@@ -28,13 +30,26 @@ pub(super) fn client_id(provider: &str) -> Option<&'static str> {
     }
 }
 
+pub(super) fn legacy_client_id(provider: &str) -> Option<&'static str> {
+    match provider {
+        "anilist" => option_env!("ANIVERSE_ANILIST_CLIENT_ID")
+            .map(str::trim)
+            .filter(|id| (1..=12).contains(&id.len()) && id.bytes().all(|x| x.is_ascii_digit())),
+        "mal" => mal_client_id(),
+        _ => None,
+    }
+}
+
 fn saved_mal_client(account: &Value) -> Option<&'static str> {
     if account["oauthClient"].is_null() {
         mal_client_id()
     } else {
         // A profile may only select a currently compiled/public client, never an
         // arbitrary application ID from renderer input or migrated settings.
-        client_id("mal").filter(|current| account["oauthClient"] == *current)
+        [client_id("mal"), legacy_client_id("mal")]
+            .into_iter()
+            .flatten()
+            .find(|current| account["oauthClient"] == *current)
     }
 }
 
@@ -74,6 +89,7 @@ pub(super) async fn exchange_mal(
     client: &str,
     code: &str,
     verifier: &str,
+    redirect: &'static str,
 ) -> Result<Tokens, RpcError> {
     mal_exchange(
         service,
@@ -82,7 +98,7 @@ pub(super) async fn exchange_mal(
             ("grant_type", "authorization_code"),
             ("code", code),
             ("code_verifier", verifier),
-            ("redirect_uri", MAL_REDIRECT),
+            ("redirect_uri", redirect),
         ],
         None,
     )

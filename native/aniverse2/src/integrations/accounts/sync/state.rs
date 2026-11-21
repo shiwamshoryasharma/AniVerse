@@ -413,18 +413,30 @@ pub(super) fn completed(root: &Path, job: &Job, error: Option<&str>) -> Result<(
     Ok(())
 }
 
-pub(super) fn mark_synced(root: &Path, provider: &str, now: i64) -> Result<(), RpcError> {
-    let db = profile::writable(root).map_err(storage)?;
-    let mut data = super::read(Some(&db), provider)?;
-    if data.is_object() {
-        data["lastSyncAt"] = json!(now);
-        db.execute(
+pub(super) fn sync_status(
+    root: &Path,
+    provider: &str,
+    synced_at: Option<i64>,
+    error: Option<&str>,
+) -> Result<(), RpcError> {
+    let mut db = profile::writable(root).map_err(storage)?;
+    let tx = db
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(storage)?;
+    let mut data = super::read(Some(&tx), provider)?;
+    let message = json!(error);
+    if data.is_object() && (data["lastError"] != message || synced_at.is_some()) {
+        if let Some(synced_at) = synced_at {
+            data["lastSyncAt"] = json!(synced_at);
+        }
+        data["lastError"] = message;
+        tx.execute(
             "UPDATE accounts SET data=?2 WHERE provider=?1",
             params![provider, data.to_string()],
         )
         .map_err(storage)?;
     }
-    Ok(())
+    tx.commit().map_err(storage)
 }
 
 fn now() -> i64 {
