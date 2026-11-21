@@ -139,17 +139,21 @@ function Hero({ items }: { items: Media[] }) {
     const target = spotlight.current;
     if (!isAniVerse2 || !hasSlides || !target) return;
     let inViewport = true;
-    const syncVisibility = () => setVisible(inViewport && !document.hidden);
+    const syncVisibility = () => setVisible(inViewport && !document.hidden && document.hasFocus());
     const observer = new IntersectionObserver(([entry]) => {
       inViewport = entry.isIntersecting;
       syncVisibility();
     });
     observer.observe(target);
     document.addEventListener('visibilitychange', syncVisibility);
+    window.addEventListener('focus', syncVisibility);
+    window.addEventListener('blur', syncVisibility);
     syncVisibility();
     return () => {
       observer.disconnect();
       document.removeEventListener('visibilitychange', syncVisibility);
+      window.removeEventListener('focus', syncVisibility);
+      window.removeEventListener('blur', syncVisibility);
     };
   }, [hasSlides]);
 
@@ -159,17 +163,24 @@ function Hero({ items }: { items: Media[] }) {
     return () => clearInterval(t);
   }, [paused, visible, count, setIndex]);
 
+  useEffect(() => {
+    if (!isAniVerse2 || previous < 0) return;
+    // The hidden full-size image is needed only for the 700 ms crossfade.
+    const timer = window.setTimeout(() => selectSlide(current =>
+      current.index === index && current.previous === previous ? { index, previous: -1 } : current), 750);
+    return () => window.clearTimeout(timer);
+  }, [index, previous]);
   if (!count) return null;
   const active = index % count;
   const current = items[active];
   const next = visible && loadedArt.includes(current.banner ?? current.cover) ? (active + 1) % count : -1;
 
   return (
-    <section ref={spotlight} className="hero" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} aria-roledescription="carousel">
+    <section ref={spotlight} className="hero" data-spotlight-visible={isAniVerse2 ? visible : undefined} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} aria-roledescription="carousel">
       {items.map((m, i) => {
         const art = m.banner ?? m.cover;
         return (
-          <div key={m.id} className={cx('hero-slide', i === active && 'active')} aria-hidden={i !== active}>
+          <div key={m.id} className={cx('hero-slide', i === active && 'active', isAniVerse2 && i === previous && 'outgoing')} aria-hidden={i !== active}>
             {(!isAniVerse2 || i === active || i === previous || i === next) && (
               <img src={art} alt="" decoding={isAniVerse2 ? 'async' : undefined}
                 fetchPriority={isAniVerse2 ? (i === active ? 'high' : 'low') : undefined}

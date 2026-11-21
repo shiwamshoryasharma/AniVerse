@@ -221,6 +221,7 @@ export interface AniverseBridge {
   readonly edition?: 'aniverse2';
   readonly releasePlayerFile?: (url: string) => Promise<void>;
   readonly saveMp4?: (url: string, sourceId?: string) => Promise<boolean>;
+  readonly saveSiteMp4?: (webContentsId: number) => Promise<boolean>;
   readonly onMp4Progress?: (listener: (progress: { received: number; total: number | null }) => void) => () => void;
   readonly hoverSourceAudio?: (sourceId: string, mediaId: number) => Promise<{ sub: number | null; dub: number | null; total: number | null } | null>;
   readonly windowControls?: {

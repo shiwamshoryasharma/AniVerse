@@ -530,7 +530,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
               ? <SiteQuantumAudioControl id={webContentsId} ready={!!navKey && navReady === navKey && !siteBusy && !choosing} />
               : <QuantumAudioUnavailable labelled />)}
             <DownloadMp4Button url={offeredDownload} sourceId={sourceId ?? undefined}
-              unavailableReason="This source has no public MP4 available to download." />
+              webContentsId={isSite && !privatePlayback && navReady === navKey && !siteBusy && !choosing ? webContentsId ?? undefined : undefined}
+              unavailableReason={isSite && !privatePlayback ? 'Open an episode to check its download options.' : 'MP4 saving is unavailable for this player.'} />
           </div>}
 
           <div className="toolbar">

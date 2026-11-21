@@ -1,3 +1,5 @@
+mod hls;
+mod remux;
 mod transfer;
 
 use crate::{profile, RpcError};
@@ -6,7 +8,9 @@ use reqwest::{redirect::Policy, Client, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
+    future::Future,
     io::{self, Write},
+    net::IpAddr,
     path::{Path, PathBuf},
     sync::Mutex,
     time::Duration,
@@ -117,6 +121,38 @@ impl Service {
             return Err(invalid("Choose a public HTTPS MP4 file from this source."));
         }
         let url = Url::parse(&input.url).map_err(|_| invalid("The MP4 link is invalid."))?;
+        self.save_validated(window, url, None, || async { true })
+            .await
+    }
+
+    pub(crate) async fn save_active<Fut: Future<Output = bool>>(
+        &self,
+        window: &Webview,
+        url: Url,
+        observed: Option<Url>,
+        validate: impl Fn() -> Fut,
+    ) -> Result<Value, RpcError> {
+        let _operation = self.begin()?;
+        if !is_active_media_url(&url) || (observed.is_some() && !has_extension(&url, "m3u8")) {
+            return Err(invalid(
+                "Choose a public MP4 or clear on-demand HLS stream.",
+            ));
+        }
+        if !validate().await {
+            return Err(invalid(
+                "The active video changed before the download started.",
+            ));
+        }
+        self.save_validated(window, url, observed, validate).await
+    }
+
+    async fn save_validated<Fut: Future<Output = bool>>(
+        &self,
+        window: &Webview,
+        url: Url,
+        observed: Option<Url>,
+        validate: impl Fn() -> Fut,
+    ) -> Result<Value, RpcError> {
         let mut dialog = window
             .dialog()
             .file()
@@ -137,16 +173,34 @@ impl Service {
         {
             return Err(invalid("Choose a filename ending in .mp4."));
         }
+        if !validate().await {
+            return Err(invalid(
+                "The active video changed before the download started.",
+            ));
+        }
         let client = public_transport(&url).await?;
-        timeout(
-            Duration::from_secs(45 * 60),
-            transfer::save(&client, &url, &destination, |received, total| {
-                let _ = window.emit(
-                    "aniverse:mp4/progress",
-                    json!({"received": received, "total": total}),
-                );
-            }),
-        )
+        let progress = |received, total| {
+            let _ = window.emit(
+                "aniverse:mp4/progress",
+                json!({ "received": received, "total": total }),
+            );
+        };
+        timeout(Duration::from_secs(45 * 60), async {
+            if has_extension(&url, "m3u8") {
+                let ffmpeg = bundled_ffmpeg(window)?;
+                remux::save(
+                    &client,
+                    &url,
+                    observed.as_ref(),
+                    &destination,
+                    &ffmpeg,
+                    progress,
+                )
+                .await
+            } else {
+                transfer::save(&client, &url, &destination, progress).await
+            }
+        })
         .await
         .map_err(|_| RpcError::new("network", "The MP4 download timed out."))??;
         Ok(Value::Bool(true))
@@ -227,7 +281,10 @@ fn suggested_name(url: &Url) -> String {
         .path_segments()
         .and_then(|segments| segments.last())
         .unwrap_or("video.mp4");
-    let stem = base.get(..base.len().saturating_sub(4)).unwrap_or("video");
+    let stem = base
+        .rsplit_once('.')
+        .map(|(stem, _)| stem)
+        .unwrap_or("video");
     let safe: String = stem
         .chars()
         .take(96)
@@ -245,8 +302,61 @@ fn suggested_name(url: &Url) -> String {
     )
 }
 
+pub(crate) fn is_active_media_url(url: &Url) -> bool {
+    public_media_url(url) && (has_extension(url, "mp4") || has_extension(url, "m3u8"))
+}
+
+fn has_extension(url: &Url, expected: &str) -> bool {
+    url.path()
+        .rsplit_once('.')
+        .is_some_and(|(_, value)| value.eq_ignore_ascii_case(expected))
+}
+
+fn public_media_url(url: &Url) -> bool {
+    url.as_str().len() <= 4096
+        && url.query().is_none()
+        && url.fragment().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && (crate::player::fixture_source(url)
+            || (url.scheme() == "https"
+                && url.port().is_none()
+                && url.host_str().is_some_and(|host| {
+                    let host = host.trim_matches(['[', ']']).trim_end_matches('.');
+                    host.parse::<IpAddr>()
+                        .map(allows_public_address)
+                        .unwrap_or_else(|_| {
+                            host.contains('.')
+                                && !host.ends_with(".localhost")
+                                && !host.ends_with(".local")
+                        })
+                })))
+}
+
+fn bundled_ffmpeg(window: &Webview) -> Result<PathBuf, RpcError> {
+    if let Ok(resources) = window.path().resource_dir() {
+        let exe = resources.join("ffmpeg/ffmpeg.exe");
+        if exe.is_file() {
+            return Ok(exe);
+        }
+    }
+    #[cfg(any(debug_assertions, feature = "isolated-test"))]
+    {
+        let exe =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../build/vendor/ffmpeg/ffmpeg.exe");
+        if exe.is_file() {
+            return Ok(exe);
+        }
+    }
+    Err(RpcError::new(
+        "config",
+        "The bundled MP4 remuxer is missing.",
+    ))
+}
+
 async fn public_transport(url: &Url) -> Result<Client, RpcError> {
-    let failed = || RpcError::new("network", "Could not reach a public MP4 host.");
+    let failed = || RpcError::new("network", "Could not reach a public media host.");
+    let fixture = crate::player::fixture_source(url);
     let host = url.host_str().ok_or_else(failed)?.trim_matches(['[', ']']);
     let port = url.port_or_known_default().ok_or_else(failed)?;
     let addresses = timeout(Duration::from_secs(5), lookup_host((host, port)))
@@ -255,15 +365,15 @@ async fn public_transport(url: &Url) -> Result<Client, RpcError> {
         .map_err(|_| failed())?
         .collect::<Vec<_>>();
     if addresses.is_empty()
-        || !addresses
-            .iter()
-            .all(|address| allows_public_address(address.ip()))
+        || !addresses.iter().all(|address| {
+            allows_public_address(address.ip()) || (fixture && address.ip().is_loopback())
+        })
     {
         return Err(failed());
     }
     // Connect only to the DNS results already checked. A proxy or redirect could change the destination.
     Client::builder()
-        .https_only(true)
+        .https_only(!fixture)
         .no_proxy()
         .redirect(Policy::none())
         .resolve_to_addrs(host, &addresses)

@@ -8,3 +8,23 @@
     animation: none;
   }
 }
+
+/* Keep the spotlight zoom and crossfade while leaving the banner static between slides. */
+:root[data-aniverse-edition='2'] .home-page .hero-slide > img {
+  transition: none;
+}
+:root[data-aniverse-edition='2'] .home-page :is(.hero-slide.active, .hero-slide.outgoing) > img {
+  animation: spotlight-zoom 2.3s ease-out both;
+}
+:root[data-aniverse-edition='2'] .home-page :is(.hero-slide.outgoing, [data-spotlight-visible='false'] .hero-slide.active) > img {
+  animation-play-state: paused;
+}
+@keyframes spotlight-zoom {
+  from { transform: scale(1.04); }
+  to { transform: scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-aniverse-edition='2'] .home-page .hero-slide > img {
+    animation: none;
+  }
+}

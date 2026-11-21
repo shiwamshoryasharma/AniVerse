@@ -3,9 +3,10 @@ import { useId, useState } from 'react';
 import { errorText, isAniVerse2 } from '../lib/bridge';
 import { useToast } from '../lib/useToast';
 
-export function DownloadMp4Button({ url, sourceId, unavailableReason }: {
+export function DownloadMp4Button({ url, sourceId, webContentsId, unavailableReason }: {
   url?: string | null;
   sourceId?: string;
+  webContentsId?: number;
   unavailableReason?: string;
 }) {
   const toast = useToast();
@@ -13,18 +14,22 @@ export function DownloadMp4Button({ url, sourceId, unavailableReason }: {
   const [saving, setSaving] = useState(false);
   const [percent, setPercent] = useState<number | null>(null);
   const bridge = window.aniverse;
-  const available = !!bridge?.saveMp4 && !!url && /^https:\/\/[^?#]+\.mp4(?:[?#]|$)/i.test(url);
+  const direct = !!bridge?.saveMp4 && !!url && /^https:\/\/[^?#]+\.mp4(?:[?#]|$)/i.test(url);
+  const active = webContentsId !== undefined && !!bridge?.saveSiteMp4;
+  const available = direct || active;
   if (!isAniVerse2 || (!available && !unavailableReason)) return null;
 
   const save = async () => {
-    if (!available || !url || saving) return;
+    if (!available || saving) return;
     setSaving(true);
     setPercent(null);
     const stop = bridge?.onMp4Progress?.(({ received, total }) => {
       setPercent(total ? Math.min(100, Math.floor(received * 100 / total)) : null);
     });
     try {
-      if (await bridge?.saveMp4?.(url, sourceId)) toast.push({ level: 'success', message: 'MP4 saved.' });
+      const saved = direct && url ? await bridge?.saveMp4?.(url, sourceId)
+        : webContentsId === undefined ? false : await bridge?.saveSiteMp4?.(webContentsId);
+      if (saved) toast.push({ level: 'success', message: 'MP4 saved.' });
     } catch (error) {
       toast.push({ level: 'error', message: errorText(error) });
     } finally {

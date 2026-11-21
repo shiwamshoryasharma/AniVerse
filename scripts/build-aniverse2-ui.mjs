@@ -5,9 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { build as bundle } from 'esbuild';
 import { build } from 'vite';
 import { buildInstallerSplash } from './build-aniverse2-installer.mjs';
+import { prepareMediaRuntime } from './prepare-media.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 buildInstallerSplash(root);
+await prepareMediaRuntime();
 const outDir = path.resolve(root, process.argv[2] || 'dist/aniverse2');
 const quantumTarget = path.join(root, 'test/cache/aniverse2/quantum');
 execFileSync('cargo', ['build', '--locked', '--release', '--target', 'wasm32-unknown-unknown',

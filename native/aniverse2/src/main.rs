@@ -366,102 +366,118 @@ fn run(context: tauri::Context<tauri::Wry>, checking: bool) -> Result<(), tauri:
         .invoke_handler(tauri::generate_handler![desktop_rpc])
         .setup(move |app| {
             let profile = profile_path(app)?;
-            let (root, data) = if checking {
-                let boot = migration_boot::Probe::load(&profile)?;
-                let paths = (boot.home.clone(), boot.data.clone());
-                app.manage(boot);
-                paths
-            } else {
-                app.manage(migration_boot::profile_lock(&profile, false)?);
-                let data = app_data(&profile).unwrap_or_else(|error| {
-                    eprintln!("AniVerse2 could not prepare the profile: {error}");
-                    std::process::exit(1)
-                });
-                (profile, data)
-            };
-            let first_run = profile::renderer_preferences(&data)?;
-            let palettes = serde_json::to_string(PALETTES)?;
-            let mut startup = format!(r#"
-                {BRIDGE}
-                (() => {{
-                    if (window !== window.top || location.origin !== 'https://tauri.localhost') return;
-                    for (const [key, value] of Object.entries({first_run})) {{
-                        if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
-                    }}
-                    const sheet = new CSSStyleSheet();
-                    sheet.replaceSync({palettes});
-                    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-                    const setEdition = () => {{
-                        document.documentElement.dataset.aniverseEdition = '2';
-                        const saved = localStorage.getItem('aniverse2.palette');
-                        document.documentElement.dataset.aniverse2Theme = ['dark', 'light', 'github-dimmed', 'vscode', 'ion', 'copper', 'wisteria', 'verdant', 'nocturne', 'legacy'].includes(saved)
-                            ? saved : localStorage.getItem('aniverse.desktop-theme') === 'midnight' ? 'legacy' : 'ion';
-                        document.title = 'AniVerse2';
-                    }};
-                    if (document.documentElement) setEdition();
-                    else document.addEventListener('DOMContentLoaded', setEdition, {{ once: true }});
-                }})();
-            "#);
-            if checking {
-                startup.push_str(migration_boot::SCRIPT);
-            }
-            let webview = root.join("webview");
-            app.manage(updates::Service::new(app.handle(), &root, &data)?);
-            ensure_sandbox_arguments()?;
-            app.manage(gpu_preference::Service::startup(&data));
-            let (rendering, rendering_arguments) = ui_rendering::Service::startup(&data);
-            app.manage(rendering);
-            app.manage(patterns::Service::new(&data));
-            app.manage(player::Service::new(root.join("site-webviews")));
-            app.manage(local_player::Service::default());
-            if !checking {
-                app.manage(cast::Service::new(app.handle().clone(), root.join("cast"))?);
-            }
-            app.manage(profile::WorkspaceState::default());
-            app.manage(adblocker::Service::new(&data));
-            app.manage(integrations::Service::new()?);
-            app.manage(downloads::Service::new(&root, &data));
-            app.manage(data);
-            app.manage(metadata::Client::new()?);
-            let initial = if checking {
-                WebviewUrl::External(Url::parse("about:blank")?)
-            } else {
-                WebviewUrl::App("index.html".into())
-            };
-            let (width, height) = app.primary_monitor().ok().flatten().map_or((1280.0, 860.0), |monitor| {
-                let work_area = monitor.work_area().size.to_logical::<f64>(monitor.scale_factor());
-                ((work_area.width - 24.0).clamp(1.0, 1280.0), (work_area.height - 24.0).clamp(1.0, 860.0))
-            });
-            let window = WebviewWindowBuilder::new(app, MAIN, initial)
-                .title(app.config().product_name.as_deref().unwrap_or("AniVerse2"))
-                .inner_size(width, height)
-                .decorations(false)
-                .visible(!checking && !cfg!(feature = "isolated-test"))
-                .use_https_scheme(true)
-                .initialization_script(startup)
-                .data_directory(dunce::simplified(&webview).to_owned())
-                .browser_extensions_enabled(false)
-                .on_navigation(move |url| app_origin(url) || (checking && url.as_str() == "about:blank"))
-                .on_page_load(|window, payload| {
-                    // On Windows ContentLoading runs for a new document, so
-                    // hash-router navigation keeps its currently owned views.
-                    if payload.event() == tauri::webview::PageLoadEvent::Started {
-                        window.state::<player::Service>().reset_source_sessions();
-                    }
-                })
-                .on_new_window(|_, _| NewWindowResponse::Deny)
-                .build()?;
-            drop(rendering_arguments);
-            if checking {
-                migration_boot::start(&window, webview)?;
-            } else {
-                updates::start(app.handle());
-                adblocker::start(app.handle());
-                integrations::start(app.handle());
-            }
+            let handle = app.handle().clone();
+            // Profile reads can wait for SQLite or a slow disk. Keep the Windows message pump free.
+            std::thread::Builder::new().name("aniverse-startup".into()).spawn(move || {
+                if let Err(error) = start_window(&handle, profile, checking) {
+                    eprintln!("AniVerse2 could not start: {error}");
+                    handle.exit(1);
+                }
+            })?;
             Ok(())
         })
         .run(context)
+}
+
+fn start_window(
+    app: &tauri::AppHandle,
+    profile: PathBuf,
+    checking: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (root, data) = if checking {
+        let boot = migration_boot::Probe::load(&profile)?;
+        let paths = (boot.home.clone(), boot.data.clone());
+        app.manage(boot);
+        paths
+    } else {
+        app.manage(migration_boot::profile_lock(&profile, false)?);
+        let data = app_data(&profile).unwrap_or_else(|error| {
+            eprintln!("AniVerse2 could not prepare the profile: {error}");
+            std::process::exit(1)
+        });
+        (profile, data)
+    };
+    let first_run = profile::renderer_preferences(&data)?;
+    let palettes = serde_json::to_string(PALETTES)?;
+    let mut startup = format!(r#"
+        {BRIDGE}
+        (() => {{
+            if (window !== window.top || location.origin !== 'https://tauri.localhost') return;
+            for (const [key, value] of Object.entries({first_run})) {{
+                if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
+            }}
+            const sheet = new CSSStyleSheet();
+            sheet.replaceSync({palettes});
+            document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+            const setEdition = () => {{
+                document.documentElement.dataset.aniverseEdition = '2';
+                const saved = localStorage.getItem('aniverse2.palette');
+                document.documentElement.dataset.aniverse2Theme = ['dark', 'light', 'github-dimmed', 'vscode', 'ion', 'copper', 'wisteria', 'verdant', 'nocturne', 'legacy'].includes(saved)
+                    ? saved : localStorage.getItem('aniverse.desktop-theme') === 'midnight' ? 'legacy' : 'ion';
+                document.title = 'AniVerse2';
+            }};
+            if (document.documentElement) setEdition();
+            else document.addEventListener('DOMContentLoaded', setEdition, {{ once: true }});
+        }})();
+    "#);
+    if checking {
+        startup.push_str(migration_boot::SCRIPT);
+    }
+    let webview = root.join("webview");
+    app.manage(updates::Service::new(app, &root, &data)?);
+    ensure_sandbox_arguments()?;
+    app.manage(gpu_preference::Service::startup(&data));
+    let (rendering, rendering_arguments) = ui_rendering::Service::startup(&data);
+    app.manage(rendering);
+    app.manage(patterns::Service::new(&data));
+    app.manage(player::Service::new(root.join("site-webviews")));
+    app.manage(local_player::Service::default());
+    if !checking {
+        app.manage(cast::Service::new(app.clone(), root.join("cast"))?);
+    }
+    app.manage(profile::WorkspaceState::default());
+    app.manage(adblocker::Service::new(&data));
+    app.manage(integrations::Service::new()?);
+    app.manage(downloads::Service::new(&root, &data));
+    app.manage(data);
+    app.manage(metadata::Client::new()?);
+    let initial = if checking {
+        WebviewUrl::External(Url::parse("about:blank")?)
+    } else {
+        WebviewUrl::App("index.html".into())
+    };
+    let (width, height) = app.primary_monitor().ok().flatten().map_or((1280.0, 860.0), |monitor| {
+        let work_area = monitor.work_area().size.to_logical::<f64>(monitor.scale_factor());
+        ((work_area.width - 24.0).clamp(1.0, 1280.0), (work_area.height - 24.0).clamp(1.0, 860.0))
+    });
+    let window = WebviewWindowBuilder::new(app, MAIN, initial)
+        .title(app.config().product_name.as_deref().unwrap_or("AniVerse2"))
+        .inner_size(width, height)
+        .decorations(false)
+        .visible(!checking && !cfg!(feature = "isolated-test"))
+        .use_https_scheme(true)
+        .initialization_script(startup)
+        .data_directory(dunce::simplified(&webview).to_owned())
+        .browser_extensions_enabled(false)
+        .on_navigation(move |url| app_origin(url) || (checking && url.as_str() == "about:blank"))
+        .on_page_load(|window, payload| {
+            // On Windows ContentLoading runs for a new document, so
+            // hash-router navigation keeps its currently owned views.
+            if payload.event() == tauri::webview::PageLoadEvent::Started {
+                window.state::<player::Service>().reset_source_sessions();
+            }
+        })
+        .on_new_window(|_, _| NewWindowResponse::Deny)
+        .build()?;
+    drop(rendering_arguments);
+    if checking {
+        migration_boot::start(&window, webview)?;
+    } else {
+        updates::start(app);
+        adblocker::start(app);
+        integrations::start(app);
+    }
+    Ok(())
 }
 
 #[cfg(not(feature = "isolated-test"))]

@@ -699,12 +699,13 @@ fn protocol_id(value: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-async fn audio_world(
+async fn player_world(
     session: &Session,
     generation: u64,
     frame: String,
+    world_name: &str,
 ) -> Result<AudioFrameWorld, RpcError> {
-    let options = json!({"frameId":frame,"worldName":"aniverse-quantum-audio"});
+    let options = json!({"frameId":frame,"worldName":world_name});
     let method = "Page.createIsolatedWorld";
     if let Some(context) = devtools(&session.view, method, options.clone())
         .await
@@ -787,7 +788,7 @@ pub(super) async fn evaluate_audio_frame(
             return Err(failure("The selected source player frame changed."));
         }
     } else {
-        *pinned = Some(audio_world(session, generation, frame).await?);
+        *pinned = Some(player_world(session, generation, frame, "aniverse-quantum-audio").await?);
     }
     let world = pinned
         .as_ref()
@@ -801,6 +802,18 @@ pub(super) async fn evaluate_audio_frame(
         user_gesture,
     )
     .await
+}
+
+pub(super) async fn inspect_player_frame(
+    session: &Session, generation: u64, expression: &'static str,
+) -> Result<Value, RpcError> {
+    let frame = marked_audio_frame(session, generation).await?;
+    let world = player_world(session, generation, frame, "aniverse-download").await?;
+    let result = audio_eval(
+        session, generation, world.target.clone(), world.context, expression.into(), false,
+    ).await;
+    detach_audio_target(session, world.target).await;
+    result
 }
 
 // Teardown uses only the previously approved context, even after its DOM mark is removed.

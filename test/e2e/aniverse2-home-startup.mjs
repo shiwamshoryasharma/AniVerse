@@ -112,6 +112,54 @@ try {
   await page.getByRole('heading', { name: 'Title 7' }).waitFor();
   assert.equal(await page.locator('.latest-episodes .mcard').count(), 36);
   report.navigation = true;
+
+  const original = process.env.ANIVERSE2_HOME_RENDER_BASELINE === '1';
+  const art = () => page.locator('.hero').evaluate(hero => ({
+    fullSizeImages: hero.querySelectorAll('.hero-slide img').length,
+    runningBannerAnimations: hero.getAnimations({ subtree: true }).filter(animation =>
+      animation.playState === 'running' && animation.effect?.target?.matches('.hero-slide img')).length,
+  }));
+  await page.getByRole('button', { name: 'Slide 8', exact: true }).click();
+  await page.getByRole('heading', { name: 'Title 8' }).waitFor();
+  await page.locator('.hero-slide.active img').evaluate(image => image.decode());
+  const transition = await art();
+  await page.waitForTimeout(2800);
+  const settled = await art();
+  const cdp = await page.context().newCDPSession(page);
+  const events = { compositorDraw: 0, raster: 0 };
+  cdp.on('Tracing.dataCollected', ({ value }) => {
+    for (const event of value) {
+      if (event.name === 'Display::DrawAndSwap' && event.ph === 'X') events.compositorDraw++;
+      if (event.name === 'RasterTask' && event.ph === 'X') events.raster++;
+    }
+  });
+  const traceDone = new Promise(done => cdp.once('Tracing.tracingComplete', done));
+  await cdp.send('Tracing.start', { categories: 'cc,viz,gpu,devtools.timeline,disabled-by-default-devtools.timeline.frame' });
+  await page.waitForTimeout(1000);
+  await cdp.send('Tracing.end');
+  await traceDone;
+  await cdp.detach();
+  await page.mouse.move(0, 0);
+  await page.waitForFunction(() => window.homeFixture.intervals.size === 1);
+  const onBackground = await page.evaluate(() => {
+    const hasFocus = document.hasFocus;
+    document.hasFocus = () => false;
+    window.dispatchEvent(new Event('blur'));
+    return new Promise(resolve => requestAnimationFrame(() => {
+      const remaining = window.homeFixture.intervals.size;
+      document.hasFocus = hasFocus;
+      window.dispatchEvent(new Event('focus'));
+      resolve(remaining);
+    }));
+  });
+  await page.waitForFunction(() => window.homeFixture.intervals.size === 1);
+  report.loadedHero = { transition, settled, traceSampleMs: 1000, ...events, backgroundIntervals: onBackground };
+  if (!original) {
+    assert.equal(transition.fullSizeImages >= 2, true, 'Outgoing art stays mounted during the fade');
+    assert.equal(settled.fullSizeImages, 2, 'Keep only the current and next banners after the fade');
+    assert.equal(settled.runningBannerAnimations, 0, 'Idle time between slides must not animate the full banner');
+    assert.equal(onBackground, 0, 'Pause automatic slide work when window focus leaves');
+  }
   assert.deepEqual(report.loading, { placeholders: 55, animated: 2 });
   assert.equal(report.initialBannerNodes, 1);
   assert.deepEqual(report.initialBannerRequests, ['/banner-1.png']);
@@ -120,6 +168,6 @@ try {
 } finally {
   firstBanner.resolve();
   await browser.close();
-  await writeFile(resolve('test/artifacts/aniverse2-home-startup-after.json'), JSON.stringify(report, null, 2) + '\n');
+  await writeFile(resolve(process.env.ANIVERSE2_HOME_RENDER_BASELINE === '1' ? 'test/artifacts/aniverse2-home-rendering-baseline.json' : 'test/artifacts/aniverse2-home-startup-after.json'), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report));
 }

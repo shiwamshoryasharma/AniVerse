@@ -14,6 +14,9 @@
     saveMp4(url, sourceId) {
       return window.aniverse.invoke('player.saveMp4', { url, sourceId });
     },
+    saveSiteMp4(webContentsId) {
+      return window.aniverse.invoke('site.surface', { action: 'downloadMedia', webContentsId, save: true });
+    },
     onMp4Progress(listener) {
       const off = window.__TAURI__.event.listen('aniverse:mp4/progress', ({ payload }) => listener(payload));
       return () => void off.then((unlisten) => unlisten()).catch(() => {});

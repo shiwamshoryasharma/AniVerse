@@ -1,6 +1,7 @@
 mod capture;
 mod catalogue;
 mod discovery;
+mod download;
 mod frames;
 mod legacy_session;
 mod native;
@@ -661,6 +662,7 @@ impl Service {
             }
             #[cfg(feature = "isolated-test")]
             "probeDiagnostics" => return navigation::probe_diagnostics(session).await,
+            "downloadMedia" => return download::request(owner, session, input).await,
             "directMp4" => {
                 let current = session.view.url().ok().filter(|url| {
                     url.query().is_none()

@@ -14,12 +14,12 @@ const bundle = await build({ stdin: {
     "import { ToastProvider } from './frontend/src/lib/toast';",
     "import { DownloadMp4Button } from './frontend/src/components/DownloadMp4Button';",
     "import { SiteQuantumAudioControl } from './frontend/src/player/SiteQuantumAudioControl';",
-    "function Fixture() { const [ready, setReady] = useState(false);",
+    "function Fixture() { const [ready, setReady] = useState(false); const [stream, setStream] = useState(false);",
     "return <ToastProvider><div className='toolbar watch-media-actions' role='group' aria-label='Playback tools'>",
     "<SiteQuantumAudioControl id={1} ready={ready} /><DownloadMp4Button",
-    "url={ready ? 'https://fixture.test/episode.mp4' : null} sourceId='fixture-source'",
+    "url={ready && !stream ? 'https://fixture.test/episode.mp4' : null} webContentsId={stream ? 1 : undefined} sourceId='fixture-source'",
     "unavailableReason='This source has no public MP4 available to download.' />",
-    "</div><button onClick={() => setReady(true)}>Open fixture episode</button></ToastProvider>; }",
+    "</div><button onClick={() => setReady(true)}>Open fixture episode</button><button onClick={() => setStream(true)}>Open HLS fixture</button></ToastProvider>; }",
     "createRoot(document.querySelector('#root')).render(<Fixture />);",
   ].join('\n'),
 }, bundle: true, write: false, jsx: 'automatic' });
@@ -37,7 +37,7 @@ try {
   await page.addInitScript(() => {
     window.saves = [];
     window.aniverse = { edition: 'aniverse2', platform: 'win32', on: () => () => {},
-      saveMp4: async (...args) => (window.saves.push(args), true) };
+      saveMp4: async (...args) => (window.saves.push(args), true), saveSiteMp4: async id => (window.saves.push([id]), true) };
     window.__TAURI__ = { core: { invoke: async (_command, { input }) =>
       ({ state: input.action === 'enable' || input.action === 'status' ? 'active' : 'off' }) } };
   });
@@ -75,6 +75,10 @@ try {
   });
   assert.ok(right, 'Compact Watch actions must fit in their toolbar.');
   report.existingSaveFlowAndCompactLayout = true;
+  await page.getByRole('button', { name: 'Open HLS fixture' }).click();
+  await download.click();
+  assert.deepEqual(await page.evaluate(() => window.saves.at(-1)), [1]);
+  report.activePlayerDownloadUsesOpaqueViewId = true;
   report.passed = true;
 } finally {
   await browser.close();
