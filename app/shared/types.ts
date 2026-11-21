@@ -466,6 +466,7 @@ export interface AppInfo {
   platform: string;
   configPath: string;
   dataPath: string;
+  uiRendering?: import('./graphics').UiRenderingState;
   graphics?: import('./graphics').GraphicsSummary & { renderer: string | null; uiRendering: import('./graphics').UiRenderingState };
 }
 

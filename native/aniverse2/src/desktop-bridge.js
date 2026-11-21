@@ -8,6 +8,19 @@
   Object.defineProperty(window, 'aniverse', { value: Object.freeze({
     platform: 'win32',
     edition: 'aniverse2',
+    releasePlayerFile(url) {
+      return window.aniverse.invoke('player.releaseFile', { url });
+    },
+    saveMp4(url, sourceId) {
+      return window.aniverse.invoke('player.saveMp4', { url, sourceId });
+    },
+    onMp4Progress(listener) {
+      const off = window.__TAURI__.event.listen('aniverse:mp4/progress', ({ payload }) => listener(payload));
+      return () => void off.then((unlisten) => unlisten()).catch(() => {});
+    },
+    hoverSourceAudio(sourceId, mediaId) {
+      return window.aniverse.invoke('sources.hoverAudio', { sourceId, mediaId });
+    },
     windowControls: Object.freeze({
       minimize: () => nativeWindow().minimize(),
       toggleMaximize: () => nativeWindow().toggleMaximize(),

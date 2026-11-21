@@ -558,8 +558,8 @@ function PrivacySection() {
         >
           <Switch label="Block ads" on={s.adblock} onChange={(v) => save({ privacy: { adblock: v } })} />
         </Setting>
-        <Setting title="Filter updates" desc={stats?.error ?? 'Checks hourly and refreshes lists after 24 hours. Reload an open source page after updating to apply new cosmetic rules.'}>
-          <button className="btn sm" disabled={updating||stats?.updating} onClick={()=>{setUpdating(true);void call('adblock.update').then(next=>{qc.setQueryData(keys.adblock,next);toast.push({level:'success',message:'Ad-blocking filters updated. Reload the source page to apply cosmetic rules.'});}).catch(err=>toast.push({level:'error',message:errorText(err)})).finally(()=>setUpdating(false));}}>
+        <Setting title="Filter updates" desc={stats?.error ?? (isAniVerse2 ? 'Checks hourly and refreshes lists after 24 hours. New network rules apply to subsequent source requests.' : 'Checks hourly and refreshes lists after 24 hours. Reload an open source page after updating to apply new cosmetic rules.')}>
+          <button className="btn sm" disabled={updating||stats?.updating} onClick={()=>{setUpdating(true);void call('adblock.update').then(next=>{qc.setQueryData(keys.adblock,next);toast.push({level:'success',message:isAniVerse2?'Network filters updated.':'Ad-blocking filters updated. Reload the source page to apply cosmetic rules.'});}).catch(err=>toast.push({level:'error',message:errorText(err)})).finally(()=>setUpdating(false));}}>
             <RefreshCw size={14}/>{updating||stats?.updating?'Updating…':'Update filters'}
           </button>
         </Setting>

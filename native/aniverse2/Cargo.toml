@@ -1,6 +1,6 @@
 [package]
 name = "aniverse2"
-version = "3.0.3"
+version = "3.0.4"
 edition = "2021"
 publish = false
 
@@ -12,19 +12,29 @@ installer-handoff = ["dep:aniverse-desktop-migration", "dep:dirs"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+adblock = { version = "=0.13.6", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling"] }
 aniverse-desktop-migration = { path = "../desktop-migration", optional = true }
 dirs = { version = "7", optional = true }
+aniverse-security = { path = "../security" }
 chrono = "0.4"
+base64 = "0.23"
+sha2 = "0.11"
+icu_normalizer = "2.4"
 regex = "1"
 reqwest = { version = "0.13.5", default-features = false, features = ["native-tls", "json"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "=2.12.7", features = ["custom-protocol"] }
+tauri = { version = "=2.12.7", features = ["custom-protocol", "unstable"] }
 thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
+tauri-plugin-dialog = "2"
 tauri-plugin-updater = { version = "=2.14.1", default-features = false, features = ["native-tls", "system-proxy"] }
 tempfile = "3"
-tokio = { version = "1", features = ["time", "sync"] }
+tokio = { version = "1", features = ["time", "sync", "fs", "io-util", "net"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+webview2-com = "0.39"
+dunce = "1"
+windows = "0.62"
+windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Security_Cryptography", "Win32_System_Memory", "Win32_System_Com"] }

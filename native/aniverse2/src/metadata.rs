@@ -1,54 +1,128 @@
 mod cards;
+mod request;
+mod search;
+
+pub(crate) use request::Request;
+pub(crate) use search::discovery_score;
 
 use crate::RpcError;
 use chrono::Local;
 use reqwest::{redirect::Policy, StatusCode};
-use serde_json::{json, Value};
+use serde::Deserialize;
+use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
-    sync::Mutex,
+    sync::{Arc, Mutex, MutexGuard, OnceLock, Weak},
     time::{Duration, Instant},
 };
+use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 
 const ENDPOINT: &str = "https://graphql.anilist.co";
 const HOME: &str = include_str!(concat!(env!("OUT_DIR"), "/anilist-home.graphql"));
 const SAFE_HOME: &str = include_str!(concat!(env!("OUT_DIR"), "/anilist-home-safe.graphql"));
 const LATEST: &str = include_str!(concat!(env!("OUT_DIR"), "/anilist-latest.graphql"));
+const CATALOGUE: &str = include_str!(concat!(env!("OUT_DIR"), "/anilist-catalogue.json"));
 const MAX_RESPONSE: usize = 2 * 1024 * 1024;
+const MAX_ENTRIES: usize = 128;
+const MAX_PENDING: usize = 32;
+const DAY: i64 = 86_400;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Request {
-    Home,
-    Latest(u8),
+#[derive(Deserialize)]
+struct Queries {
+    card: String,
+    filters: HashMap<String, String>,
+    details: String,
+    hover: String,
+    search: String,
+    safe_search: String,
+    schedule: String,
+    genres: String,
 }
 
-impl Request {
-    pub(crate) fn parse(method: &str, input: Option<&Value>) -> Option<Result<Self, RpcError>> {
-        match method {
-            "meta.home" => Some(Ok(Self::Home)),
-            "meta.latest" => Some(
-                input
-                    .and_then(|value| value["page"].as_u64())
-                    .filter(|page| (1..=20).contains(page))
-                    .map(|page| Self::Latest(page as u8))
-                    .ok_or_else(|| {
-                        RpcError::new("invalid-input", "Expected an episode page from 1 to 20.")
-                    }),
-            ),
-            _ => None,
+impl Queries {
+    fn browse(&self, variables: &Map<String, Value>) -> String {
+        let mut declarations = String::from("$page: Int, $perPage: Int");
+        let mut media_args = String::from("type: ANIME");
+        for key in variables.keys() {
+            if let Some(kind) = self.filters.get(key.as_str()) {
+                declarations.push_str(&format!(", ${key}: {kind}"));
+                media_args.push_str(&format!(", {key}: ${key}"));
+            }
         }
+        format!(
+            "{}\nquery ({declarations}) {{ Page(page: $page, perPage: $perPage) {{ pageInfo {{ total currentPage hasNextPage }} media({media_args}) {{ ...card }} }} }}",
+            self.card
+        )
     }
+}
+
+type Key = (Request, bool, Vec<i32>);
+
+struct Entry {
+    expires: Instant,
+    last_read: Instant,
+    value: Value,
 }
 
 #[derive(Default)]
 struct Cache {
-    entries: HashMap<(Request, bool), (Instant, Value)>,
+    entries: HashMap<Key, Entry>,
+    flights: HashMap<Key, Weak<AsyncMutex<()>>>,
     cooldown: Option<Instant>,
+    generation: u64,
+}
+
+impl Cache {
+    fn cached(&mut self, key: &Key) -> Option<(bool, Value)> {
+        let entry = self.entries.get_mut(key)?;
+        let now = Instant::now();
+        if now.saturating_duration_since(entry.expires) > Duration::from_secs(7 * DAY as u64) {
+            return None;
+        }
+        entry.last_read = now;
+        Some((entry.expires > now, entry.value.clone()))
+    }
+
+    fn insert(&mut self, key: Key, ttl: u64, value: Value) {
+        if self.entries.len() >= MAX_ENTRIES && !self.entries.contains_key(&key) {
+            let oldest = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_read)
+                .map(|(key, _)| key.clone());
+            if let Some(oldest) = oldest {
+                self.entries.remove(&oldest);
+            }
+        }
+        let now = Instant::now();
+        self.entries.insert(
+            key,
+            Entry {
+                expires: now + Duration::from_secs(ttl),
+                last_read: now,
+                value,
+            },
+        );
+    }
+
+    fn flight(&mut self, key: &Key) -> Option<Arc<AsyncMutex<()>>> {
+        if let Some(running) = self.flights.get(key).and_then(Weak::upgrade) {
+            return Some(running);
+        }
+        self.flights.retain(|_, flight| flight.strong_count() > 0);
+        if self.flights.len() >= MAX_PENDING {
+            return None;
+        }
+        let flight = Arc::new(AsyncMutex::new(()));
+        self.flights.insert(key.clone(), Arc::downgrade(&flight));
+        Some(flight)
+    }
 }
 
 pub(crate) struct Client {
     http: reqwest::Client,
     cache: Mutex<Cache>,
+    outbound: Semaphore,
 }
 
 impl Client {
@@ -61,72 +135,203 @@ impl Client {
                 .user_agent("AniVerse2 Desktop")
                 .build()?,
             cache: Mutex::new(Cache::default()),
+            outbound: Semaphore::new(4),
         })
     }
 
-    pub(crate) async fn get(&self, request: Request, adult: bool) -> Result<Value, RpcError> {
-        let key = (request, adult);
-        let (stale, limited) = {
-            let cache = self.cache.lock().unwrap_or_else(|error| error.into_inner());
-            let cached = cache.entries.get(&key);
-            if let Some((expires, value)) = cached {
-                if *expires > Instant::now() {
-                    return Ok(value.clone());
+    fn cache(&self) -> MutexGuard<'_, Cache> {
+        self.cache.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
+    pub(crate) fn clear_cache(&self) {
+        let mut cache = self.cache();
+        cache.entries.clear();
+        cache.generation = cache.generation.wrapping_add(1);
+    }
+
+    pub(crate) async fn get(
+        &self,
+        request: Request,
+        adult: bool,
+        excluded: Vec<i32>,
+    ) -> Result<Value, RpcError> {
+        if crate::runtime_privacy::active() {
+            return self.fetch(&request, adult, &excluded).await;
+        }
+        let key = (request, adult, excluded);
+        let flight = {
+            let mut cache = self.cache();
+            if let Some((true, cached)) = cache.cached(&key) {
+                return Ok(cached);
+            }
+            match cache.flight(&key) {
+                Some(flight) => flight,
+                None => {
+                    return cache.cached(&key).map(|(_, value)| value).ok_or_else(|| {
+                        RpcError::new(
+                            "rate-limited",
+                            "AniList metadata is busy. Try again shortly.",
+                        )
+                    })
                 }
             }
-            (
-                cached.map(|(_, value)| value.clone()),
-                cache.cooldown.is_some_and(|until| until > Instant::now()),
-            )
         };
-        if limited {
-            return stale.ok_or_else(rate_limit);
-        }
-        let now = Local::now();
-        let day = 86_400;
-        let seconds = now.timestamp();
-        let season = cards::season(&now);
-        let (query, variables, ttl) = match request {
-            Request::Home => {
-                let rounded = seconds.div_euclid(300) * 300;
-                (
-                    if adult { HOME } else { SAFE_HOME },
-                    json!({"season": season["season"], "year": season["year"],
-                           "since": rounded - 3 * day, "now": rounded}),
-                    600,
-                )
-            }
-            Request::Latest(page) => (
-                LATEST,
-                json!({"page": page, "from": seconds.div_euclid(60) * 60 - 14 * day,
-                       "to": seconds.div_euclid(60) * 60}),
-                90,
-            ),
+        let _guard = flight.lock().await;
+        let stale = match self.cache().cached(&key) {
+            Some((true, cached)) => return Ok(cached),
+            Some((false, value)) => Some(value),
+            None => None,
         };
-        let result = self.query(query, variables).await.and_then(|data| {
-            match request {
-                Request::Home => cards::home(&data, season, seconds, adult),
-                Request::Latest(_) => cards::latest(&data, adult),
-            }
-            .ok_or_else(|| RpcError::new("network", "AniList returned incomplete data."))
-        });
-        match result {
+        let generation = self.cache().generation;
+        match self.fetch(&key.0, adult, &key.2).await {
             Ok(value) => {
-                self.cache
-                    .lock()
-                    .unwrap_or_else(|error| error.into_inner())
-                    .entries
-                    .insert(
-                        key,
-                        (Instant::now() + Duration::from_secs(ttl), value.clone()),
-                    );
+                let ttl = key.0.ttl();
+                let mut cache = self.cache();
+                if cache.generation == generation {
+                    cache.insert(key, ttl, value.clone());
+                }
                 Ok(value)
             }
+            Err(error) if error.code == "not-found" => Err(error),
             Err(error) => stale.ok_or(error),
         }
     }
 
+    async fn fetch(
+        &self,
+        request: &Request,
+        adult: bool,
+        excluded: &[i32],
+    ) -> Result<Value, RpcError> {
+        static QUERIES: OnceLock<Queries> = OnceLock::new();
+        let queries = QUERIES
+            .get_or_init(|| serde_json::from_str(CATALOGUE).expect("generated AniList queries"));
+        match request {
+            Request::Home => {
+                let now = Local::now();
+                let seconds = now.timestamp();
+                let season = cards::season(&now);
+                let rounded = seconds.div_euclid(300) * 300;
+                let data = self
+                    .query(
+                        if adult { HOME } else { SAFE_HOME },
+                        json!({"season": season["season"], "year": season["year"],
+                           "since": rounded - 3 * DAY, "now": rounded}),
+                    )
+                    .await?;
+                cards::home(&data, season, seconds, adult).ok_or_else(incomplete)
+            }
+            Request::Latest(page) => {
+                let seconds = Local::now().timestamp();
+                let data = self
+                    .query(
+                        LATEST,
+                        json!({
+                            "page": page, "from": seconds - 14 * DAY,
+                            "to": seconds.div_euclid(60) * 60,
+                        }),
+                    )
+                    .await?;
+                cards::latest(&data, adult).ok_or_else(incomplete)
+            }
+            Request::Details(id) => {
+                let data = self.query(&queries.details, json!({"id": id})).await?;
+                cards::details(&data["Media"]).ok_or_else(incomplete)
+            }
+            Request::Hover(id) => {
+                let data = self.query(&queries.hover, json!({"id": id})).await?;
+                cards::hover(&data["Media"]).ok_or_else(incomplete)
+            }
+            Request::Genres => {
+                let data = self.query(&queries.genres, json!({})).await?;
+                cards::genres(&data, adult).ok_or_else(incomplete)
+            }
+            Request::Search(term) => {
+                if term.is_empty() {
+                    return Ok(json!([]));
+                }
+                let query = if adult {
+                    &queries.search
+                } else {
+                    &queries.safe_search
+                };
+                let mut data = self.query(query, json!({"search": term})).await?;
+                let primary = take_rows(&mut data["Page"], "media")?;
+                let wider = (primary.len() < 8).then(|| search::broader(term)).flatten();
+                let nearby = match wider {
+                    Some(wider) => self
+                        .query(query, json!({"search": wider}))
+                        .await
+                        .ok()
+                        .and_then(|mut data| take_rows(&mut data["Page"], "media").ok())
+                        .unwrap_or_default(),
+                    None => Vec::new(),
+                };
+                Ok(Value::Array(search::rank(term, primary, nearby, adult)))
+            }
+            Request::Browse { variables, .. } => {
+                let mut vars = variables.clone();
+                if !adult {
+                    vars.insert("isAdult".into(), Value::Bool(false));
+                }
+                if !excluded.is_empty() {
+                    vars.insert("id_not_in".into(), json!(excluded));
+                }
+                let query = queries.browse(&vars);
+                let wider = vars
+                    .get("search")
+                    .and_then(Value::as_str)
+                    .and_then(search::broader);
+                let first = vars["page"] == 1;
+                let data = self.query(&query, Value::Object(vars.clone())).await?;
+                let mut page = cards::browse(&data["Page"], adult).ok_or_else(incomplete)?;
+                if let Some(wider) =
+                    wider.filter(|_| first && page["items"].as_array().is_some_and(Vec::is_empty))
+                {
+                    vars.insert("search".into(), json!(wider));
+                    let data = self.query(&query, Value::Object(vars)).await?;
+                    page = cards::browse(&data["Page"], adult).ok_or_else(incomplete)?;
+                    page["hasNext"] = Value::Bool(false);
+                    page["total"] = json!(data["Page"]["media"]
+                        .as_array()
+                        .ok_or_else(incomplete)?
+                        .len());
+                }
+                Ok(page)
+            }
+            Request::Schedule { from, to } => {
+                let mut items = Vec::new();
+                for page in 1..=6 {
+                    let data = self
+                        .query(
+                            &queries.schedule,
+                            json!({"page": page, "from": from, "to": to}),
+                        )
+                        .await?;
+                    let info = &data["Page"];
+                    let rows = info["airingSchedules"].as_array().ok_or_else(incomplete)?;
+                    items.extend(cards::airings(rows, adult));
+                    if !info["pageInfo"]["hasNextPage"]
+                        .as_bool()
+                        .ok_or_else(incomplete)?
+                    {
+                        break;
+                    }
+                }
+                Ok(Value::Array(items))
+            }
+        }
+    }
+
     async fn query(&self, query: &str, variables: Value) -> Result<Value, RpcError> {
+        let _permit = self.outbound.acquire().await.map_err(|_| incomplete())?;
+        if self
+            .cache()
+            .cooldown
+            .is_some_and(|until| until > Instant::now())
+        {
+            return Err(rate_limit());
+        }
         let offline = |_: reqwest::Error| RpcError::new("network", "Could not reach AniList.");
         let mut response = self
             .http
@@ -142,11 +347,11 @@ impl Client {
                 .and_then(|value| value.to_str().ok()?.parse::<u64>().ok())
                 .unwrap_or(60)
                 .clamp(1, 300);
-            self.cache
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .cooldown = Some(Instant::now() + Duration::from_secs(delay));
+            self.cache().cooldown = Some(Instant::now() + Duration::from_secs(delay));
             return Err(rate_limit());
+        }
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(not_found());
         }
         if !response.status().is_success() {
             return Err(RpcError::new(
@@ -166,16 +371,26 @@ impl Client {
         }
         let mut response: Value = serde_json::from_slice(&body)
             .map_err(|_| RpcError::new("network", "AniList returned an invalid response."))?;
-        let data = response["data"].take();
-        if data.is_object() {
-            Ok(data)
-        } else {
-            Err(RpcError::new(
-                "network",
-                "AniList returned no catalogue data.",
-            ))
+        if response["errors"][0]["status"] == 404 {
+            return Err(not_found());
         }
+        response
+            .get_mut("data")
+            .filter(|data| data.is_object())
+            .map(Value::take)
+            .ok_or_else(incomplete)
     }
+}
+
+fn take_rows(data: &mut Value, key: &str) -> Result<Vec<Value>, RpcError> {
+    match data.get_mut(key).map(Value::take) {
+        Some(Value::Array(rows)) => Ok(rows),
+        _ => Err(incomplete()),
+    }
+}
+
+fn incomplete() -> RpcError {
+    RpcError::new("network", "AniList returned incomplete data.")
 }
 
 fn rate_limit() -> RpcError {
@@ -183,4 +398,8 @@ fn rate_limit() -> RpcError {
         "rate-limited",
         "AniList is rate limiting requests. Try again shortly.",
     )
+}
+
+fn not_found() -> RpcError {
+    RpcError::new("not-found", "AniList could not find that title.")
 }

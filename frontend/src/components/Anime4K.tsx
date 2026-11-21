@@ -4,7 +4,7 @@ import { CompatibilityUpscale } from './CompatibilityUpscale';
 import { capturePlayer, stopPlayerCapture, type PlayerCaptureSession } from '../lib/playerCapture';
 import type { UpscaleStatus } from '../../../app/shared/upscale';
 import { useSettings, useUpdateSettings } from '../lib/queries';
-import { call, errorText, onEvent } from '../lib/bridge';
+import { call, errorText, isAniVerse2, onEvent } from '../lib/bridge';
 import { useToast } from '../lib/useToast';
 import { Switch } from './common';
 
@@ -85,9 +85,11 @@ export function SiteAnime4K({ webContentsId, surface }: { webContentsId: number;
     <details><summary>Anime4K Upscale <span className="faint" role="status">{shown?.message}</span></summary><Anime4KPanel status={shown}/></details>
     {options.enabled&&<div className="compatibility-upscale-actions">
       {capture?<button className="btn" onClick={()=>void stop()}>Stop compatibility upscaling</button>:<button className="btn primary" disabled={busy} onClick={()=>void start()}>{busy?'Starting capture…':'Use compatibility upscaling'}</button>}
-      <p>For websites that block direct video filtering. Captures only this site view, applies Anime4K on this device, and keeps the original player’s audio and controls. Use player-only mode for best results. Protected video may still block capture.</p>
+      <p>{isAniVerse2 ? 'Shows a video-only preview of the selected website player. Audio and controls stay in the original player. This requires a single accessible, unprotected video.' : 'For websites that block direct video filtering. Captures only this site view, applies Anime4K on this device, and keeps the original player’s audio and controls. Use player-only mode for best results. Protected video may still block capture.'}</p>
       {error&&<p className="err" role="alert">{error}</p>}
     </div>}
-    {capture&&options.enabled&&surface.current&&createPortal(<CompatibilityUpscale capture={capture} options={options} onStatus={setCompatStatus}/>,surface.current)}
+    {capture && options.enabled && (isAniVerse2
+      ? <CompatibilityUpscale capture={capture} options={options} onStatus={setCompatStatus} preview/>
+      : surface.current && createPortal(<CompatibilityUpscale capture={capture} options={options} onStatus={setCompatStatus}/>, surface.current))}
   </div>;
 }

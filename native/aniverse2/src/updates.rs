@@ -1,9 +1,8 @@
-use crate::{profile, sources, RpcError};
+use crate::{profile, RpcError};
 use reqwest::redirect::Policy;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    ffi::OsStr,
     fs,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -298,17 +297,6 @@ impl Service {
                 "Could not launch the verified AniVerse2 installer. Try again.",
             ));
         }
-        Ok(Value::Null)
-    }
-
-    pub(crate) fn open_notes(&self, input: Option<&Value>) -> Result<Value, RpcError> {
-        let snapshot = self.snapshot();
-        let approved = snapshot["releaseUrl"]
-            .as_str()
-            .filter(|url| input.and_then(|value| value["url"].as_str()) == Some(*url))
-            .ok_or_else(|| RpcError::new("invalid-input", "Select the AniVerse2 update notes."))?;
-        sources::open_in_windows(OsStr::new(approved))
-            .map_err(|_| RpcError::new("internal", "Could not open the release notes."))?;
         Ok(Value::Null)
     }
 

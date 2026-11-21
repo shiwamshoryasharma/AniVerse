@@ -2,9 +2,9 @@ import type {AudioChoice} from '../app/shared/audioAvailability';
 export interface CatalogueRawCard {title:string;url:string;image:string|null;anilistId:number|null;sub:number|null;dub:number|null;total:number|null}
 export interface CatalogueSnapshot {items:CatalogueRawCard[];active:string|null;canFilter:boolean;hasNext:boolean;empty:boolean}
 type Op={kind:'read'|'filter'|'next';audio?:AudioChoice;search?:boolean};
-export function catalogueScript(op:Op){return '('+PAGE.toString()+')('+JSON.stringify(op)+')';}
+export function catalogueScript(op:Op){return '('+CATALOGUE_PAGE.toString()+')('+JSON.stringify(op)+')';}
 /** Fixed DOM operations only: public catalogue cards and the website's own controls. */
-function PAGE(op:Op):unknown{
+export function CATALOGUE_PAGE(op:Op):unknown{
  const text=(node:Element|null)=>node?.textContent?.replace(/\s+/g,' ').trim()??'';
  const headings=[...document.querySelectorAll('h1,h2,h3')];
  const heading=!op.search&&headings.find(node=>/^(latest episodes?|recently updated|latest updates?|latest releases?)$/i.test(text(node)));

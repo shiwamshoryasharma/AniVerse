@@ -1,5 +1,7 @@
-//! A staging primitive for a future desktop cutover. It never opens a live
-//! profile for writing, promotes a profile, or changes application startup.
+//! Verified copies for the desktop handoff. The legacy app and profile remain
+//! intact throughout staging.
+#[cfg(target_os = "windows")]
+mod credentials;
 #[cfg(target_os = "windows")]
 mod handoff;
 #[cfg(target_os = "windows")]
@@ -8,9 +10,13 @@ mod profile;
 #[cfg(target_os = "windows")]
 mod profile_publish;
 #[cfg(target_os = "windows")]
+mod proof;
+#[cfg(target_os = "windows")]
 mod release_signature;
 #[cfg(target_os = "windows")]
 pub use handoff::{HandoffError, VerifiedHandoff};
+#[cfg(target_os = "windows")]
+pub use proof::ProfileProof;
 
 pub use profile::stage_profile;
 #[cfg(target_os = "windows")]
@@ -61,14 +67,25 @@ pub fn stage_database(
         .parent()
         .filter(|p| p.is_dir())
         .ok_or(SnapshotError::MissingStagingDirectory)?;
+    profile::require_regular(source)?;
     let original = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     original.busy_timeout(Duration::from_millis(100))?;
+    original.execute_batch("PRAGMA trusted_schema=OFF; BEGIN DEFERRED;")?;
+    let original_version =
+        original.query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))?;
+    if original_version != expected_schema {
+        return Err(SnapshotError::WrongSchema {
+            expected: expected_schema,
+            found: original_version,
+        });
+    }
     let temporary = tempfile::Builder::new()
         .prefix(".aniverse-db-")
         .tempdir_in(parent)?;
     let staged_file = temporary.path().join("snapshot.sqlite");
     let mut staged = Connection::open(&staged_file)?;
     staged.busy_timeout(Duration::from_millis(100))?;
+    staged.pragma_update(None, "trusted_schema", false)?;
 
     {
         let start = Instant::now();

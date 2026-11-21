@@ -400,7 +400,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
       onMouseLeave={() => playing && setIdle(true)}
       aria-label="Video player"
     >
-      <video ref={video} playsInline crossOrigin={source.subtitles.length || source.url.startsWith('media:') ? 'anonymous' : undefined} onClick={toggle} onDoubleClick={toggleFs}>
+      <video ref={video} playsInline crossOrigin={source.subtitles.length || source.url.startsWith('media:') || source.url.startsWith('https://localmedia.localhost/') ? 'anonymous' : undefined} onClick={toggle} onDoubleClick={toggleFs}>
         {source.subtitles.map((s, i) => (
           <track key={s.url} kind="subtitles" src={s.url} srcLang={s.lang} label={s.label} default={i === 0} />
         ))}

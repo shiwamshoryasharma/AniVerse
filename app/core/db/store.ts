@@ -16,7 +16,7 @@ import { nowSec } from '../util';
 type Row = Record<string, unknown>;
 type SqlValue = string | number | bigint | null | Uint8Array;
 
-const MIGRATIONS: string[] = [
+export const MIGRATIONS: string[] = [
   `
   CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   CREATE TABLE source_overrides (id TEXT PRIMARY KEY, data TEXT NOT NULL);

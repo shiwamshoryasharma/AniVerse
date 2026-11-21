@@ -1,7 +1,6 @@
-use crate::{release_signature::SignedRelease, stage_profile, SnapshotError};
+use crate::{proof, release_signature::SignedRelease, stage_profile, ProfileProof, SnapshotError};
 use semver::Version;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -74,7 +73,7 @@ struct Publisher {
 
 /// Input to the native installer coordinator after checking the signed release and candidate executable.
 /// The legacy PID and path are metadata for the coordinator's process and uninstall checks.
-pub struct VerifiedHandoff(Descriptor);
+pub struct VerifiedHandoff(Descriptor, String);
 
 impl VerifiedHandoff {
     pub fn open(
@@ -111,6 +110,10 @@ impl VerifiedHandoff {
 
     pub fn nonce(&self) -> Uuid {
         self.0.nonce
+    }
+
+    pub fn profile_proof(&self, root: &Path) -> Result<ProfileProof, HandoffError> {
+        Ok(ProfileProof::capture(root, self.nonce(), &self.1)?)
     }
 
     /// Run on the installer worker. The coordinator must still prevent Electron
@@ -208,20 +211,10 @@ fn verify(
     {
         return Err(HandoffError::Invalid);
     }
-    let mut hash = Sha256::new();
-    let mut executable = File::open(application)?;
-    let mut buffer = [0; 65_536];
-    loop {
-        let read = executable.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        hash.update(&buffer[..read]);
-    }
-    if hex::encode(hash.finalize()) != payload.application_sha256 {
+    if proof::file_hash(application)? != payload.application_sha256 {
         return Err(HandoffError::ApplicationHash);
     }
-    Ok(VerifiedHandoff(job))
+    Ok(VerifiedHandoff(job, payload.application_sha256))
 }
 
 fn stable_version(text: &str) -> Result<Version, HandoffError> {

@@ -1,10 +1,11 @@
 import { ArrowLeft, ArrowRight, ExternalLink, House, Lock, RotateCw, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import type { SourceInfo } from '../../../app/shared/types';
-import { call } from '../lib/bridge';
+import { call, isAniVerse2 } from '../lib/bridge';
 import { cx, hostOf } from '../lib/format';
 import { useAdblockStats, useSettings } from '../lib/queries';
 import { Empty } from './common';
+import { TauriWebSession } from './TauriWebSession';
 
 /** The subset of Electron's <webview> API the renderer uses. */
 interface WebviewElement extends HTMLElement {
@@ -19,8 +20,12 @@ interface WebviewElement extends HTMLElement {
   getWebContentsId(): number;
 }
 
-interface Props {
+export interface WebSessionProps {
   source: SourceInfo;
+  mediaId?: number;
+  suspended?: boolean;
+  onDirectMp4?: (url: string | null) => void;
+  onSurfaceError?: (error: string | null) => void;
   src: string;
   /** Sent as the HTTP referrer of the first request (YouTube embeds require an app identity). */
   referrer?: string;
@@ -42,7 +47,11 @@ export interface WebSessionControls {
  * (`persist:src-<id>`). The main process enforces the partition, strips node
  * access, blocks ads/popups and cross-site redirects, and runs Cloudflare checks.
  */
-export function WebSession({ source, src, referrer, toolbar = true, extra, onNavigate, onWebContents, controls }: Props) {
+export function WebSession(props: WebSessionProps) {
+  return isAniVerse2 ? <TauriWebSession {...props} /> : <ElectronWebSession {...props} />;
+}
+
+function ElectronWebSession({ source, src, referrer, toolbar = true, extra, onNavigate, onWebContents, controls }: WebSessionProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<WebviewElement | null>(null);
   const ready = useRef(false);

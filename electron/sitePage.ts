@@ -54,7 +54,7 @@ export function recipeSelector(recipe: SiteRecipe | null, key: 'titleLink' | 'wa
 
 /* eslint-disable */
 // Serialised into the page with Function.prototype.toString — keep it self-contained.
-function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
+export function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
   const norm = (s: unknown) =>
     String(s || '')
       .normalize('NFKC')

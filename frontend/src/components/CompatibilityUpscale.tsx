@@ -1,7 +1,7 @@
 import { useEffect,useRef } from 'react';
 import type { UpscaleSettings,UpscaleStatus } from '../../../app/shared/upscale';
 import type { PlayerCaptureSession } from '../lib/playerCapture';
-export function CompatibilityUpscale({capture,options,onStatus}:{capture:PlayerCaptureSession;options:UpscaleSettings;onStatus:(status:UpscaleStatus)=>void}){
+export function CompatibilityUpscale({capture,options,onStatus,preview=false}:{capture:PlayerCaptureSession;options:UpscaleSettings;onStatus:(status:UpscaleStatus)=>void;preview?:boolean}){
   const video=useRef<HTMLVideoElement>(null),canvas=useRef<HTMLCanvasElement>(null);
   useEffect(()=>{
     const element=video.current,target=canvas.current;if(!element||!target)return;
@@ -12,5 +12,5 @@ export function CompatibilityUpscale({capture,options,onStatus}:{capture:PlayerC
     }).catch(()=>{if(!cancelled)onStatus({state:'unavailable',message:'Compatibility capture could not start. Keep the source player visible and try again.'});});
     return()=>{cancelled=true;dispose?.();element.pause();element.srcObject=null;};
   },[capture,options,onStatus]);
-  return <div className="compatibility-upscale-surface" aria-hidden="true"><video ref={video} muted playsInline/><canvas key={JSON.stringify(options)} ref={canvas}/></div>;
+  return <div className={preview ? "compatibility-upscale-surface preview" : "compatibility-upscale-surface"} aria-hidden="true"><video ref={video} muted playsInline/><canvas key={JSON.stringify(options)} ref={canvas}/></div>;
 }

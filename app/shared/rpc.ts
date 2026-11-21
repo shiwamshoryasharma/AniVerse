@@ -218,6 +218,10 @@ export interface RpcError {
 /** Surface exposed by the preload script on `window.aniverse`. */
 export interface AniverseBridge {
   readonly edition?: 'aniverse2';
+  readonly releasePlayerFile?: (url: string) => Promise<void>;
+  readonly saveMp4?: (url: string, sourceId?: string) => Promise<boolean>;
+  readonly onMp4Progress?: (listener: (progress: { received: number; total: number | null }) => void) => () => void;
+  readonly hoverSourceAudio?: (sourceId: string, mediaId: number) => Promise<{ sub: number | null; dub: number | null; total: number | null } | null>;
   readonly windowControls?: {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<void>;

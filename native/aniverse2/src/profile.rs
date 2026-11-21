@@ -1,7 +1,18 @@
+mod settings;
+mod source_writes;
+mod workspace;
+mod writes;
+pub(crate) use source_writes::saved_pin;
+pub(crate) use workspace::{
+    handles as workspace_handles, request as workspace_request, State as WorkspaceState,
+};
+pub(crate) use writes::writable;
+
 use crate::{sources, RpcError};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Params, Row};
 use serde_json::{json, Value};
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File},
     io::{self, Read},
     path::Path,
@@ -24,16 +35,113 @@ pub(crate) fn update_defaults(root: &Path) -> Value {
         .unwrap_or_default()
 }
 
-pub(crate) fn show_adult(root: &Path) -> Result<bool, RpcError> {
+pub(crate) fn metadata_preferences(
+    root: &Path,
+    exclude_library: bool,
+) -> Result<(bool, Vec<i32>), RpcError> {
     let db = open(root).map_err(read_error)?;
     let settings = kv(db.as_ref(), "settings").map_err(read_error)?;
-    Ok(settings
+    let adult = settings
         .as_ref()
         .and_then(|settings| settings["appearance"]["showAdult"].as_bool())
-        .unwrap_or(false))
+        .unwrap_or(false);
+    let ids = if exclude_library {
+        rows(db.as_ref(), "SELECT media_id FROM library WHERE media_id BETWEEN 1 AND 2147483647 ORDER BY media_id", [], |row| row.get(0))
+            .map_err(read_error)?
+    } else {
+        Vec::new()
+    };
+    Ok((adult, ids))
+}
+
+pub(crate) fn private_title(root: &Path, media: i64) -> Result<bool, RpcError> {
+    let db = open(root).map_err(read_error)?;
+    is_private(db.as_ref(), media).map_err(read_error)
+}
+
+fn is_private(db: Option<&Connection>, media: i64) -> rusqlite::Result<bool> {
+    if crate::runtime_privacy::active() {
+        return Ok(true);
+    }
+    let Some(db) = db else {
+        return Ok(false);
+    };
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM private_titles WHERE media_id=?1)",
+        [media],
+        |row| row.get(0),
+    )
+}
+
+pub(crate) fn audio_context(
+    root: &Path,
+) -> Result<(BTreeMap<String, String>, BTreeSet<i64>), RpcError> {
+    let db = open(root).map_err(read_error)?;
+    let private = rows(
+        db.as_ref(),
+        "SELECT media_id FROM private_titles",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(read_error)?
+    .into_iter()
+    .collect();
+    let sources = sources::list(root, db.as_ref())
+        .map_err(read_error)?
+        .into_iter()
+        .filter(|source| source["enabled"] == true && source["kind"] == "web")
+        .filter_map(|source| {
+            let id = source["id"].as_str()?.to_owned();
+            let url = tauri::Url::parse(source["url"].as_str()?).ok()?;
+            Some((id, url.origin().ascii_serialization()))
+        })
+        .collect();
+    Ok((sources, private))
+}
+
+fn library_state(db: Option<&Connection>, media_id: i64) -> rusqlite::Result<Value> {
+    let Some(db) = db else {
+        return Ok(json!({"favourite": false, "entry": null, "progress": [], "pinned": {}}));
+    };
+    let favourite = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM favourites WHERE media_id=?1)",
+        [media_id],
+        |row| row.get::<_, bool>(0),
+    )?;
+    let entry = db.query_row("SELECT l.status,l.progress,l.score,l.updated_at,l.media_id,m.data FROM library l LEFT JOIN media_snapshot m ON m.id=l.media_id WHERE l.media_id=?1", [media_id], |row| Ok(json!({
+        "media": media_at(row,4,5)?, "status": row.get::<_, String>(0)?, "progress": row.get::<_, i64>(1)?,
+        "score": row.get::<_, Option<f64>>(2)?, "updatedAt": row.get::<_, i64>(3)?,
+    }))).optional()?;
+    let progress = rows(Some(db), "SELECT episode,position,duration,completed,source_id,updated_at FROM progress WHERE media_id=?1 ORDER BY episode", [media_id], |row| Ok(json!({
+        "mediaId": media_id, "episode": row.get::<_, i64>(0)?, "position": row.get::<_, f64>(1)?,
+        "duration": row.get::<_, f64>(2)?, "completed": row.get::<_, bool>(3)?,
+        "sourceId": row.get::<_, Option<String>>(4)?, "updatedAt": row.get::<_, i64>(5)?,
+    })))?;
+    let pinned = if is_private(Some(db), media_id)? {
+        BTreeMap::new()
+    } else {
+        rows(
+            Some(db),
+            "SELECT source_id,url FROM source_pins WHERE media_id=?1",
+            [media_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )?
+        .into_iter()
+        .collect::<BTreeMap<_, _>>()
+    };
+    Ok(json!({"favourite": favourite, "entry": entry, "progress": progress, "pinned": pinned}))
 }
 
 pub(crate) fn request(root: &Path, method: &str, input: Value) -> Result<Value, RpcError> {
+    if method == "settings.set" {
+        return settings::write(root, &input);
+    }
+    if source_writes::handles(method) {
+        return source_writes::write(root, method, &input);
+    }
+    if writes::handles(method) {
+        return writes::write(root, method, &input);
+    }
     if method == "sources.openConfig" {
         return sources::open_config(root)
             .map(|path| json!({ "path": path }))
@@ -48,6 +156,8 @@ pub(crate) fn request(root: &Path, method: &str, input: Value) -> Result<Value, 
         method,
         "settings.get"
             | "privacy.state"
+            | "privacy.watchSources"
+            | "library.state"
             | "library.history"
             | "library.entries"
             | "library.favourites"
@@ -64,6 +174,18 @@ pub(crate) fn request(root: &Path, method: &str, input: Value) -> Result<Value, 
     let db = open(root).map_err(read_error)?;
     let db = db.as_ref();
     match method {
+        "privacy.watchSources" => {
+            let id = media_id(&input)?;
+            if is_private(db, id).map_err(read_error)? {
+                return Err(RpcError::new(
+                    "unavailable",
+                    "Private playback needs a private browser session.",
+                ));
+            }
+            Ok(json!({"leaseId": null, "sources": sources::list(root, db).map_err(read_error)?}))
+        }
+        "library.state" => library_state(db, media_id(&input)?).map_err(read_error),
+        "library.continue" if crate::runtime_privacy::active() => Ok(json!([])),
         "library.continue" => Ok(Value::Array(continue_watching(db).map_err(read_error)?)),
         "settings.get" => {
             let mut defaults = serde_json::from_slice(DEFAULT_SETTINGS).map_err(read_error)?;
@@ -80,8 +202,9 @@ pub(crate) fn request(root: &Path, method: &str, input: Value) -> Result<Value, 
                 |row| row.get::<_, i64>(0),
             )
             .map_err(read_error)?;
-            Ok(json!({"incognito": false, "privateMediaIds": ids}))
+            Ok(json!({"incognito": crate::runtime_privacy::active(), "privateMediaIds": ids}))
         }
+        "library.history" if crate::runtime_privacy::active() => Ok(json!([])),
         "library.history" => {
             let limit = input["limit"]
                 .as_u64()
@@ -171,7 +294,7 @@ fn continue_watching(db: Option<&Connection>) -> rusqlite::Result<Vec<Value>> {
     }).take(20).collect())
 }
 
-fn open(root: &Path) -> rusqlite::Result<Option<Connection>> {
+pub(crate) fn open(root: &Path) -> rusqlite::Result<Option<Connection>> {
     let db = root.join("aniverse.db");
     if matches!(fs::metadata(&db), Err(error) if error.kind() == io::ErrorKind::NotFound) {
         return Ok(None);
@@ -211,8 +334,12 @@ pub(crate) fn rows<T>(
 }
 
 fn media(row: &Row) -> rusqlite::Result<Value> {
-    let id: i64 = row.get(0)?;
-    Ok(row.get::<_, Option<String>>(1)?.and_then(|row| serde_json::from_str(&row).ok())
+    media_at(row, 0, 1)
+}
+
+fn media_at(row: &Row, id_col: usize, data_col: usize) -> rusqlite::Result<Value> {
+    let id: i64 = row.get(id_col)?;
+    Ok(row.get::<_, Option<String>>(data_col)?.and_then(|row| serde_json::from_str(&row).ok())
         .filter(Value::is_object).unwrap_or_else(|| json!({
             "id":id,"idMal":null,"title":format!("AniList #{id}"),"cover":"","banner":null,"format":null,"episodes":null,
         })))
@@ -261,6 +388,13 @@ pub(crate) fn renderer_preferences(root: &Path) -> io::Result<String> {
         })
         .collect::<serde_json::Map<_, _>>();
     Ok(Value::Object(prefs).to_string())
+}
+
+fn media_id(input: &Value) -> Result<i64, RpcError> {
+    input["mediaId"]
+        .as_i64()
+        .filter(|id| (1..=i32::MAX as i64).contains(id))
+        .ok_or_else(invalid)
 }
 
 fn invalid() -> RpcError {

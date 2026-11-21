@@ -1,16 +1,22 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, Info, Play, Star } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import type { MediaCard } from '../../../app/shared/types';
-import { call } from '../lib/bridge';
+import { call, isAniVerse2 } from '../lib/bridge';
 import { availableEpisodes, countdown, pendingRelease, formatLabel, seasonLabel, statusLabel, titleOf } from '../lib/format';
 import { useSettings } from '../lib/queries';
 import {AudioTags,type HoverAudioProps} from './AudioTags';
 
 const OPEN_DELAY = 420;
 const CLOSE_DELAY = 140;
+const hoverQuery = (id: number) => ({
+  queryKey: ['hover', id],
+  queryFn: () => call('meta.hover', { id }),
+  staleTime: Infinity,
+  retry: false,
+});
 
 /**
  * Shows a rich preview next to any media card after a short hover: rating,
@@ -22,16 +28,23 @@ export function HoverPreview({ media, children, watchTo, ...audio }: HoverAudioP
   const openTimer = useRef(0);
   const closeTimer = useRef(0);
   const host = useRef<HTMLDivElement>(null);
+  const prefetchTimer = useRef(0);
+  const queryClient = useQueryClient();
 
   const scheduleOpen = () => {
     window.clearTimeout(closeTimer.current);
     window.clearTimeout(openTimer.current);
+    window.clearTimeout(prefetchTimer.current);
+    if (isAniVerse2) {
+      prefetchTimer.current = window.setTimeout(() => void queryClient.prefetchQuery(hoverQuery(media.id)), 160);
+    }
     openTimer.current = window.setTimeout(() => {
       const el = host.current?.firstElementChild;
       if (el) setAnchor(el.getBoundingClientRect());
     }, OPEN_DELAY);
   };
   const scheduleClose = () => {
+    window.clearTimeout(prefetchTimer.current);
     window.clearTimeout(openTimer.current);
     closeTimer.current = window.setTimeout(() => setAnchor(null), CLOSE_DELAY);
   };
@@ -49,6 +62,7 @@ export function HoverPreview({ media, children, watchTo, ...audio }: HoverAudioP
 
   useEffect(
     () => () => {
+      window.clearTimeout(prefetchTimer.current);
       window.clearTimeout(openTimer.current);
       window.clearTimeout(closeTimer.current);
     },
@@ -93,7 +107,7 @@ function PreviewCard({
   const navigate = useNavigate();
   const settings = useSettings();
   const lang = settings.appearance.titleLanguage;
-  const { data: extra, isLoading } = useQuery({ queryKey: ['hover', media.id], queryFn: () => call('meta.hover', { id: media.id }), staleTime: Infinity, retry: false });
+  const { data: extra, isLoading } = useQuery(hoverQuery(media.id));
   const panel=useRef<HTMLDivElement>(null),[height,setHeight]=useState(440);
   useLayoutEffect(()=>{if(!panel.current)return;const observer=new ResizeObserver(()=>setHeight(panel.current?.getBoundingClientRect().height??440));observer.observe(panel.current);return ()=>observer.disconnect();},[]);
   const width = 320;

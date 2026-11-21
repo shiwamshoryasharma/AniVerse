@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AniVerse2",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "identifier": "app.aniverse2.desktop",
   "build": {
     "frontendDist": "../../dist/aniverse2"
@@ -13,11 +13,12 @@
       "capabilities": [
         "desktop-local"
       ],
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' ipc: https://ipc.localhost http://ipc.localhost; media-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' ipc: https://ipc.localhost http://ipc.localhost https://localmedia.localhost; media-src 'self' blob: https://localmedia.localhost; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
     }
   },
   "bundle": {
     "active": false,
+    "resources": ["../../assets/aniverse2/adblock-MPL-2.0.txt"],
     "icon": [
       "../../assets/aniverse2/aniverse2.ico"
     ],

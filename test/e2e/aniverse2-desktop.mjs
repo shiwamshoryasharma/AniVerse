@@ -11,6 +11,9 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright-core';
 
 const withHandoff = process.env.ANIVERSE2_CHECK_HANDOFF === '1';
+const withBoot = withHandoff && process.env.ANIVERSE2_CHECK_CUTOVER_BOOT === '1';
+const withSearch = withHandoff && process.env.ANIVERSE2_CHECK_MIGRATED_SEARCH_TEMPLATES === '1';
+const withNativeSave = process.env.ANIVERSE2_CHECK_NATIVE_SAVE === '1';
 const cache = path.resolve('test/cache/aniverse2');
 await mkdir(cache, { recursive: true });
 const run = await mkdtemp(path.join(cache, 'desktop-'));
@@ -18,6 +21,11 @@ const legacy = path.join(run, 'legacy');
 const profile = path.join(run, 'profile');
 await mkdir(legacy);
 await mkdir(profile);
+const saveFolder = path.join(run, 'chosen-folder');
+if (withNativeSave) {
+  await mkdir(saveFolder);
+  await writeFile(path.join(profile, 'mp4-download-folder.json'), JSON.stringify(saveFolder));
+}
 const bundle = path.join(run, 'seed.cjs');
 await build({ stdin: { contents: 'export { Store } from "./app/core/db/store";', resolveDir: process.cwd() }, outfile: bundle,
   platform: 'node', format: 'cjs', bundle: true, external: ['node:sqlite'] });
@@ -28,17 +36,26 @@ const media = { id: 743, idMal: null, title: 'Saved AniVerse fixture', cover: ''
 const hidden = { ...media, id: 744, title: 'Private history fixture' };
 store.setKv('settings', { profile: { name: 'Saved profile' }, appearance: { style: 'aurora' }, player: { volume: 0.48 } });
 store.setKv('windows:mp4-download-folder', 'D:/Saved video location');
-store.patchSourceOverride('sample-test', { name: 'Saved custom source' });
+store.patchSourceOverride('sample-test', { name: 'Saved custom source', ...(withSearch ? {
+  searchTemplate: 'https://www.sample.test/preferred?q={query}',
+} : {}) });
+if (withSearch) store.setKv('discovery:sample-test-2', {
+  template: 'https://sample.test/saved-find?q={query}', via: 'opensearch', at: 123,
+});
 store.saveProgress({ media, episode: 3, position: 83, duration: 720, sourceId: 'sample-test' }, 0.85);
 store.saveProgress({ media: hidden, episode: 1, position: 18, duration: 720, sourceId: 'sample-test' }, 0.85);
 store.setTitlePrivate(hidden.id, true);
 store.setLibraryEntry(media, 'CURRENT', 2);
 store.setFavourite(media, true);
+store.setPin('sample-test', media.id, 'https://www.sample.test/watch/example');
+store.setSiteLink('sample-test', media.id, 3, 'https://www.sample.test/watch/example/3');
+store.setSiteLink('sample-test-2', media.id, 3, 'https://sample.test/alternate/3');
+store.cacheSet('migration:fixture', { previouslyCached: true }, 3600);
 store.close();
 const checksum = async (file) => createHash('sha256').update(await readFile(file)).digest('hex');
 const initialHash = await checksum(database);
 
-const sites = '\uFEFF# Saved source comments\r\n1. https://www.sample.test/catalogue/\r\nhttps://sample.test/alternate\r\nhttps://www.youtube.com/@Example\r\n';
+const sites = '\uFEFF# Saved source comments\r\n1. https://www.sample.test/catalogue/\r\nhttps://sample.test/alternate\r\nhttps://www.youtube.com/@Example\r\n' + (withSearch ? 'https://recipe.test/home\r\n' : '');
 const preferences = { 'aniverse.historyView': 'list', 'aniverse.rail': 'open' };
 const config = withHandoff ? path.join(run, 'custom config') : path.join(profile, 'config');
 await mkdir(config);
@@ -62,14 +79,69 @@ const launchEnv = {
 };
 delete launchEnv.ANIVERSE_ELECTRON_HANDOFF;
 const staged = withHandoff ? path.join(profile, 'profile-data') : profile;
+const stagedFiles = new Map([
+  ['adblock-engine.bin', Buffer.from('compatible offline blocker cache')],
+  ['config/filters.txt', Buffer.from('! legacy custom filter\r\n')],
+  ['config/site-recipes.json', Buffer.from(withSearch ? JSON.stringify({
+    'recipe.test': {search:'https://recipe.test/saved-search?q={query}'},
+    'sample.test': {search:'https://www.sample.test/recipe?q={query}'},
+  }) : '{}')],
+  ['graphics.json', Buffer.from('{"mode":"stable"}')],
+  ['profile/avatar.webp', Buffer.from('profile fixture bytes')],
+]);
+const legacyEncryptedKey = Buffer.from('DPAPI fixture ciphertext').toString('base64');
 const nonce = randomUUID();
 if (withHandoff) {
+  for (const [relative, contents] of stagedFiles) {
+    const target = relative.startsWith('config/') ? path.join(config, relative.slice(7)) : path.join(legacy, relative);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, contents);
+  }
+  await writeFile(path.join(legacy, 'Local State'), JSON.stringify({
+    os_crypt: { encrypted_key: legacyEncryptedKey }, profile: { unrelated: 'exclude this information' },
+  }));
+  await writeFile(path.join(run, 'AniVerse.exe'), 'original application sentinel');
   const marker = await prepareHandoffFixture({ run, exe, profile, legacy, preferences, nonce, launchEnv });
+  if (withBoot) await rejectUnreadableHistory({ run, legacy, exe, marker, launchEnv });
   const prepared = spawnSync(exe, ['--prepare-legacy-profile'], {
     windowsHide: true, timeout: 60000, env: { ...launchEnv, ANIVERSE_ELECTRON_HANDOFF: marker },
   });
   assert.equal(prepared.status, 0, prepared.stderr?.toString());
   launchEnv.ANIVERSE2_TEST_PREPARED_MARKER = marker;
+  const inventory = path.join(staged, 'migration-inventory.json');
+  const originalInventory = await readFile(inventory);
+  if (withBoot) {
+    const journal = JSON.parse(await readFile(path.join(staged, 'migration-stage.json'), 'utf8'));
+    assert.equal(journal.state, 'renderer-verified');
+    await assert.rejects(stat(path.join(profile, 'webview')), { code: 'ENOENT' });
+  }
+  const verification = JSON.parse(originalInventory);
+  assert.equal(verification.nonce, nonce);
+  assert.equal(verification.application_sha256, await checksum(exe));
+  for (const [file, hash] of Object.entries(verification.files)) {
+    assert.equal(await checksum(path.join(staged, file)), hash);
+  }
+  for (const [file, content] of stagedFiles) assert.deepEqual(await readFile(path.join(staged, file)), content);
+  assert.equal(JSON.parse(await readFile(path.join(staged, 'chromium-encrypted-key.json'), 'utf8')), legacyEncryptedKey);
+  await assert.rejects(stat(path.join(staged, 'Local State')), { code: 'ENOENT' });
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
+  const stagedDb = new DatabaseSync(path.join(staged, 'aniverse.db'), { readOnly: true });
+  try {
+    const cached = stagedDb.prepare('SELECT value FROM http_cache WHERE key=?').get('migration:fixture');
+    assert.deepEqual(JSON.parse(cached.value), { previouslyCached: true });
+  }
+  finally { stagedDb.close(); }
+  const receipt = path.join(staged, 'migration-copy-verified');
+  const originalReceipt = await readFile(receipt);
+  await writeFile(receipt, 'invalid test receipt');
+  try {
+    const rejected = spawnSync(exe, [], { windowsHide: true, timeout: 10000, env: launchEnv });
+    assert.equal(rejected.status, 1, rejected.stderr?.toString());
+    assert.equal(await checksum(database), initialHash);
+    assert.equal(await readFile(path.join(run, 'AniVerse.exe'), 'utf8'), 'original application sentinel');
+  } finally {
+    await writeFile(receipt, originalReceipt);
+  }
 }
 const child = spawn(exe, [], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: launchEnv });
 let output = '', browser, launchError;
@@ -77,7 +149,10 @@ child.on('error', (error) => { launchError = error; });
 child.stdout.on('data', (bytes) => { output += bytes; });
 child.stderr.on('data', (bytes) => { output += bytes; });
 const exited = once(child, 'exit').catch(() => undefined);
-const report = { passed: false, tests: {} };
+const report = {
+  passed: false, tests: {},
+  evidence: { executableSha256: await checksum(exe), scope: withHandoff ? 'Windows x64 isolated signed-descriptor handoff' : 'Windows x64 isolated desktop smoke' },
+};
 try {
   for (let i = 0; i < 180 && child.exitCode === null && !launchError; i++) {
     try {
@@ -118,13 +193,45 @@ try {
     });
     assert.equal(badPage, 'invalid-input');
     report.tests.liveHomeAndLatestEpisodes = true;
+    await page.evaluate(() => { location.hash = '#/anime/1'; });
+    await page.getByRole('heading', { name: 'Cowboy Bebop', exact: true }).waitFor();
+    assert.equal(await page.getByText('Something went wrong', { exact: true }).count(), 0);
+    const details = await invoke('meta.details', {id: 1});
+    assert.equal(details.id, 1);
+    report.tests.liveTitleDetails = true;
   }
   const settings = await invoke('settings.get');
   assert.equal(settings.profile.name, 'Saved profile');
   assert.equal(settings.player.volume, 0.48);
   assert.equal(settings.player.autoplay, true);
-  assert.equal(await invoke('player.mp4Folder', { action: 'get' }), 'D:/Saved video location');
+  assert.equal(await invoke('player.mp4Folder', { action: 'get' }), withNativeSave ? saveFolder : 'D:/Saved video location');
   report.tests.settings = true;
+  await page.evaluate(() => { location.hash = '#/player'; });
+  const streamUrl = page.getByRole('textbox', { name: 'Stream URL' });
+  const downloadMp4 = page.getByRole('button', { name: 'Download MP4' });
+  await streamUrl.fill('https://media.example.test/master.m3u8');
+  assert.equal(await downloadMp4.count(), 0);
+  await streamUrl.fill('https://media.example.test/episode.mp4');
+  await downloadMp4.waitFor();
+  assert.equal(await downloadMp4.isEnabled(), true);
+  report.tests.explicitMp4DownloadAction = true;
+  if (withNativeSave) {
+    const url = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
+    const destination = path.join(saveFolder, 'AniVerse - flower.mp4');
+    const response = await fetch(url, {signal: AbortSignal.timeout(15000)});
+    assert.ok(response.ok);
+    const reference = createHash('sha256').update(Buffer.from(await response.arrayBuffer())).digest('hex');
+    await streamUrl.fill(url);
+    const dialog = spawn('powershell.exe', ['-NoProfile','-NonInteractive','-File',
+      path.resolve('test/e2e/fixtures/aniverse2-submit-save.ps1'),'-AppPid',String(child.pid),'-Destination',destination],
+      {windowsHide:true, env:launchEnv, stdio:['ignore','ignore','inherit']});
+    const ended = once(dialog,'exit');
+    await downloadMp4.click();
+    assert.equal((await ended)[0], 0, 'Native Save As did not submit');
+    await page.getByText('MP4 saved.',{exact:true}).waitFor({timeout:30000});
+    assert.equal(await checksum(destination), reference);
+    report.tests.nativeSaveAsAndExactBytes = true;
+  }
   await page.evaluate(() => { location.hash = '#/history'; });
   await page.getByRole('heading', { name: 'Watch history', exact: true }).waitFor();
   await page.getByRole('link', { name: media.title, exact: true }).waitFor();
@@ -148,8 +255,27 @@ try {
   await page.getByRole('heading', { name: 'Sources', exact: true }).waitFor();
   await page.getByText('Saved custom source', { exact: true }).waitFor();
   const sources = await invoke('sources.list');
-  assert.deepEqual(sources.map((row) => row.id), ['sample-test', 'sample-test-2', 'yt-example']);
+  assert.deepEqual(sources.map((row) => row.id), ['sample-test', 'sample-test-2', 'yt-example', ...(withSearch ? ['recipe-test'] : [])]);
+  if (withSearch) {
+    assert.equal(sources[0].searchTemplate, 'https://www.sample.test/preferred?q={query}');
+    assert.equal(sources[0].searchTemplateSource, 'user');
+    assert.equal(sources[1].searchTemplate, 'https://sample.test/saved-find?q={query}');
+    assert.equal(sources[1].searchTemplateSource, 'opensearch');
+    assert.equal(sources[1].searchCheckedAt, 123);
+    assert.equal(sources[3].searchTemplate, 'https://recipe.test/saved-search?q={query}');
+    assert.equal(sources[3].searchTemplateSource, 'recipe');
+    report.tests.migratedUserRecipeAndDiscoveredTemplates = true;
+  }
   report.tests.savedSourceIds = true;
+  assert.equal((await invoke('library.state', {mediaId: media.id})).pinned['sample-test'], 'https://www.sample.test/watch/example');
+  await invoke('site.forget', {sourceId: 'sample-test', mediaId: media.id});
+  assert.deepEqual((await invoke('library.state', {mediaId: media.id})).pinned, {});
+  const stagedStore = new Store(path.join(staged, 'aniverse.db'));
+  try {
+    assert.deepEqual(stagedStore.getSiteLinks('sample-test', media.id), {});
+    assert.equal(stagedStore.getSiteLinks('sample-test-2', media.id)[3], 'https://sample.test/alternate/3');
+  } finally { stagedStore.close(); }
+  report.tests.refindClearsOnlySelectedSource = true;
   const maximize = page.getByRole('button', { name: 'Maximize window' });
   await maximize.click();
   await page.getByRole('button', { name: 'Restore window' }).waitFor();
@@ -185,12 +311,42 @@ try {
     const prefs = JSON.parse(await readFile(path.join(profile, 'update-preferences.json'), 'utf8'));
     assert.equal(prefs.autoDownload, false);
     await page.reload();
-    await automatic.waitFor();
+    await page.getByRole('switch', { name: 'Download updates automatically', checked: false }).waitFor();
     assert.equal(await automatic.getAttribute('aria-checked'), 'false');
     report.tests.ownUpdaterControlsAndPreferences = true;
   }
+  if (process.env.ANIVERSE2_CHECK_DESKTOP_PORTS === '1') {
+    assert.deepEqual(await invoke('sources.streams',{sourceId:'sample-test',ref:'episode-1'}),[]);
+    assert.deepEqual((await invoke('sources.streams',{sourceId:'yt-example',ref:'abcDEF_01-2'}))[0],
+      {type:'youtube',videoId:'abcDEF_01-2',label:'YouTube · official embed'});
+    await assert.rejects(invoke('sources.streams',{sourceId:'yt-example',ref:'https://example.test/unsafe'}),/Invalid YouTube video ID/);
+    const before=await invoke('changelog.state');
+    const seen=await invoke('changelog.markSeen',{version:before.version});
+    assert.equal(seen.seen,before.version);
+    assert.equal((await invoke('changelog.state')).unread,false);
+    await assert.rejects(invoke('changelog.markSeen',{version:'0.0.0'}),/Only this app version/);
+    const db=new Store(path.join(staged,'aniverse.db'));
+    db.cacheSet('isolation:retained-cache-fixture',{value:'to be purged'},3600);
+    db.close();
+    await invoke('app.cacheClear');
+    const after=new Store(path.join(staged,'aniverse.db'));
+    try {
+      assert.equal(after.cacheGet('isolation:retained-cache-fixture'),null);
+      assert.ok(after.listHistory(200,0).some(entry=>entry.media.id===media.id));
+    } finally {after.close();}
+    const next=await invoke('privacy.title',{mediaId:media.id,on:true});
+    assert.ok(next.privateMediaIds.includes(media.id));
+    assert.equal((await invoke('library.history',{limit:200,offset:0})).length,0);
+    const privateSources=await invoke('privacy.watchSources',{mediaId:media.id});
+    assert.ok(privateSources.leaseId && privateSources.sources.every(source=>source.partition.startsWith('private-')));
+    await invoke('privacy.releaseSources',{leaseId:privateSources.leaseId});
+    await invoke('privacy.title',{mediaId:media.id,on:false});
+    assert.equal((await invoke('library.history',{limit:200,offset:0})).length,1);
+    assert.equal((await invoke('settings.get')).profile.name,'Saved profile');
+    report.tests.desktopPortsCacheChangelogAndPrivacy=true;
+  }
   const unsupported = await page.evaluate(async () => {
-    try { await window.aniverse.invoke('site.openEpisode', {}); return null; }
+    try { await window.aniverse.invoke('test.unknownOperation', {}); return null; }
     catch (error) { return error.code; }
   });
   assert.equal(unsupported, 'unavailable');
@@ -200,7 +356,7 @@ try {
   report.tests.originalDatabaseAndSourceBytes = true;
   if (withHandoff) {
     assert.deepEqual(JSON.parse(await readFile(path.join(staged, 'migration-stage.json'), 'utf8')), {
-      schema: 1, nonce, state: 'profile-copied',
+      schema: 2, nonce, state: 'renderer-verified',
     });
     const existing = await checksum(path.join(staged, 'aniverse.db'));
     const repeated = spawnSync(exe, ['--prepare-legacy-profile'], { windowsHide: true, timeout: 10000, env: { ...launchEnv, ANIVERSE_ELECTRON_HANDOFF: launchEnv.ANIVERSE2_TEST_PREPARED_MARKER } });
@@ -209,14 +365,19 @@ try {
     assert.equal(await readFile(path.join(config, 'streaming-sites.txt'), 'utf8'), sites);
     report.tests.verifiedHandoffProfileCopy = true;
     report.tests.tamperedHandoffRejected = true;
+    report.tests.inventoryAndCompatibleFilesVerified = true;
+    report.tests.encryptedWindowsKeyOnly = true;
+    report.tests.committedHttpCachePreserved = true;
+    report.tests.badReceiptBlockedCandidateWithoutTouchingElectron = true;
     report.tests.repeatDidNotReplaceProfile = true;
+    if (withBoot) report.tests.firstRendererVerifiedWithDisposalAndRollback = true;
   }
   report.runtime = await page.evaluate(() => ({ origin: location.origin, userAgent: navigator.userAgent }));
   report.passed = true;
   console.log(report);
 } finally {
   await mkdir('test/artifacts', { recursive: true });
-  await writeFile(withHandoff ? 'test/artifacts/aniverse2-handoff-windows.json' : 'test/artifacts/aniverse2-desktop-windows.json', JSON.stringify(report, null, 2) + '\n');
+  await writeFile(process.env.ANIVERSE2_TEST_REPORT ?? (withHandoff ? 'test/artifacts/aniverse2-handoff-windows.json' : 'test/artifacts/aniverse2-desktop-windows.json'), JSON.stringify(report, null, 2) + '\n');
   await browser?.close().catch(() => undefined);
   if (child.exitCode === null && child.signalCode === null && child.pid && child.kill()) await exited;
 }
@@ -247,4 +408,35 @@ async function prepareHandoffFixture({ run, exe, profile, legacy, preferences, n
   await assert.rejects(stat(path.join(profile, 'profile-data')), { code: 'ENOENT' });
   await writeFile(marker, JSON.stringify(descriptor));
   return marker;
+}
+
+async function rejectUnreadableHistory({ run, legacy, exe, marker, launchEnv }) {
+  const failure = path.join(run, 'unreadable-history');
+  const source = path.join(failure, 'legacy');
+  const target = path.join(failure, 'profile');
+  const config = path.join(source, 'config');
+  const attempt = path.join(source, 'windows-migration', 'attempt-fixture');
+  await Promise.all([mkdir(attempt, { recursive: true }), mkdir(config, { recursive: true }), mkdir(target, { recursive: true })]);
+  const descriptor = JSON.parse(await readFile(marker, 'utf8'));
+  await copyFile(path.join(legacy, 'profile.id'), path.join(source, 'profile.id'));
+  await copyFile(path.join(descriptor.configDir, 'streaming-sites.txt'), path.join(config, 'streaming-sites.txt'));
+  const database = path.join(source, 'aniverse.db');
+  await copyFile(path.join(legacy, 'aniverse.db'), database);
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
+  const bad = new DatabaseSync(database);
+  bad.exec('DROP TABLE history; PRAGMA wal_checkpoint(TRUNCATE);');
+  bad.close();
+  const digest = createHash('sha256').update(await readFile(database)).digest('hex');
+  const brokenMarker = path.join(attempt, 'electron-handoff.json');
+  await writeFile(brokenMarker, JSON.stringify({
+    ...descriptor, nonce: randomUUID(), dataDir: source, configDir: config,
+  }));
+  const rejected = spawnSync(exe, ['--prepare-legacy-profile'], { windowsHide: true, timeout: 60000, env: {
+    ...launchEnv, ANIVERSE2_TEST_PROFILE: target, ANIVERSE2_TEST_LEGACY_PROFILE: source, ANIVERSE_ELECTRON_HANDOFF: brokenMarker,
+  } });
+  assert.equal(rejected.status, 1, rejected.stderr?.toString());
+  assert.match(rejected.stderr?.toString() ?? '', /did not verify the copied profile/);
+  await assert.rejects(stat(path.join(target, 'profile-data')), { code: 'ENOENT' });
+  assert.equal(createHash('sha256').update(await readFile(database)).digest('hex'), digest);
+  assert.equal(await readFile(path.join(run, 'AniVerse.exe'), 'utf8'), 'original application sentinel');
 }

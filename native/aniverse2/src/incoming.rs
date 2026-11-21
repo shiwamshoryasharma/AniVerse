@@ -1,4 +1,4 @@
-use aniverse_desktop_migration::{publish_profile_copy, VerifiedHandoff};
+use aniverse_desktop_migration::{publish_profile_copy, ProfileProof, VerifiedHandoff};
 use serde_json::json;
 use std::{
     ffi::OsStr,
@@ -14,14 +14,33 @@ const IMPORTED: &str = "profile-data";
 pub(crate) fn data_root(root: &Path) -> io::Result<PathBuf> {
     let candidate = root.join(IMPORTED);
     match fs::symlink_metadata(&candidate) {
-        Ok(meta) if meta.file_type().is_dir() => Ok(candidate),
-        Ok(_) => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "invalid imported profile folder",
-        )),
+        Ok(meta) if meta.file_type().is_dir() => {
+            let journal = crate::profile::text_file(&candidate.join("migration-stage.json"), 512)?;
+            let required = match journal {
+                Some(journal) => {
+                    let record: serde_json::Value = serde_json::from_str(&journal)?;
+                    match record["schema"].as_u64() {
+                        Some(1) => false,
+                        Some(2) => true,
+                        _ => return Err(invalid_profile()),
+                    }
+                }
+                None => false,
+            };
+            ProfileProof::validate_completion(&candidate, required)?;
+            Ok(candidate)
+        }
+        Ok(_) => Err(invalid_profile()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(root.to_path_buf()),
         Err(error) => Err(error),
     }
+}
+
+fn invalid_profile() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        "invalid imported profile folder or migration record",
+    )
 }
 
 pub(crate) fn prepare(identifier: &str, marker: &OsStr) -> Result<(), Box<dyn std::error::Error>> {
@@ -54,6 +73,7 @@ fn receive(
     root: &Path,
     legacy: &Path,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let _profile_lock = crate::migration_boot::profile_lock(root, true)?;
     if data_root(root)? != root
         || root.join("aniverse.db").try_exists()?
         || root.join("profile.id").try_exists()?
@@ -63,7 +83,6 @@ fn receive(
     }
     let executable = std::env::current_exe()?;
     let job = verify(Path::new(marker), legacy, &executable)?;
-    fs::create_dir_all(root)?;
     let stage = job.stage_after_exit(
         root,
         LEGACY_SQLITE_SCHEMA,
@@ -71,10 +90,14 @@ fn receive(
         Duration::from_secs(20),
     )?;
     let mut journal = File::create_new(stage.path().join("migration-stage.json"))?;
-    let record = json!({"schema": 1, "nonce": job.nonce().to_string(), "state": "profile-copied"});
+    let record = json!({"schema": 2, "nonce": job.nonce().to_string(), "state": "renderer-verified"});
     journal.write_all(&serde_json::to_vec(&record)?)?;
     journal.sync_all()?;
     drop(journal);
+    let proof = job.profile_proof(stage.path())?;
+    proof.write_inventory(stage.path())?;
+    crate::migration_boot::verify(root, stage.path(), &executable)?;
+    proof.complete(stage.path())?;
     let target = root.join(IMPORTED);
     publish_profile_copy(stage, &target)?;
     Ok(target)

@@ -16,7 +16,7 @@ import { AppError, nowSec, stripHtml } from '../util';
 
 export const ANILIST_GRAPHQL = 'https://graphql.anilist.co';
 
-const CARD = `
+export const CARD = `
 fragment card on Media {
   id idMal type
   title { romaji english native userPreferred } synonyms
@@ -41,7 +41,7 @@ query ($season: MediaSeason, $year: Int, $since: Int, $now: Int) {
   recent: Page(perPage: 36) { airingSchedules(airingAt_greater: $since, airingAt_lesser: $now, sort: TIME_DESC) { id episode airingAt media { ...card } } }
 }`;
 
-const BROWSE_TYPES: Record<string, string> = {
+export const BROWSE_TYPES: Record<string, string> = {
   search: 'String',
   genre_in: '[String]',
   genre_not_in: '[String]',
@@ -73,7 +73,7 @@ query ($page: Int, $perPage: Int${keys.map((k) => `, $${k}: ${BROWSE_TYPES[k]}`)
 }`;
 }
 
-const DETAILS_QUERY = `${CARD}
+export const DETAILS_QUERY = `${CARD}
 query ($id: Int) {
   Media(id: $id, type: ANIME) {
     ...card
@@ -92,7 +92,7 @@ query ($id: Int) {
   }
 }`;
 
-const searchQuery = (showAdult: boolean) => `${CARD}
+export const searchQuery = (showAdult: boolean) => `${CARD}
 query ($search: String) {
   Page(perPage: 24) { media(search: $search, type: ANIME, sort: SEARCH_MATCH${adultArg(showAdult)}) { ...card } }
 }`;
@@ -105,9 +105,9 @@ query ($page: Int, $from: Int, $to: Int) {
   }
 }`;
 
-const GENRES_QUERY = `query { GenreCollection MediaTagCollection { name isAdult category } }`;
+export const GENRES_QUERY = `query { GenreCollection MediaTagCollection { name isAdult category } }`;
 
-const HOVER_QUERY = `query ($id: Int) {
+export const HOVER_QUERY = `query ($id: Int) {
   Media(id: $id, type: ANIME) {
     description(asHtml: false)
     studios(isMain: true) { nodes { name } }
