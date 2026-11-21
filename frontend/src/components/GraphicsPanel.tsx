@@ -3,7 +3,8 @@ import { useState } from 'react';
 import windowsGuide from '../assets/graphics/windows-graphics.svg';
 import rtxGuide from '../assets/graphics/rtx-video.svg';
 import { useAppInfo } from '../lib/queries';
-import { call, errorText } from '../lib/bridge';
+import { call, errorText, isAniVerse2 } from '../lib/bridge';
+import { DesktopDisplayPanel } from './DesktopDisplayPanel';
 import { useToast } from '../lib/useToast';
 import { Select } from './controls';
 import type { UiRenderingMode } from '../../../app/shared/graphics';
@@ -39,6 +40,7 @@ export function GraphicsPanel() {
       {error ? <div className="card gpu-content" role="alert">{errorText(error)}</div> : !data ? <div className="card gpu-content">Loading graphics preferences…</div> : (
         <div className="card gpu-content" role="tabpanel" id={'gpu-' + tab} aria-labelledby={'gpu-tab-' + tab}>
           {tab === 'overview' && <>
+            {isAniVerse2 && <DesktopDisplayPanel />}
             {graphics && <>
             <div className="gpu-active"><span className="gpu-chip"><Monitor size={28} /></span><div><span className="gpu-eyebrow">ACTIVE GRAPHICS</span><h3>{graphics.activeAdapter ?? 'Not confirmed'}</h3><div className="gpu-badges">
               <span className={graphics.hardwareDecode ? 'gpu-badge success' : 'gpu-badge warning'}><ShieldCheck size={13} /> Hardware video decoding {graphics.hardwareDecode ? 'available' : 'unavailable'}</span>

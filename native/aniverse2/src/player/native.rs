@@ -15,7 +15,8 @@ use tauri::{AppHandle, Manager, Url, Webview};
 use tokio::sync::oneshot;
 use webview2_com::{
     take_pwstr, CallDevToolsProtocolMethodCompletedHandler, Microsoft::Web::WebView2::Win32::*,
-    PermissionRequestedEventHandler, WebResourceRequestedEventHandler,
+    PermissionRequestedEventHandler, ScreenCaptureStartingEventHandler,
+    WebResourceRequestedEventHandler,
 };
 use windows::{
     core::{w, Interface, HSTRING, PWSTR},
@@ -100,6 +101,17 @@ unsafe fn install(
         })),
         &mut token,
     )?;
+    if let Ok(capture) = webview.cast::<ICoreWebView2_27>() {
+        capture.add_ScreenCaptureStarting(
+            &ScreenCaptureStartingEventHandler::create(Box::new(|_, args| {
+                if let Some(args) = args {
+                    args.SetCancel(true)?;
+                }
+                Ok(())
+            })),
+            &mut token,
+        )?;
+    }
     // Do not issue a source request without coverage for worker and subframe traffic.
     webview
         .cast::<ICoreWebView2_22>()?

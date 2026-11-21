@@ -5,6 +5,7 @@ use crate::{
 };
 use reqwest::{Method, Url};
 use serde_json::{json, Value};
+use std::path::Path;
 
 const FIELDS: &str =
     "id idMal title { userPreferred } coverImage { large } bannerImage format episodes";
@@ -187,13 +188,16 @@ async fn map_mal(
 
 pub(super) async fn push(
     service: &Service,
+    root: &Path,
     session: &Session,
     id: i32,
     id_mal: Option<i32>,
     wanted: Option<&Entry>,
     favourite: Option<bool>,
-) -> Result<(), RpcError> {
-    privacy(session.privacy_epoch)?;
+) -> Result<bool, RpcError> {
+    if !can_push(root, session, id)? {
+        return Ok(false);
+    }
     if session.provider == "mal" {
         if let (Some(id), None) = (id_mal, favourite) {
             push_mal(service, session, id, wanted).await?;
@@ -206,16 +210,24 @@ pub(super) async fn push(
             .as_bool()
             .ok_or_else(network)?;
         if wanted != current {
-            privacy(session.privacy_epoch)?;
+            if !can_push(root, session, id)? {
+                return Ok(false);
+            }
             let query = "mutation ($id:Int){ ToggleFavourite(animeId:$id){ anime { pageInfo { total } } } }";
             service
                 .graphql(query, json!({"id":id}), Some(&session.token))
                 .await?;
         }
     } else {
-        push_anilist(service, session, id, wanted).await?;
+        return push_anilist(service, root, session, id, wanted).await;
     }
-    Ok(())
+    Ok(true)
+}
+
+fn can_push(root: &Path, session: &Session, id: i32) -> Result<bool, RpcError> {
+    let public = !crate::profile::private_title(root, i64::from(id))?;
+    privacy(session.privacy_epoch)?;
+    Ok(public)
 }
 
 async fn push_mal(
@@ -269,10 +281,11 @@ async fn push_mal(
 
 async fn push_anilist(
     service: &Service,
+    root: &Path,
     session: &Session,
     id: i32,
     desired: Option<&Entry>,
-) -> Result<(), RpcError> {
+) -> Result<bool, RpcError> {
     if let Some(entry) = desired {
         let score = entry.score.map(|value| (value * 10.0).round() as i32);
         let mut variables = json!({"media":id,"progress":entry.progress,"status":entry.status});
@@ -298,11 +311,13 @@ async fn push_anilist(
             .await;
         let result = match result {
             Ok(result) => result,
-            Err(error) if error.code == "not-found" => return Ok(()),
+            Err(error) if error.code == "not-found" => return Ok(true),
             Err(error) => return Err(error),
         };
         if let Some(entry) = positive_id(&result["MediaList"]["id"]) {
-            privacy(session.privacy_epoch)?;
+            if !can_push(root, session, id)? {
+                return Ok(false);
+            }
             let query = "mutation($id:Int){ DeleteMediaListEntry(id:$id){ deleted } }";
             let data = service
                 .graphql(query, json!({"id":entry}), Some(&session.token))
@@ -312,7 +327,7 @@ async fn push_anilist(
             }
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 fn snapshot(raw: &Value) -> Result<Value, RpcError> {

@@ -4,7 +4,7 @@ import type { CastDevice } from '../../../app/shared/types';
 import type { PlayerControls } from '../player/VideoPlayer';
 import { useCastState, isCasting } from '../player/useCastState';
 import { useToast } from '../lib/useToast';
-import { call, errorText, onEvent } from '../lib/bridge';
+import { call, errorText, isAniVerse2, onEvent } from '../lib/bridge';
 import { startWebsiteMirror } from '../lib/websiteMirror';
 import { ChromeCastPicker } from './ChromeCastPicker';
 import { WirelessDisplay } from './WirelessDisplay';
@@ -22,15 +22,17 @@ export function EpisodeCast({ native, webContentsId, title }: { native: RefObjec
   }), []);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; stopRef.current?.(); }; }, []);
   const start = async (device: CastDevice) => {
-    if (!webContentsId || busy) return;
+    if (!webContentsId || busy || (isAniVerse2 && device.transport !== 'chrome')) return;
     setBusy(true); setError('');
     let ticket: string | null = null;
     try {
-      ticket = (await call('cast.mirrorPrepare', { webContentsId, deviceId: device.id, title, upscale })).ticket;
-      const stop = await startWebsiteMirror(ticket, audio, (message) => toast.push({ level: 'error', message }));
+      ticket = (await call('cast.mirrorPrepare', { webContentsId, deviceId: device.id, title, upscale: !isAniVerse2 && upscale })).ticket;
+      const stop = await startWebsiteMirror(ticket, !isAniVerse2 && audio, (message) => toast.push({ level: 'error', message }));
       if (!mounted.current) { stop(); return; }
       stopRef.current = stop; setCapture(true); setOpen(false);
-      toast.push({ level: 'info', message: 'Preparing the TV stream. Keep the episode playing; mirroring has a short delay.' });
+      toast.push({ level: 'info', message: isAniVerse2
+        ? 'Preparing video-only mirroring. Keep the website player visible.'
+        : 'Preparing the TV stream. Keep the episode playing; mirroring has a short delay.' });
     } catch (e) { if (ticket) void call('cast.mirrorStop', { ticket }).catch(() => undefined); setError(errorText(e)); }
     finally { if (mounted.current) setBusy(false); }
   };
@@ -39,13 +41,24 @@ export function EpisodeCast({ native, webContentsId, title }: { native: RefObjec
     {isCasting(state) && <button className="btn sm" onClick={stop}><ScreenShareOff size={15} />Stop casting</button>}
     <button className="btn primary episode-cast-button" disabled={busy} onClick={() => {
       if (native.current) native.current.openCast();
-      else if (webContentsId) { setOpen(true); void scan(); void call('cast.capabilities').then((s) => setAvailable(s.available)).catch(() => undefined); }
+      else if (webContentsId) {
+        setOpen(true);
+        if (!isAniVerse2) {
+          void scan();
+          void call('cast.capabilities').then((s) => setAvailable(s.available)).catch(() => undefined);
+        }
+      }
       else toast.push({ level: 'info', message: 'Start an episode or open a video first, then choose Cast to TV.' });
     }}><Tv size={18} />{busy ? 'Preparing TV…' : 'Cast to TV'}</button>
     {capture && <span role="status" className="mirror-live-indicator"><Cast size={13} />{state.status === 'connecting' ? 'Preparing website stream…' : 'Mirroring to ' + state.device?.name}</span>}
     <dialog ref={dialog} className="episode-cast-dialog" aria-label="Cast episode to TV" onCancel={(e) => { e.preventDefault(); if (!busy) setOpen(false); }}>
       <header><div className="row"><Tv size={23} /><div><h2>Cast episode to TV</h2><p>{title}</p></div></div><button className="icon-btn" aria-label="Close TV chooser" disabled={busy} onClick={() => setOpen(false)}><X size={19} /></button></header>
-      <div className="stack">{open && <ChromeCastPicker disabled={busy} onPick={(device) => void start(device)} />}<h3 className="cast-protocol-heading">Direct Google Cast</h3><div className="mirror-explanation"><MonitorPlay size={21} /><div><strong>Mirror this website’s player</strong><p>Sends the selected site view and its audio to your TV. Your desktop and other apps are not captured. Keep the player visible; leaving the episode stops mirroring. Protected video may not be capturable.</p></div></div>
+      {isAniVerse2 ? <div className="stack">
+        <p>Mirror the visible website player using Chrome. Start playback and focus the video before choosing a TV. Website audio stays on this computer.</p>
+        {open && <ChromeCastPicker disabled={busy} onPick={(device) => void start(device)} />}
+        {!!error && <p className="err" role="alert">{error}</p>}
+        <WirelessDisplay />
+      </div> : <div className="stack">{open && <ChromeCastPicker disabled={busy} onPick={(device) => void start(device)} />}<h3 className="cast-protocol-heading">Direct Google Cast</h3><div className="mirror-explanation"><MonitorPlay size={21} /><div><strong>Mirror this website’s player</strong><p>Sends the selected site view and its audio to your TV. Your desktop and other apps are not captured. Keep the player visible; leaving the episode stops mirroring. Protected video may not be capturable.</p></div></div>
         <label className="row between">Include website audio<Switch label="Include website audio" on={audio} onChange={setAudio} disabled={busy} /></label>
         <label className="row between">Anime4K · process 4K on this device<Switch label="Mirror in 4K" on={upscale} onChange={setUpscale} disabled={busy || !available} /></label>
         <p className="faint">Standard mirroring uses H.264 at 1080p. 4K needs a Vulkan-capable sender and a 4K HEVC Cast receiver. All filtering and encoding run here. TV playback is delayed by a few seconds; use the website player to seek.</p>
@@ -54,7 +67,7 @@ export function EpisodeCast({ native, webContentsId, title }: { native: RefObjec
           devices.map((device) => <button className="cast-device-card" disabled={busy || !available} key={device.id} onClick={() => void start(device)}><Tv size={20} /><span><strong>{device.name}</strong><small>{device.model}</small></span><Cast size={17} /></button>)}
         {!!error && !!devices?.length && <p className="err" role="alert">{error}</p>}
         <details className="cast-windows-option"><summary>Windows wireless display · Miracast</summary><WirelessDisplay /></details>
-      </div>
+      </div>}
     </dialog>
   </div>;
 }

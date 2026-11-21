@@ -20,6 +20,7 @@ fn main() {
         "site-upscale.js",
         "site-audio.js",
         "site-catalogue.js",
+        "chrome-player.js",
     ] {
         let source = renderer.join(name);
         println!("cargo:rerun-if-changed={}", source.display());

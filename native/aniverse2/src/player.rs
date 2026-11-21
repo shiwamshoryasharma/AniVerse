@@ -2,6 +2,7 @@ mod capture;
 mod catalogue;
 mod discovery;
 mod frames;
+mod legacy_session;
 mod native;
 mod navigation;
 mod private_views;
@@ -300,6 +301,7 @@ impl Service {
             if method == "sources.session" {
                 return session_data::cookies(&session).await;
             }
+            legacy_session::forget(root, &session.source)?;
             crate::desktop::clear_browsing_data(&session.view, true).await?;
             return Ok(Value::Null);
         }
@@ -372,7 +374,11 @@ impl Service {
             "site.episodes" => navigation::episodes(owner, &session).await,
             "site.choose" => navigation::choose(owner, &session, &input).await?,
             "site.focus" => {
-                json!({"focused": navigation::focus(&session, input["on"].as_bool().ok_or_else(invalid)?).await?})
+                let on = input["on"].as_bool().ok_or_else(invalid)?;
+                if !on {
+                    capture::revoke_mirror(&session);
+                }
+                json!({"focused": navigation::focus(&session, on).await?})
             }
             "player.upscale" => upscale::apply(&session, &input["options"]).await?,
             "player.capturePrepare" => capture::prepare(self, owner, &session).await?,
@@ -545,6 +551,9 @@ impl Service {
         {
             let _ = view.close();
             return Err(error);
+        }
+        if !hidden && !discovery && lease.is_none() && !crate::runtime_privacy::active() {
+            legacy_session::restore(&view, &source, &directory).await;
         }
         Ok(Arc::new(Session {
             view,
@@ -719,6 +728,11 @@ fn navigate(session: &Session, url: Url) -> Result<(), RpcError> {
         return Err(failure(
             "The source redirected outside its configured site.",
         ));
+    }
+    if url.scheme() == "https" && !session.browsing_private() {
+        let root = session.view.state::<PathBuf>();
+        // Native cookie writes finish before any regular guest can contact this source.
+        legacy_session::forget(root.inner(), &session.source)?;
     }
     session.ready.store(false, Ordering::Release);
     session.page_generation.fetch_add(1, Ordering::Relaxed);

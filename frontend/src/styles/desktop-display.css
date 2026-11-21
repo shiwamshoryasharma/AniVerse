@@ -1,0 +1,59 @@
+/* Keep the host coordinate system stable for native source WebViews. */
+:root[data-aniverse-edition='2'] { --desktop-scale: 1; }
+:root[data-aniverse-edition='2'][data-display-scale='85'] { --desktop-scale: .85; }
+:root[data-aniverse-edition='2'][data-display-scale='115'] { --desktop-scale: 1.15; }
+:root[data-aniverse-edition='2'][data-display-scale='125'] { --desktop-scale: 1.25; }
+:root[data-aniverse-edition='2'] .app {
+  zoom: var(--desktop-scale);
+  min-width: 0;
+  height: calc(100dvh / var(--desktop-scale));
+  container-type: inline-size;
+}
+:root[data-aniverse-edition='2'] .desktop-display .row { align-items: center; }
+
+@media (max-width: 960px), (max-height: 660px) {
+  :root[data-aniverse-edition='2'][data-display-scale='auto'] { --desktop-scale: .9; }
+}
+@container (max-width: 1190px) {
+  :root[data-aniverse-edition='2'] .layout-studio .watch,
+  :root[data-aniverse-edition='2'] .watch { grid-template-columns: minmax(0, 1fr); }
+  :root[data-aniverse-edition='2'] .ep-panel { position: static; }
+}
+@container (max-width: 960px) {
+  :root[data-aniverse-edition='2'] .tauri-topbar { gap: 6px; padding-left: 8px; }
+  :root[data-aniverse-edition='2'] .tauri-topbar .brand { min-width: 0; padding-left: 0; }
+  :root[data-aniverse-edition='2'] .tauri-topbar .search { flex: 1 1 100px; min-width: 88px; }
+  :root[data-aniverse-edition='2'] .tauri-topbar .search input { min-width: 0; }
+  :root[data-aniverse-edition='2'] .tauri-window-controls button { width: 36px; }
+  :root[data-aniverse-edition='2'] .app .source-bar { grid-template-columns: minmax(0, 1fr); }
+  :root[data-aniverse-edition='2'] .source-bar .now { border-right: 0; }
+  :root[data-aniverse-edition='2'] .watch-heading,
+  :root[data-aniverse-edition='2'] .toolbar { flex-wrap: wrap; }
+  :root[data-aniverse-edition='2'] .watch-heading > div:first-child { flex: 1 1 100%; }
+  :root[data-aniverse-edition='2'] .toolbar .grow { display: none; }
+}
+@media (max-width: 960px) {
+  :root[data-aniverse-edition='2'] .app.rail-open,
+  :root[data-aniverse-edition='2'] .layout-studio {
+    grid-template-columns: 58px minmax(0, 1fr);
+    --rail: 58px;
+    --pad: 12px;
+  }
+  :root[data-aniverse-edition='2'] .layout-classic { --pad: 12px; }
+  :root[data-aniverse-edition='2'] :is(.layout-studio, .layout-classic) .rail { padding-inline: 6px; }
+  :root[data-aniverse-edition='2'] :is(.layout-studio, .layout-classic) .rail-item { padding-inline: 12px; }
+  :root[data-aniverse-edition='2'] :is(.layout-studio, .layout-classic) .rail-label,
+  :root[data-aniverse-edition='2'] .studio-nav-heading { display: none; }
+  :root[data-aniverse-edition='2'] .tauri-topbar .search kbd,
+  :root[data-aniverse-edition='2'] .tauri-topbar .word { display: none; }
+}
+.quantum-audio-control { position: relative; }
+.quantum-audio-control:focus-within { z-index: 2; }
+.quantum-audio-menu {
+  inset: auto 0 calc(100% + 8px) auto;
+  display: grid;
+  gap: 9px;
+  width: 204px;
+}
+.quantum-audio-menu label { display: grid; gap: 5px; min-width: 0; }
+.player:has(.quantum-audio-control [aria-expanded='true']) .player-controls { opacity: 1; pointer-events: auto; }

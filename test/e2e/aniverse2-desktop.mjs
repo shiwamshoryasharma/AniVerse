@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { copyFile, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright-core';
 
 const withHandoff = process.env.ANIVERSE2_CHECK_HANDOFF === '1';
+const withWebsiteSessions = withHandoff && process.env.ANIVERSE2_CHECK_LEGACY_WEBSITE_SESSIONS === '1';
 const withBoot = withHandoff && process.env.ANIVERSE2_CHECK_CUTOVER_BOOT === '1';
 const withSearch = withHandoff && process.env.ANIVERSE2_CHECK_MIGRATED_SEARCH_TEMPLATES === '1';
 const withNativeSave = process.env.ANIVERSE2_CHECK_NATIVE_SAVE === '1';
@@ -78,6 +79,7 @@ const launchEnv = {
   TEMP: run, TMP: run, TMPDIR: run,
 };
 delete launchEnv.ANIVERSE_ELECTRON_HANDOFF;
+if (withWebsiteSessions) delete launchEnv.WEBVIEW2_USER_DATA_FOLDER;
 const staged = withHandoff ? path.join(profile, 'profile-data') : profile;
 const stagedFiles = new Map([
   ['adblock-engine.bin', Buffer.from('compatible offline blocker cache')],
@@ -89,20 +91,36 @@ const stagedFiles = new Map([
   ['graphics.json', Buffer.from('{"mode":"stable"}')],
   ['profile/avatar.webp', Buffer.from('profile fixture bytes')],
 ]);
-const legacyEncryptedKey = Buffer.from('DPAPI fixture ciphertext').toString('base64');
+const report = {
+  passed: false, tests: {},
+  evidence: { executableSha256: await checksum(exe), scope: withHandoff ? 'Windows x64 isolated signed-descriptor handoff' : 'Windows x64 isolated desktop smoke' },
+};
+let legacyEncryptedKey = Buffer.from('DPAPI fixture ciphertext').toString('base64');
 const nonce = randomUUID();
+try {
 if (withHandoff) {
   for (const [relative, contents] of stagedFiles) {
     const target = relative.startsWith('config/') ? path.join(config, relative.slice(7)) : path.join(legacy, relative);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, contents);
   }
-  await writeFile(path.join(legacy, 'Local State'), JSON.stringify({
+  if (!withWebsiteSessions) await writeFile(path.join(legacy, 'Local State'), JSON.stringify({
     os_crypt: { encrypted_key: legacyEncryptedKey }, profile: { unrelated: 'exclude this information' },
   }));
   await writeFile(path.join(run, 'AniVerse.exe'), 'original application sentinel');
   const marker = await prepareHandoffFixture({ run, exe, profile, legacy, preferences, nonce, launchEnv });
-  if (withBoot) await rejectUnreadableHistory({ run, legacy, exe, marker, launchEnv });
+  if (withBoot) {
+    report.evidence.bootScratch = { rejected: await rejectUnreadableHistory({ run, legacy, exe, marker, launchEnv }) };
+  }
+  if (withWebsiteSessions) {
+    const electron = createRequire(import.meta.url)('electron');
+    const seed = spawnSync(electron, [path.resolve('test/e2e/fixtures/aniverse2-seed-website-session.cjs')], {
+      env: { ...launchEnv, ANIVERSE2_COOKIE_FIXTURE: legacy, ANIVERSE2_COOKIE_ATTEMPT: path.dirname(marker), ANIVERSE2_COOKIE_NONCE: nonce },
+      windowsHide: true, timeout: 15000,
+    });
+    assert.equal(seed.status, 0, seed.stderr?.toString());
+    legacyEncryptedKey = JSON.parse(await readFile(path.join(legacy, 'Local State'), 'utf8')).os_crypt.encrypted_key;
+  }
   const prepared = spawnSync(exe, ['--prepare-legacy-profile'], {
     windowsHide: true, timeout: 60000, env: { ...launchEnv, ANIVERSE_ELECTRON_HANDOFF: marker },
   });
@@ -113,6 +131,7 @@ if (withHandoff) {
   if (withBoot) {
     const journal = JSON.parse(await readFile(path.join(staged, 'migration-stage.json'), 'utf8'));
     assert.equal(journal.state, 'renderer-verified');
+    report.evidence.bootScratch.accepted = await separateProbeScratch(profile);
     await assert.rejects(stat(path.join(profile, 'webview')), { code: 'ENOENT' });
   }
   const verification = JSON.parse(originalInventory);
@@ -143,16 +162,17 @@ if (withHandoff) {
     await writeFile(receipt, originalReceipt);
   }
 }
+} catch (error) {
+  report.error = error.stack ?? String(error);
+  await saveReport();
+  throw error;
+}
 const child = spawn(exe, [], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: launchEnv });
 let output = '', browser, launchError;
 child.on('error', (error) => { launchError = error; });
 child.stdout.on('data', (bytes) => { output += bytes; });
 child.stderr.on('data', (bytes) => { output += bytes; });
 const exited = once(child, 'exit').catch(() => undefined);
-const report = {
-  passed: false, tests: {},
-  evidence: { executableSha256: await checksum(exe), scope: withHandoff ? 'Windows x64 isolated signed-descriptor handoff' : 'Windows x64 isolated desktop smoke' },
-};
 try {
   for (let i = 0; i < 180 && child.exitCode === null && !launchError; i++) {
     try {
@@ -206,6 +226,47 @@ try {
   assert.equal(settings.player.autoplay, true);
   assert.equal(await invoke('player.mp4Folder', { action: 'get' }), withNativeSave ? saveFolder : 'D:/Saved video location');
   report.tests.settings = true;
+  if (withWebsiteSessions) {
+    const sources = await invoke('sources.list');
+    const primary = sources.find(source => source.id === 'sample-test');
+    const foreign = sources.find(source => source.id === 'sample-test-2');
+    const open = source => invoke('site.surface', {
+      action:'attach', sourceId:source.id, partition:source.partition, bounds:{x:0,y:0,width:640,height:360},
+    });
+    assert.equal((await invoke('sources.session', { id: primary.id })).cookies, 0);
+    const handoffArchive = path.join(staged, 'website-sessions.json');
+    const originalArchive = await readFile(handoffArchive, 'utf8');
+    const claimed = id => path.join(staged, 'website-sessions-processed', id);
+    if (withSearch) {
+      const recipe = sources.find(source => source.id === 'recipe-test');
+      await writeFile(handoffArchive, originalArchive + '\n');
+      const altered = await open(recipe);
+      assert.equal((await invoke('sources.session', { id: recipe.id })).cookies, 0);
+      await assert.rejects(stat(claimed(recipe.id)), {code:'ENOENT'});
+      await invoke('site.surface', {action:'detach', webContentsId:altered.webContentsId});
+      await writeFile(handoffArchive, originalArchive);
+      const restored = await open(recipe);
+      assert.deepEqual(await invoke('sources.session', { id: recipe.id }), {cookies:1,signedIn:true});
+      await invoke('site.surface', {action:'detach', webContentsId:restored.webContentsId});
+      report.tests.modifiedWebsiteArchiveRejectedWithoutConsumingIt = true;
+    }
+    assert.equal((await invoke('privacy.incognito',{on:true})).incognito,true);
+    const privateSource = (await invoke('sources.list')).find(source=>source.id===primary.id);
+    assert.ok(privateSource.partition.startsWith('private-'));
+    await open(privateSource);
+    await assert.rejects(stat(claimed(primary.id)),{code:'ENOENT'});
+    assert.equal((await invoke('privacy.incognito',{on:false})).incognito,false);
+    await open(primary);
+    assert.deepEqual(await invoke('sources.session', { id: primary.id }), {cookies:1,signedIn:true});
+    await open(foreign);
+    assert.equal((await invoke('sources.session', { id: foreign.id })).cookies, 0);
+    await invoke('sources.clearSession', { id: primary.id });
+    await open(primary);
+    assert.equal((await invoke('sources.session', { id: primary.id })).cookies, 0);
+    assert.ok((await readFile(path.join(staged, 'website-sessions.json'), 'utf8')).startsWith('{"sample-test":"enc2:'));
+    report.tests.protectedWebsiteCookieScopeAndClearVerified = true;
+    report.tests.incognitoDidNotConsumeRegularCookieTransfer = true;
+  }
   await page.evaluate(() => { location.hash = '#/player'; });
   const streamUrl = page.getByRole('textbox', { name: 'Stream URL' });
   const downloadMp4 = page.getByRole('button', { name: 'Download MP4' });
@@ -370,16 +431,39 @@ try {
     report.tests.committedHttpCachePreserved = true;
     report.tests.badReceiptBlockedCandidateWithoutTouchingElectron = true;
     report.tests.repeatDidNotReplaceProfile = true;
-    if (withBoot) report.tests.firstRendererVerifiedWithDisposalAndRollback = true;
+    if (withBoot) report.tests.firstRendererVerifiedWithRollback = true;
   }
   report.runtime = await page.evaluate(() => ({ origin: location.origin, userAgent: navigator.userAgent }));
   report.passed = true;
   console.log(report);
+} catch (error) {
+  report.error = error.stack ?? String(error);
+  throw error;
 } finally {
-  await mkdir('test/artifacts', { recursive: true });
-  await writeFile(process.env.ANIVERSE2_TEST_REPORT ?? (withHandoff ? 'test/artifacts/aniverse2-handoff-windows.json' : 'test/artifacts/aniverse2-desktop-windows.json'), JSON.stringify(report, null, 2) + '\n');
+  await saveReport();
   await browser?.close().catch(() => undefined);
   if (child.exitCode === null && child.signalCode === null && child.pid && child.kill()) await exited;
+}
+
+async function saveReport() {
+  await mkdir('test/artifacts', { recursive: true });
+  const data = JSON.stringify(report, null, 2) + '\n';
+  await writeFile(path.join(run, 'result.json'), data);
+  await writeFile(process.env.ANIVERSE2_TEST_REPORT ?? (withHandoff ? 'test/artifacts/aniverse2-handoff-windows.json' : 'test/artifacts/aniverse2-desktop-windows.json'), data);
+}
+
+async function separateProbeScratch(profile) {
+  const entries = await readdir(profile, { withFileTypes: true });
+  assert.ok(entries.every(entry => !entry.name.startsWith('.aniverse-profile-')),
+    'An unpublished app-data stage survived the migration worker.');
+  // Chromium can outlive the worker briefly. Any residue must remain in the
+  // dedicated browser scratch folder, separate from the profile being promoted.
+  const browser = entries.filter(entry => entry.name.startsWith('.aniverse-boot-'));
+  for (const entry of browser) {
+    assert.ok(entry.isDirectory());
+    assert.ok((await readdir(path.join(profile, entry.name))).every(name => name === 'webview'));
+  }
+  return browser.length;
 }
 
 async function prepareHandoffFixture({ run, exe, profile, legacy, preferences, nonce, launchEnv }) {
@@ -437,6 +521,8 @@ async function rejectUnreadableHistory({ run, legacy, exe, marker, launchEnv }) 
   assert.equal(rejected.status, 1, rejected.stderr?.toString());
   assert.match(rejected.stderr?.toString() ?? '', /did not verify the copied profile/);
   await assert.rejects(stat(path.join(target, 'profile-data')), { code: 'ENOENT' });
+  const browserScratch = await separateProbeScratch(target);
   assert.equal(createHash('sha256').update(await readFile(database)).digest('hex'), digest);
   assert.equal(await readFile(path.join(run, 'AniVerse.exe'), 'utf8'), 'original application sentinel');
+  return browserScratch;
 }

@@ -73,7 +73,7 @@ struct Publisher {
 
 /// Input to the native installer coordinator after checking the signed release and candidate executable.
 /// The legacy PID and path are metadata for the coordinator's process and uninstall checks.
-pub struct VerifiedHandoff(Descriptor, String);
+pub struct VerifiedHandoff(Descriptor, String, PathBuf);
 
 impl VerifiedHandoff {
     pub fn open(
@@ -141,8 +141,48 @@ impl VerifiedHandoff {
         let mut preferences = File::create_new(profile.path().join("renderer-preferences.json"))?;
         preferences.write_all(&serde_json::to_vec(&job.preferences)?)?;
         preferences.sync_all()?;
+        stage_website_sessions(&self.2, profile.path())?;
         Ok(profile)
     }
+}
+
+/// Optional data from bridges built with website-session export. Historical
+/// signed descriptors use the same schema and do not have this sibling file.
+fn stage_website_sessions(marker: &Path, profile: &Path) -> Result<(), HandoffError> {
+    const NAME: &str = "website-sessions.json";
+    const LIMIT: usize = 128_000;
+    let file = match crate::profile::open_regular(&marker.with_file_name(NAME)) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    let mut bytes = Vec::new();
+    file.take((LIMIT + 1) as u64).read_to_end(&mut bytes)?;
+    if bytes.len() > LIMIT {
+        return Err(HandoffError::Invalid);
+    }
+    let packets: BTreeMap<String, String> = serde_json::from_slice(&bytes)?;
+    if packets.is_empty()
+        || packets.len() > 100
+        || packets.iter().any(|(id, packet)| {
+            !(1..=128).contains(&id.len())
+                || !id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+                || !packet.strip_prefix("enc2:").is_some_and(|sealed| {
+                    (40..=50_000).contains(&sealed.len())
+                        && sealed.bytes().all(|byte| {
+                            byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=')
+                        })
+                })
+        })
+    {
+        return Err(HandoffError::Invalid);
+    }
+    let mut output = File::create_new(profile.join(NAME))?;
+    output.write_all(&bytes)?;
+    output.sync_all()?;
+    Ok(())
 }
 
 fn verify(
@@ -163,7 +203,7 @@ fn verify(
         return Err(HandoffError::Invalid);
     }
     let mut bytes = Vec::new();
-    File::open(marker)?.take(65_537).read_to_end(&mut bytes)?;
+    File::open(&marker)?.take(65_537).read_to_end(&mut bytes)?;
     if bytes.len() > 65_536 {
         return Err(HandoffError::Invalid);
     }
@@ -214,7 +254,7 @@ fn verify(
     if proof::file_hash(application)? != payload.application_sha256 {
         return Err(HandoffError::ApplicationHash);
     }
-    Ok(VerifiedHandoff(job, payload.application_sha256))
+    Ok(VerifiedHandoff(job, payload.application_sha256, marker))
 }
 
 fn stable_version(text: &str) -> Result<Version, HandoffError> {

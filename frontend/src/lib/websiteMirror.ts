@@ -1,6 +1,7 @@
-import { call, onEvent } from './bridge';
+import { call, isAniVerse2, onEvent } from './bridge';
 /** User-initiated capture; main grants only the selected, owned source webContents. */
 export async function startWebsiteMirror(ticket: string, audio: boolean, onError: (message: string) => void): Promise<() => void> {
+  if (isAniVerse2) return startWindowsMirror(ticket, onError);
   let stream: MediaStream | null = null, recorder: MediaRecorder | null = null;
   let stopped = false, sequence = 0, queued = 0, tail = Promise.resolve();
   let detach: () => void = () => undefined;
@@ -31,4 +32,47 @@ export async function startWebsiteMirror(ticket: string, audio: boolean, onError
     recorder.start(250);
     return stop;
   } catch (error) { stop(); throw error; }
+}
+
+interface MirrorEventBridge {
+  event: {
+    listen<T>(name: string, callback: (event: {payload: T}) => void): Promise<() => void>;
+  };
+}
+
+async function startWindowsMirror(ticket: string, onError: (message: string) => void): Promise<() => void> {
+  const tauri = (window as Window & {__TAURI__?: MirrorEventBridge}).__TAURI__;
+  if (!tauri) throw new Error('The Windows mirror bridge is unavailable.');
+  let stopped = false;
+  let sending = false;
+  let detach: () => void = () => undefined;
+  let off: Promise<() => void> | undefined;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    detach();
+    void off?.then((unlisten) => unlisten()).catch(() => undefined);
+    void call('cast.mirrorStop', { ticket }).catch(() => undefined);
+  };
+  detach = onEvent('player.captureEnded', (event) => {
+    if (event.ticket === ticket) stop();
+  });
+  off = tauri.event.listen<{ticket: string; sequence: number}>('aniverse:cast/mirrorFrame', ({ payload }) => {
+    if (stopped || sending || payload.ticket !== ticket) return;
+    sending = true;
+    void call('cast.mirrorChunk', { ticket, sequence: payload.sequence, bytes: new Uint8Array(0) }).catch((error) => {
+      if (!stopped) {
+        onError(error instanceof Error ? error.message : 'Website casting stopped.');
+        stop();
+      }
+    }).finally(() => { sending = false; });
+  });
+  try {
+    await off;
+    if (stopped) throw new Error('The source capture ended before Chrome connected.');
+    return stop;
+  } catch (error) {
+    stop();
+    throw error;
+  }
 }

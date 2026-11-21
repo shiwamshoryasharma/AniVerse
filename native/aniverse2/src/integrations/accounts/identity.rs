@@ -134,6 +134,7 @@ pub(super) async fn sync_token(
     root: &Path,
     provider: &str,
     account: &Value,
+    force: bool,
 ) -> Result<String, RpcError> {
     if account["needsReconnect"] == true {
         return Err(reconnect());
@@ -145,8 +146,8 @@ pub(super) async fn sync_token(
     let now = chrono::Utc::now().timestamp();
     let expiry = account["expiresAt"].as_i64();
     let live = expiry.is_none_or(|end| end > now);
-    if provider != "mal" || (live && expiry.is_none_or(|end| end > now + 86_400)) {
-        return saved.filter(|_| live).ok_or_else(reconnect);
+    if provider != "mal" || (!force && live && expiry.is_none_or(|end| end > now + 86_400)) {
+        return saved.filter(|_| !force && live).ok_or_else(reconnect);
     }
     let client = saved_mal_client(account);
     let refresh = account["refreshToken"]
@@ -154,7 +155,7 @@ pub(super) async fn sync_token(
         .and_then(|secret| crate::integrations::vault::open(root, secret).ok())
         .filter(|token| valid_token(token));
     let (Some(client), Some(refresh)) = (client, refresh) else {
-        return saved.filter(|_| live).ok_or_else(reconnect);
+        return saved.filter(|_| !force && live).ok_or_else(reconnect);
     };
     match mal_exchange(
         service,
@@ -173,7 +174,11 @@ pub(super) async fn sync_token(
             replace_account(root, provider, account, &update, false)?;
             Ok(tokens.access)
         }
-        Err(error) if error.code != "unauthorised" && expiry.is_some_and(|end| end > now + 60) => {
+        Err(error)
+            if !force
+                && error.code != "unauthorised"
+                && expiry.is_some_and(|end| end > now + 60) =>
+        {
             saved.ok_or(error)
         }
         Err(error) => {
@@ -250,7 +255,7 @@ fn seal_tokens(root: &Path, data: &mut Value, tokens: &Tokens) -> Result<(), Rpc
     Ok(())
 }
 
-fn mark_reconnect(root: &Path, provider: &str, account: &Value) -> Result<(), RpcError> {
+pub(super) fn mark_reconnect(root: &Path, provider: &str, account: &Value) -> Result<(), RpcError> {
     let mut update = account.clone();
     update["needsReconnect"] = Value::Bool(true);
     replace_account(root, provider, account, &update, false)

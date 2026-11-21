@@ -27,7 +27,8 @@ export function PlaybackRescue({ probe, health, webContentsId, busy }: { probe: 
     <section className="card playback-rescue" aria-label="Playback Rescue">
       <div><b>Playback Rescue</b><span role="status">{busy ? 'Switching player…' : health ? labels[health.state] : 'Waiting for video'}</span></div>
       {probe?.video && <p className="faint">
-        {probe.video.width} × {probe.video.height} · {probe.video.bufferedAhead.toFixed(1)}s buffered
+        {probe.video.width} × {probe.video.height}
+        {Number.isFinite(probe.video.bufferedAhead) && ' · ' + probe.video.bufferedAhead.toFixed(1) + 's buffered'}
         {health?.fps !== null && health?.fps !== undefined ? ' · ' + health.fps.toFixed(1) + ' fps' : ''}
         {health?.dropPercent !== null && health?.dropPercent !== undefined ? ' · ' + health.dropPercent.toFixed(1) + '% dropped' : ''}
       </p>}

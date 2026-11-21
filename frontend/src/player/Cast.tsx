@@ -5,7 +5,7 @@ import { ChromeCastPicker } from '../components/ChromeCastPicker';
 import { WirelessDisplay } from '../components/WirelessDisplay';
 import { Switch } from '../components/common';
 import { Range } from '../components/controls';
-import { call, errorText } from '../lib/bridge';
+import { call, errorText, isAniVerse2 } from '../lib/bridge';
 import { isCasting } from './useCastState';
 import { clock, cx } from '../lib/format';
 
@@ -39,8 +39,9 @@ export function CastMenu({ state, onPick, onStop, onClose, canUpscale }: { canUp
       <div className="row between"><h5>Cast to TV</h5><button className="icon-btn" aria-label="Close TV chooser" onClick={onClose}><X size={16}/></button></div>
       {state.status === 'error' && state.error && <p className="err" role="alert">{state.error}</p>}
       <ChromeCastPicker onPick={(device) => onPick(device, upscale4k)} />
-      <h5 className="cast-protocol-heading">Direct Google Cast</h5>
-      <div className="cast-4k-choice"><label className="row"><Switch label="Process 4K on this device" on={upscale4k} onChange={(on) => setUpscale4k(on && canUpscale && !!capability?.available)} />4K · process on this device</label><p>{canUpscale ? (capability?.message ?? 'Checking embedded encoder…') : '4K sender processing is available for opened local videos.'}</p><p>Requires a 4K HEVC-capable Google Cast TV/receiver, Vulkan GPU and sufficient LAN bandwidth. No system FFmpeg needed.</p></div>
+      <h5 className="cast-protocol-heading">{isAniVerse2 ? 'Nearby Cast receivers' : 'Direct Google Cast'}</h5>
+      {isAniVerse2 && <p className="faint">Use Chrome above to play on a receiver.</p>}
+      {!isAniVerse2 && <div className="cast-4k-choice"><label className="row"><Switch label="Process 4K on this device" on={upscale4k} onChange={(on) => setUpscale4k(on && canUpscale && !!capability?.available)} />4K · process on this device</label><p>{canUpscale ? (capability?.message ?? 'Checking embedded encoder…') : '4K sender processing is available for opened local videos.'}</p><p>Requires a 4K HEVC-capable Google Cast TV/receiver, Vulkan GPU and sufficient LAN bandwidth. No system FFmpeg needed.</p></div>}
       {isCasting(state) && (
         <button className="on" onClick={onStop}>
           <span className="row" style={{ gap: 8 }}>
@@ -58,7 +59,7 @@ export function CastMenu({ state, onPick, onStop, onClose, canUpscale }: { canUp
         </div>
       ) : (
         devices.map((d) => (
-          <button key={d.id} className={cx(state.device?.id === d.id && 'on')} onClick={() => onPick(d, upscale4k)}>
+          <button key={d.id} className={cx(state.device?.id === d.id && 'on')} disabled={isAniVerse2} onClick={() => onPick(d, upscale4k)}>
             <span className="row" style={{ gap: 8, minWidth: 0 }}>
               <Tv size={14} />
               <span className="ellipsis">{d.name}</span>

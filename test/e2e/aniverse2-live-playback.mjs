@@ -32,7 +32,7 @@ const env = {...process.env, ANIVERSE2_TEST_PROFILE: profile,
 delete env.ANIVERSE_ELECTRON_HANDOFF;
 delete env.WEBVIEW2_USER_DATA_FOLDER;
 const child = spawn(executable, [], {windowsHide: true, stdio:['ignore','pipe','pipe'], env});
-let stderr = '', browser, launchError;
+let stderr = '', browser, page, launchError;
 child.on('error', error => { launchError = error; });
 child.stderr.on('data', bytes => {stderr += bytes;});
 const exit = once(child, 'exit').catch(() => undefined);
@@ -58,7 +58,7 @@ try {
   });
   assert.ok(browser, 'The test window did not attach');
   const context = browser.contexts()[0];
-  const page = context.pages()[0] ?? await context.waitForEvent('page');
+  page = context.pages()[0] ?? await context.waitForEvent('page');
   await page.waitForURL('https://tauri.localhost/**', {timeout: 15000});
   await page.locator('.app').waitFor();
   const rpc = (method, input) => page.evaluate(({method,input}) =>
@@ -100,6 +100,8 @@ try {
         const active = choices?.types?.find(row=>row.active)?.value;
         const metrics = await rpc('player.probe',{webContentsId}).catch(() => null);
         if (active !== audio || !(metrics?.video?.totalFrames>4 && metrics.currentTime>0.2)) continue;
+        assert.ok(Number.isFinite(metrics.video.bufferedAhead) && metrics.video.bufferedAhead>=0, 'Missing native buffered-ahead value.');
+        assert.ok(Number.isFinite(metrics.video.playbackRate), 'Missing native playback rate.');
         const previous = baseline.get(webContentsId);
         const count = metrics.video.totalFrames;
         if (previous && count > previous.count && metrics.currentTime>previous.time) return {frames:count-previous.count};
@@ -113,9 +115,53 @@ try {
   report.checks.configuredRedirect = Boolean(redirect);
   report.checks.reactWatchDecodedVideo = true;
   report.checks.subDubSubDecoded = report.frames.length === 3;
+  await page.locator('.playback-rescue').filter({hasText:/s buffered/}).waitFor({timeout:8000});
+  assert.equal(await page.getByText('This screen crashed.',{exact:false}).count(),0);
+  report.checks.playbackMetricContractRenders = true;
+
+  if (process.env.ANIVERSE2_CHECK_DISPLAY === '1') {
+    const cdp = await context.newCDPSession(page);
+    report.display = [];
+    for (const [width,height] of [[640,480],[800,600],[1024,600],[1280,720]]) {
+      await cdp.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      assert.ok(await poll(async()=>await page.evaluate(width=>innerWidth===width,width),3000),'Viewport resize failed.');
+      const result = await page.evaluate(() => {
+        const bounds = selector => document.querySelector(selector).getBoundingClientRect();
+        const close = document.querySelector('.tauri-window-controls button:last-child');
+        const view = bounds('.watch');
+        const sources = bounds('.source-bar');
+        return {
+          width:innerWidth,height:innerHeight,
+          closeVisible:!!close && close.getBoundingClientRect().right<=innerWidth+1,
+          watchFits:view.left>=-1&&view.right<=innerWidth+1,
+          sourceControlsFit:sources.left>=-1&&sources.right<=innerWidth+1,
+        };
+      });
+      assert.ok(result.closeVisible && result.watchFits && result.sourceControlsFit,JSON.stringify(result));
+      report.display.push(result);
+    }
+    await page.evaluate(()=>{location.hash='#/settings/graphics';});
+    await page.getByRole('region',{name:'Display and window'}).waitFor({timeout:12000});
+    await page.getByRole('combobox',{name:'Interface scale'}).click();
+    await page.getByText('115% interface scale',{exact:true}).click();
+    assert.equal(await page.evaluate(()=>localStorage.getItem('aniverse2.display-scale')),'115');
+    await page.reload();
+    await page.getByRole('region',{name:'Display and window'}).waitFor({timeout:12000});
+    assert.equal(await page.evaluate(()=>document.documentElement.dataset.displayScale),'115');
+    await cdp.detach();
+    report.checks.compactDisplayAndScalePersistence = true;
+  }
   report.passed = true;
 } catch (error) {
   report.error = String(error?.message ?? error);
+  if (page) {
+    report.sourceState = await page.evaluate(() => ({
+      watch: document.querySelector('.watch-heading')?.innerText?.slice(0, 300),
+      player: document.querySelector('.screen')?.innerText?.slice(0, 300),
+      sources: document.querySelector('.source-bar')?.innerText?.slice(0, 450),
+      urls: Array.from(window.ownPlaybackFixtureIds?.values() ?? [], value => new URL(value).origin + new URL(value).pathname),
+    })).catch(() => null);
+  }
   throw error;
 } finally {
   await mkdir('test/artifacts',{recursive:true});

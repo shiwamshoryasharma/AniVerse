@@ -23,7 +23,9 @@ pub(in crate::integrations) enum Mode {
 }
 
 pub(in crate::integrations) fn queue(
-    db: &Connection, id: i64, favourite: Option<bool>,
+    db: &Connection,
+    id: i64,
+    favourite: Option<bool>,
 ) -> Result<bool, RpcError> {
     state::queue_library(db, id, favourite)
 }
@@ -91,17 +93,18 @@ pub(in crate::integrations) async fn run(
     };
     let epoch = crate::runtime_privacy::epoch();
     privacy(epoch)?;
+    let two_way = mode == Mode::Full
+        && crate::integrations::kv(root, "settings")?["accounts"]["twoWay"] != false;
     let mut report = Report::default();
     let sessions = sessions(service, window, root, selected, epoch, mode, &mut report).await?;
-    let two_way = mode == Mode::Full && crate::integrations::kv(root, "settings")?["accounts"]["twoWay"] != false;
     let mut active = Vec::new();
     let started = chrono::Utc::now().timestamp();
-    for session in sessions {
+    for mut session in sessions {
         privacy(epoch)?;
         let provider = session.provider;
         event(window, provider, "syncing", "Checking your list…");
         let fetched = async {
-            verify_user(service, &session).await?;
+            validate_session(service, root, &mut session).await?;
             if two_way {
                 remote::pull(service, &session).await.map(Some)
             } else {
@@ -153,7 +156,7 @@ async fn sessions(
                 } else {
                     read(db.as_ref(), provider)?
                 };
-                Ok((provider, account))
+                Ok::<_, RpcError>((provider, account))
             })
             .collect::<Result<_, _>>()?
     };
@@ -163,7 +166,7 @@ async fn sessions(
             continue;
         }
         privacy(epoch)?;
-        match identity::sync_token(service, root, provider, &saved).await {
+        match identity::sync_token(service, root, provider, &saved, false).await {
             Ok(token) => result.push(Session {
                 provider,
                 token,
@@ -175,6 +178,46 @@ async fn sessions(
         }
     }
     Ok(result)
+}
+
+async fn validate_session(
+    service: &Service,
+    root: &Path,
+    session: &mut Session,
+) -> Result<(), RpcError> {
+    match verify_user(service, session).await {
+        Ok(()) => return Ok(()),
+        Err(error) if error.code == "unauthorised" => {}
+        Err(error) => return Err(error),
+    }
+    privacy(session.privacy_epoch)?;
+    let stored = || {
+        let db = profile::open(root).map_err(storage)?;
+        read(db.as_ref(), session.provider)
+    };
+    let refreshed = if session.provider == "mal" {
+        identity::sync_token(service, root, session.provider, &stored()?, true).await
+    } else {
+        Err(RpcError::new(
+            "unauthorised",
+            "The service rejected the saved account session.",
+        ))
+    };
+    let outcome = match refreshed {
+        Ok(token) => {
+            session.token = token;
+            verify_user(service, session).await
+        }
+        Err(error) => Err(error),
+    };
+    if outcome
+        .as_ref()
+        .is_err_and(|error| error.code == "unauthorised")
+    {
+        privacy(session.privacy_epoch)?;
+        identity::mark_reconnect(root, session.provider, &stored()?)?;
+    }
+    outcome
 }
 
 async fn verify_user(service: &Service, session: &Session) -> Result<(), RpcError> {
@@ -221,13 +264,23 @@ async fn flush(
                     // The queued job has no exact MAL identity. Keep it for review.
                     continue;
                 }
-                match remote::push(service, session, *id, *mal, entry.as_ref(), *favourite).await {
-                    Ok(()) => {
+                match remote::push(
+                    service,
+                    root,
+                    session,
+                    *id,
+                    *mal,
+                    entry.as_ref(),
+                    *favourite,
+                )
+                .await
+                {
+                    Ok(pushed) => {
                         privacy(epoch)?;
                         if state::current(root, &job)? == action {
                             state::completed(root, &job, None)?;
                         }
-                        report.pushed += 1;
+                        report.pushed += usize::from(pushed);
                     }
                     Err(error) => {
                         privacy(epoch)?;

@@ -27,6 +27,7 @@ import { Range } from '../components/controls';
 import { clock, cx } from '../lib/format';
 import { Anime4KPanel, Anime4KSurface } from '../components/Anime4K';
 import { SubtitleStudio } from './SubtitleStudio';
+import { QuantumAudioControl } from './QuantumAudioControl';
 
 export interface PlayerSource {
   type: 'hls' | 'dash' | 'mp4';
@@ -517,6 +518,7 @@ export function VideoPlayer({ source, title, subtitle, poster, startAt, prefs, t
               <Range value={muted ? 0 : volume} step={0.02} onChange={changeVolume} ariaLabel="Volume" width={76} />
             </div>
           </div>
+          <QuantumAudioControl key={source.url} video={video} url={source.url} />
           <span className="player-time">
             {clock(time)} / {clock(duration)}
           </span>

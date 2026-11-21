@@ -5,13 +5,13 @@ mod drive;
 mod vault;
 
 use crate::{profile, RpcError};
+use accounts::sync::Mode;
 use reqwest::{redirect::Policy, Client, RequestBuilder, Response};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use std::{path::Path, time::Duration};
 use tauri::{AppHandle, Manager, Webview};
 use tokio::sync::{Mutex, Notify, Semaphore};
-use accounts::sync::Mode;
 static LIBRARY_QUEUED: Notify = Notify::const_new();
 
 pub(crate) struct Service {
@@ -96,7 +96,7 @@ impl Service {
         if let Some(items) = result.as_array_mut() {
             for row in items {
                 let provider = accounts::provider(row)?;
-                let available = false;
+                let available = self.oauth.configured(provider);
                 let signing_in = self.oauth.signing_in(provider);
                 row["clientIdConfigured"] = json!(available);
                 row["signingIn"] = json!(signing_in);
@@ -196,6 +196,10 @@ impl Service {
     }
 }
 
+pub(crate) fn open_migrated_secret(root: &Path, encoded: &str) -> std::io::Result<String> {
+    vault::open(root, encoded)
+}
+
 pub(crate) fn queue_library_change(
     db: &Connection,
     id: i64,
@@ -221,7 +225,9 @@ pub(crate) fn start(app: &AppHandle) {
         let mut next_push = Instant::now();
         let mut next_pull = next_push;
         loop {
-            let Some(window) = app.get_webview("main") else { return; };
+            let Some(window) = app.get_webview("main") else {
+                return;
+            };
             let root = app.state::<std::path::PathBuf>();
             let service = app.state::<Service>();
             let now = Instant::now();
@@ -229,19 +235,32 @@ pub(crate) fn start(app: &AppHandle) {
             if now >= next_push {
                 next_push = now + PUSH_INTERVAL;
             }
-            let settings = kv(root.inner(), "settings").unwrap_or_default();
-            if settings["accounts"]["autoSync"] != false && !crate::runtime_privacy::active() {
+            let settings = kv(root.inner(), "settings")
+                .ok()
+                .filter(|settings| settings["accounts"]["autoSync"] != false);
+            if let Some(settings) = settings.filter(|_| !crate::runtime_privacy::active()) {
                 if now >= next_pull && settings["accounts"]["twoWay"] != false {
                     mode = Mode::Full;
                 }
                 if let Ok(_guard) = service.account_guard() {
-                    let _ = accounts::sync::run(&service, &window, root.inner(), &json!({"provider":null}), mode).await;
+                    let _ = accounts::sync::run(
+                        &service,
+                        &window,
+                        root.inner(),
+                        &json!({"provider":null}),
+                        mode,
+                    )
+                    .await;
                     if mode == Mode::Full {
                         next_pull = now + PULL_INTERVAL;
                     }
                 }
             }
-            let _ = timeout(next_push.saturating_duration_since(Instant::now()), LIBRARY_QUEUED.notified()).await;
+            let _ = timeout(
+                next_push.saturating_duration_since(Instant::now()),
+                LIBRARY_QUEUED.notified(),
+            )
+            .await;
         }
     });
 }
@@ -254,7 +273,10 @@ pub(crate) fn handles(method: &str) -> bool {
     matches!(
         method,
         "accounts.list"
+            | "accounts.connect"
+            | "accounts.cancel"
             | "accounts.disconnect"
+            | "accounts.sync"
             | "comments.list"
             | "comments.post"
     ) || drive::handles(method)

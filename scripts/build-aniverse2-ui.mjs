@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { copyFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build as bundle } from 'esbuild';
@@ -6,16 +7,29 @@ import { build } from 'vite';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const outDir = path.resolve(root, process.argv[2] || 'dist/aniverse2');
+const quantumTarget = path.join(root, 'test/cache/aniverse2/quantum');
+execFileSync('cargo', ['build', '--locked', '--release', '--target', 'wasm32-unknown-unknown',
+  '--manifest-path', path.join(root, 'native/quantum-audio/Cargo.toml')], {
+  cwd: root, env: { ...process.env, CARGO_TARGET_DIR: quantumTarget }, stdio: 'inherit',
+});
 await build({
   configFile: path.join(root, 'frontend/vite.config.ts'),
-  mode: 'production',
+  mode: 'aniverse2',
   build: { outDir, sourcemap: false },
 });
 await copyFile(path.join(root, 'assets/aniverse2/mark.png'), path.join(outDir, 'aniverse2-mark.png'));
+await Promise.all([
+  copyFile(path.join(quantumTarget, 'wasm32-unknown-unknown/release/aniverse_quantum_audio.wasm'), path.join(outDir, 'quantum-audio.wasm')),
+  copyFile(path.join(root, 'frontend/src/player/quantumWorklet.js'), path.join(outDir, 'quantum-worklet.js')),
+]);
 const guestUpscale = await bundle({
   entryPoints: [path.join(root, 'electron/upscaleGuest.ts')],
   write: false, bundle: true, platform: 'browser', format: 'iife',
   globalName: 'AniVerseUpscale', minify: true,
+});
+const chromePlayer = await bundle({
+  entryPoints: [path.join(root, 'electron/cast/chromePlayer.ts')],
+  write: false, bundle: true, platform: 'browser', format: 'iife', minify: true,
 });
 const shared = await bundle({
   stdin: {
@@ -54,6 +68,7 @@ await Promise.all(Object.entries({
   }),
   'site-page.js': `(function(args) { return (${PAGE_FN.toString()})(args, (${seriesMarkers.toString()})); })`,
   'site-focus.css': FOCUS_CSS,
+  'chrome-player.js': chromePlayer.outputFiles[0].text,
   'site-upscale.js': guestUpscale.outputFiles[0].text,
   'site-catalogue.js': `(${CATALOGUE_PAGE.toString()})`,
   'site-audio.js': `(${desktopAudioOptions.toString()})`,

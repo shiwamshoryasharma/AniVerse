@@ -13,6 +13,7 @@ const GENERATED: &[&str] = &[
     "aniverse.db",
     "renderer-preferences.json",
     "chromium-encrypted-key.json",
+    "website-sessions.json",
     "migration-stage.json",
 ];
 
@@ -97,6 +98,44 @@ impl ProfileProof {
         stamp.sync_all()
     }
 
+    /// Authorize only this optional archive from the atomically published profile.
+    pub fn verified_website_sessions(root: &Path) -> io::Result<Option<(Uuid, Vec<u8>)>> {
+        const ARCHIVE: &str = "website-sessions.json";
+        const JOURNAL: &str = "migration-stage.json";
+        if root.file_name().and_then(|name| name.to_str()) != Some("profile-data") {
+            return Ok(None);
+        }
+        let archive = match bounded_bytes(&root.join(ARCHIVE), 128_000) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let inventory = bounded_bytes(&root.join(Self::FILE), 8_192)?;
+        if bounded_bytes(&root.join(Self::VERIFIED), 64)?
+            != hex::encode(Sha256::digest(&inventory)).as_bytes()
+        {
+            return Err(invalid_input());
+        }
+        let receipt: serde_json::Value = serde_json::from_slice(&inventory)?;
+        let journal = bounded_bytes(&root.join(JOURNAL), 512)?;
+        let record: serde_json::Value = serde_json::from_slice(&journal)?;
+        let nonce = receipt["nonce"]
+            .as_str()
+            .and_then(|text| Uuid::parse_str(text).ok())
+            .filter(|nonce| nonce.get_version_num() == 4)
+            .ok_or_else(invalid_input)?;
+        if receipt["schema"] != 1
+            || record["schema"] != 2
+            || record["state"] != "renderer-verified"
+            || record["nonce"] != receipt["nonce"]
+            || receipt["files"][JOURNAL] != hex::encode(Sha256::digest(&journal))
+            || receipt["files"][ARCHIVE] != hex::encode(Sha256::digest(&archive))
+        {
+            return Err(invalid_input());
+        }
+        Ok(Some((nonce, archive)))
+    }
+
     /// Profiles migrated by older versions have neither verification file.
     /// A new profile with partial or corrupt verification stays unavailable.
     pub fn validate_completion(root: &Path, required: bool) -> io::Result<()> {
@@ -146,4 +185,22 @@ pub(crate) fn file_hash(path: &Path) -> io::Result<String> {
         digest.update(&buffer[..read]);
     }
     Ok(hex::encode(digest.finalize()))
+}
+
+fn bounded_bytes(path: &Path, limit: usize) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    open_regular(path)?
+        .take((limit + 1) as u64)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Err(invalid_input());
+    }
+    Ok(bytes)
+}
+
+fn invalid_input() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        "website session archive did not match the published profile receipt",
+    )
 }

@@ -18,8 +18,15 @@ const PROBE: &str = r#"(() => {
   const video = document.querySelector('video');
   if (!video || !video.videoWidth || !Number.isFinite(video.duration) || video.duration <= 0) return null;
   const quality = video.getVideoPlaybackQuality?.();
+  let bufferedAhead = 0;
+  for (let index = 0; index < video.buffered.length; index++) {
+    if (video.buffered.start(index) <= video.currentTime && video.currentTime <= video.buffered.end(index)) {
+      bufferedAhead = video.buffered.end(index) - video.currentTime;
+      break;
+    }
+  }
   return {currentTime:video.currentTime, duration:video.duration, paused:video.paused, ended:video.ended,
-    video:{width:video.videoWidth, height:video.videoHeight, readyState:video.readyState,
+    video:{width:video.videoWidth, height:video.videoHeight, readyState:video.readyState, bufferedAhead, playbackRate:video.playbackRate,
       totalFrames:quality?.totalVideoFrames ?? null, droppedFrames:quality?.droppedVideoFrames ?? null}};
 })()"#;
 
@@ -176,6 +183,10 @@ fn metrics(reply: &str) -> Option<Value> {
         "ended":raw["ended"].as_bool()?, "video":{
             "width":dimension("width")?, "height":dimension("height")?,
             "readyState":video["readyState"].as_u64().filter(|value| *value <= 4)?,
+            "bufferedAhead":video["bufferedAhead"].as_f64()
+                .filter(|value| (0.0..=duration + 0.5).contains(value)).unwrap_or(0.0),
+            "playbackRate":video["playbackRate"].as_f64()
+                .filter(|value| (0.0..=16.0).contains(value)).unwrap_or(1.0),
             "totalFrames":count("totalFrames"), "droppedFrames":count("droppedFrames")
         }}),
     )

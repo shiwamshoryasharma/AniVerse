@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod adblocker;
+mod cast;
 mod desktop;
 mod downloads;
 #[cfg(feature = "installer-handoff")]
@@ -80,11 +81,24 @@ async fn desktop_rpc(
     if let Some(boot) = app.try_state::<migration_boot::Probe>() {
         match method.as_str() {
             "migration.preferenceKeys" => {
-                let preferences = profile::renderer_preferences(&root)
-                    .map_err(|_| RpcError::new("migration", "Could not read migrated interface preferences."))?;
+                let preferences = profile::renderer_preferences(&root).map_err(|_| {
+                    RpcError::new(
+                        "migration",
+                        "Could not read migrated interface preferences.",
+                    )
+                })?;
                 let keys: serde_json::Map<String, Value> = serde_json::from_str(&preferences)
-                    .map_err(|_| RpcError::new("migration", "Could not read migrated interface preferences."))?;
+                    .map_err(|_| {
+                        RpcError::new(
+                            "migration",
+                            "Could not read migrated interface preferences.",
+                        )
+                    })?;
                 return Ok(serde_json::json!(keys.keys().collect::<Vec<_>>()));
+            }
+            "migration.abort" => {
+                app.exit(1);
+                return Ok(Value::Null);
             }
             "migration.ready" => {
                 boot.complete(input.as_ref())?;
@@ -92,8 +106,19 @@ async fn desktop_rpc(
                 return Ok(Value::Null);
             }
             "settings.get" | "sources.list" | "library.history" => {}
-            _ => return Err(RpcError::new("migration", "This request is unavailable during the migration check.")),
+            _ => {
+                return Err(RpcError::new(
+                    "migration",
+                    "This request is unavailable during the migration check.",
+                ))
+            }
         }
+    }
+    if cast::handles(&method) {
+        return window
+            .state::<cast::Service>()
+            .request(&method, input.unwrap_or_default(), &local, &window, &player)
+            .await;
     }
     if desktop::handles(&method) {
         return desktop::request(
@@ -365,6 +390,9 @@ fn run(context: tauri::Context<tauri::Wry>, checking: bool) -> Result<(), tauri:
             app.manage(patterns::Service::new(&data));
             app.manage(player::Service::new(root.join("site-webviews")));
             app.manage(local_player::Service::default());
+            if !checking {
+                app.manage(cast::Service::new(app.handle().clone(), root.join("cast"))?);
+            }
             app.manage(profile::WorkspaceState::default());
             app.manage(adblocker::Service::new(&data));
             app.manage(integrations::Service::new()?);
@@ -376,9 +404,13 @@ fn run(context: tauri::Context<tauri::Wry>, checking: bool) -> Result<(), tauri:
             } else {
                 WebviewUrl::App("index.html".into())
             };
+            let (width, height) = app.primary_monitor().ok().flatten().map_or((1280.0, 860.0), |monitor| {
+                let work_area = monitor.work_area().size.to_logical::<f64>(monitor.scale_factor());
+                ((work_area.width - 24.0).clamp(1.0, 1280.0), (work_area.height - 24.0).clamp(1.0, 860.0))
+            });
             let window = WebviewWindowBuilder::new(app, MAIN, initial)
                 .title(app.config().product_name.as_deref().unwrap_or("AniVerse2"))
-                .inner_size(1280.0, 860.0)
+                .inner_size(width, height)
                 .decorations(false)
                 .visible(!checking && !cfg!(feature = "isolated-test"))
                 .use_https_scheme(true)
@@ -393,6 +425,7 @@ fn run(context: tauri::Context<tauri::Wry>, checking: bool) -> Result<(), tauri:
             } else {
                 updates::start(app.handle());
                 adblocker::start(app.handle());
+                integrations::start(app.handle());
             }
             Ok(())
         })
@@ -437,8 +470,12 @@ fn app_data(root: &std::path::Path) -> std::io::Result<PathBuf> {
 fn main() {
     let marker = std::env::var_os("ANIVERSE_ELECTRON_HANDOFF");
     let mode = std::env::args_os().nth(1);
-    let preparing = mode.as_deref().is_some_and(|arg| arg == "--prepare-legacy-profile");
-    let checking = mode.as_deref().is_some_and(|arg| arg == migration_boot::ARG);
+    let preparing = mode
+        .as_deref()
+        .is_some_and(|arg| arg == "--prepare-legacy-profile");
+    let checking = mode
+        .as_deref()
+        .is_some_and(|arg| arg == migration_boot::ARG);
     let startup_error = if preparing && (!cfg!(feature = "installer-handoff") || marker.is_none()) {
         Some("profile preparation requires a signed AniVerse installer handoff")
     } else if checking && !cfg!(feature = "installer-handoff") {
@@ -457,6 +494,11 @@ fn main() {
         std::process::exit(1);
     }
     let context = tauri::generate_context!();
+    if let Some(accepted) =
+        integrations::handle_account_callback(context.config().identifier.as_str())
+    {
+        std::process::exit(if accepted { 0 } else { 1 });
+    }
     #[cfg(feature = "installer-handoff")]
     if preparing {
         if let Err(error) = incoming::prepare(

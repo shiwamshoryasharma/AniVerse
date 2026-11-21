@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {once} from 'node:events';
 import {createServer} from 'node:http';
 import {createServer as createSocket} from 'node:net';
@@ -7,6 +8,7 @@ import {mkdir, mkdtemp, readFile, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright-core';
+import {verifyGuestMirror} from './fixtures/aniverse2-capture-mirror.mjs';
 
 const cache = path.resolve('test/cache/aniverse2');
 const run = await mkdtemp(path.join(cache, 'rendered-player-'));
@@ -18,15 +20,19 @@ const checkSession = process.env.ANIVERSE2_CHECK_SOURCE_SESSION === '1';
 const checkPrivate = process.env.ANIVERSE2_CHECK_TITLE_LEASE === '1';
 const checkIncognito = process.env.ANIVERSE2_CHECK_INCOGNITO === '1';
 const checkCapture = process.env.ANIVERSE2_CHECK_PLAYER_CAPTURE === '1';
+const checkMirror = process.env.ANIVERSE2_MIRROR_FIXTURE === '1';
+const checkSearchFlow = process.env.ANIVERSE2_CHECK_SEARCH_FLOW === '1';
+const searchTerms = [];
+const fixtureTitle = checkSearchFlow ? 'Fixture Show: Special Edition' : 'Fixture Show';
 const privateRequests = [];
 const returnedCookies = [];
 let privateRun = false;
 const checkUpscale = process.env.ANIVERSE2_CHECK_SITE_UPSCALE === '1';
 const upscaleStates = [];
 let searchRequested = false, protectedFixtureReady = false;
-const html = `<!doctype html><meta charset="utf-8"><title>Fixture Show</title>
+const html = `<!doctype html><meta charset="utf-8"><title>${fixtureTitle}</title>
 <style>body{margin:8px;background:#25303d;color:white}button{padding:12px}video{display:block;width:640px;height:360px}</style>
-<h1>Fixture Show</h1><main><video controls muted autoplay loop playsinline src="/sub.mp4"></video>
+<h1>${fixtureTitle}</h1><main><video controls muted autoplay loop playsinline src="/sub.mp4"></video>
 <div class="servers"><button aria-pressed="true">SUB</button><button aria-pressed="false">DUB</button></div>
 <div class="episode"><button data-episode="1" aria-selected="true">Episode 1</button></div></main>
 <script>
@@ -74,9 +80,18 @@ function serve(req, res) {
     return;
   }
   if (route === '/search') {
-    searchRequested = new URL(req.url,'http://fixture.test').searchParams.get('q') === 'Fixture Show';
+    const query = new URL(req.url,'http://fixture.test').searchParams.get('q');
+    searchTerms.push(query);
+    searchRequested = query === 'Fixture Show';
     res.writeHead(200, {'Content-Type':'text/html; charset=utf-8'});
-    res.end(searchRequested ? '<h1>Search results</h1><a href="/watch/fixture-show/1">Fixture Show</a>' : 'No results'); return;
+    if (!searchRequested) res.end('<h1>No results</h1>');
+    else if (checkSearchFlow) res.end('<h1>Search results</h1><a href="/all-results">View all results</a>');
+    else res.end('<h1>Search results</h1><a href="/watch/fixture-show/1">Fixture Show</a>');
+    return;
+  }
+  if (route === '/all-results' && checkSearchFlow) {
+    res.writeHead(200, {'Content-Type':'text/html; charset=utf-8'});
+    res.end('<h1>All results</h1><a href="/watch/fixture-show/1">' + fixtureTitle + '</a>'); return;
   }
   if (checkUpscale && route === '/cors-player') {
     res.writeHead(200, {'Content-Type':'text/html; charset=utf-8'});
@@ -168,6 +183,7 @@ const port = temporary.address().port;
 await new Promise(resolve => temporary.close(resolve));
 const endpoint = 'http://127.0.0.1:' + port;
 const executable = path.resolve(process.env.ANIVERSE2_TEST_EXE ?? 'test/cache/aniverse2/aniverse2-player-test.exe');
+const executableSha256 = createHash('sha256').update(await readFile(executable)).digest('hex');
 const env = {...process.env, ANIVERSE2_TEST_PROFILE: profile, ANIVERSE2_TEST_SITE_ORIGIN: origin, ANIVERSE2_TEST_FRAME_ORIGIN: frameOrigin,
   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-address=127.0.0.1 --remote-debugging-port=' + port +
     ' --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --autoplay-policy=no-user-gesture-required',
@@ -179,7 +195,7 @@ let stderr = '', browser, launchError;
 child.on('error', error => { launchError = error; });
 child.stderr.on('data', bytes => {stderr += bytes;});
 const exit = once(child, 'exit').catch(() => undefined);
-const report = {passed: false, checks: {}, frames: []};
+const report = {passed:false, checks:{}, frames:[], executableSha256};
 const poll = async (fn, timeout = 15000) => {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -211,10 +227,14 @@ try {
   const bounds = {x: 20, y: 80, width: 780, height: 465};
   const {webContentsId} = await rpc('site.surface', {action:'attach', sourceId:source.id,partition:source.partition,bounds});
   await rpc('site.surface',{action:'place',webContentsId,bounds,visible:true});
-  const opened = await rpc('site.openEpisode',{sourceId:source.id, webContentsId, mediaId:1, episode:1, titles:['Fixture Show'], focus:false});
+  const opened = await rpc('site.openEpisode',{sourceId:source.id, webContentsId, mediaId:1, episode:1, titles:[fixtureTitle], focus:false});
   assert.equal(opened.ok, true, JSON.stringify(opened));
   assert.equal(searchRequested,true,'The source did not receive the search shown by its rendered link');
   report.checks.correctRenderedEpisode = true;
+  if (checkSearchFlow) {
+    assert.deepEqual(searchTerms.slice(0,2), ['Fixture Show Special Edition','Fixture Show']);
+    report.checks.shortQueryAndFullResultsOpened = true;
+  }
 
   for (const [index, audio] of ['sub','dub','sub'].entries()) {
     const before = transfers.length;
@@ -227,6 +247,8 @@ try {
       return probe?.video?.width === (audio === 'dub' ? 352 : 320) && probe.video.totalFrames > 0 && probe.currentTime > 0 ? probe : null;
     });
     assert.ok(sample, 'No decoded frames for '+audio);
+    assert.ok(Number.isFinite(sample.video.bufferedAhead) && sample.video.bufferedAhead>=0);
+    assert.ok(Number.isFinite(sample.video.playbackRate));
     await delay(750);
     const after = await rpc('player.probe',{webContentsId});
     assert.ok(after?.currentTime > sample.currentTime && after.video.totalFrames > sample.video.totalFrames,
@@ -358,6 +380,14 @@ try {
   assert.equal(saved.completedNow,true);
   assert.equal((await rpc('library.state',{mediaId:1})).progress[0].completed,true);
   report.checks.localPlaybackProgress = true;
+  if (checkMirror) {
+    if (checkCapture) {
+      await rpc('site.surface',{action:'navigate',webContentsId,url:origin + '/watch/fixture-show/1'});
+      assert.ok(await poll(() => rpc('player.probe',{webContentsId})));
+    }
+    report.mirror = await verifyGuestMirror(page, rpc, poll, webContentsId, origin + '/watch/fixture-show/1');
+    report.checks.ownedSiteVideoOnlyMirroredAndRevoked = true;
+  }
   await rpc('site.surface',{action:'navigate',webContentsId,url:origin + '/embedded-parent'});
   const embedded = await poll(async () => {
     const info = await rpc('site.surface',{action:'probeDiagnostics',webContentsId}).catch(() => null);
@@ -411,7 +441,7 @@ try {
     assert.ok(partition?.startsWith('private-')&&leased.leaseId);
     const guest=await rpc('site.surface',{action:'attach',sourceId:source.id,partition,bounds});
     await rpc('site.surface',{action:'place',webContentsId:guest.webContentsId,bounds,visible:true});
-    const open = {webContentsId:guest.webContentsId, sourceId:source.id, episode:1, titles:['Fixture Show'], focus:false};
+    const open = {webContentsId:guest.webContentsId, sourceId:source.id, episode:1, titles:[fixtureTitle], focus:false};
     await assert.rejects(rpc('site.openEpisode',{...open,mediaId:2}));
     assert.equal((await rpc('site.openEpisode',{...open,mediaId:1})).ok,true);
     assert.ok(privateRequests.length>0 && privateRequests.every(value=>!value),'Private source inherited a public source cookie');

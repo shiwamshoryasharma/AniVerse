@@ -141,9 +141,25 @@ pub(super) fn write(root: &Path, method: &str, input: &Value) -> Result<Value, R
         _ => return Err(invalid()),
     };
     let affected = match method {
-        "library.toggleFavourite" => Some((snapshot_id(&input["media"])?, result["favourite"].as_bool())),
-        "library.setStatus" | "library.setScore" | "library.markWatched" => Some((media_id(input)?, None)),
-        "library.saveProgress" if result["completedNow"] == true => Some((snapshot_id(&input["media"])?, None)),
+        "library.toggleFavourite" => {
+            Some((snapshot_id(&input["media"])?, result["favourite"].as_bool()))
+        }
+        "library.setScore" => Some((media_id(input)?, None)),
+        "library.setStatus" => Some((snapshot_id(&input["media"])?, None)),
+        "library.markWatched" => {
+            let id = snapshot_id(&input["media"])?;
+            let tracked: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM library WHERE media_id=?1)",
+                    [id],
+                    |row| row.get(0),
+                )
+                .map_err(error)?;
+            tracked.then_some((id, None))
+        }
+        "library.saveProgress" if result["completedNow"] == true => {
+            Some((snapshot_id(&input["media"])?, None))
+        }
         _ => None,
     };
     let queued = match affected {

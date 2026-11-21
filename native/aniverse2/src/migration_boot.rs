@@ -172,10 +172,10 @@ pub(crate) fn verify(root: &Path, profile: &Path, application: &Path) -> io::Res
         let _ = send.send(pipe.read_exact(&mut receipt).map(|()| receipt));
     });
     let deadline = Instant::now() + Duration::from_secs(25);
-    loop {
+    let result = loop {
         if let Some(status) = child.try_wait()? {
             let receipt = received.recv_timeout(deadline.saturating_duration_since(Instant::now()));
-            return if status.success()
+            break if status.success()
                 && receipt.is_ok_and(|receipt| {
                     receipt.is_ok_and(|bytes| bytes == format!("{}\n", token.simple()).as_bytes())
                 }) {
@@ -187,13 +187,22 @@ pub(crate) fn verify(root: &Path, profile: &Path, application: &Path) -> io::Res
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(io::Error::new(
+            break Err(io::Error::new(
                 io::ErrorKind::TimedOut,
                 "AniVerse2 did not verify the copied profile in time",
             ));
         }
         thread::sleep(Duration::from_millis(50));
+    };
+    // Chromium's child can release profile handles just after the Tauri host exits.
+    for _ in 0..30 {
+        match fs::remove_dir_all(home.path()) {
+            Ok(()) => break,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => break,
+            Err(_) => thread::sleep(Duration::from_millis(100)),
+        }
     }
+    result
 }
 
 fn invalid() -> io::Error {

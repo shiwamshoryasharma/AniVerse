@@ -197,20 +197,25 @@ pub(crate) fn set_title_privacy(root: &Path, input: &Value) -> Result<Value, Rpc
     let tx = db
         .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
         .map_err(database_error)?;
-    if on {
-        tx.execute(
-            "INSERT OR IGNORE INTO private_titles(media_id) VALUES(?1)",
-            [id],
-        )
-        .map_err(database_error)?;
+    let changed = if on {
+        let added = tx
+            .execute(
+                "INSERT OR IGNORE INTO private_titles(media_id) VALUES(?1)",
+                [id],
+            )
+            .map_err(database_error)?;
         tx.execute(
             "DELETE FROM sync_queue WHERE json_extract(payload,'$.mediaId')=?1",
             [id],
         )
         .map_err(database_error)?;
+        added
     } else {
         tx.execute("DELETE FROM private_titles WHERE media_id=?1", [id])
-            .map_err(database_error)?;
+            .map_err(database_error)?
+    };
+    if changed > 0 {
+        crate::runtime_privacy::advance();
     }
     tx.commit().map_err(database_error)?;
     profile::request(root, "privacy.state", Value::Null)

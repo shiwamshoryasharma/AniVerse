@@ -203,3 +203,31 @@ fn checks_live_process_identity_and_refuses_to_stage_while_running() {
         Err(HandoffError::LegacyStillRunning)
     ));
 }
+
+#[test]
+fn verified_copy_rejects_changed_data_and_incomplete_or_changed_receipts() {
+    let fixture = Fixture::new();
+    let job = fixture.verify().unwrap();
+    let stage =
+        crate::stage_profile(&fixture.data, &fixture.config, &fixture.parent, 7, TIMEOUT).unwrap();
+    for (name, data) in [
+        ("renderer-preferences.json", b"{}".as_slice()),
+        ("migration-stage.json", b"{\"schema\":2}".as_slice()),
+    ] {
+        fs::write(stage.path().join(name), data).unwrap();
+    }
+    let proof = job.profile_proof(stage.path()).unwrap();
+    proof.write_inventory(stage.path()).unwrap();
+    assert!(ProfileProof::validate_completion(stage.path(), true).is_err());
+    let old_sources = fixture.config.join("streaming-sites.txt");
+    let source = fs::read(&old_sources).unwrap();
+    let new_sources = stage.path().join("config/streaming-sites.txt");
+    fs::write(&new_sources, b"tamper").unwrap();
+    assert!(proof.complete(stage.path()).is_err());
+    assert_eq!(fs::read(&old_sources).unwrap(), source);
+    fs::write(&new_sources, source).unwrap();
+    proof.complete(stage.path()).unwrap();
+    ProfileProof::validate_completion(stage.path(), true).unwrap();
+    fs::write(stage.path().join("migration-inventory.json"), b"{}").unwrap();
+    assert!(ProfileProof::validate_completion(stage.path(), true).is_err());
+}

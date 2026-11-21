@@ -15,9 +15,10 @@ pub(super) fn merge(
     active: &[(Session, Option<Remote>)],
     report: &mut Report,
 ) -> Result<(), RpcError> {
-    if !active.iter().any(|(_, remote)| remote.is_some()) {
+    let Some((session, _)) = active.iter().find(|(_, remote)| remote.is_some()) else {
         return Ok(());
-    }
+    };
+    super::privacy(session.privacy_epoch)?;
     let mut db = profile::writable(root).map_err(storage)?;
     let tx = db
         .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -109,6 +110,16 @@ pub(super) fn merge(
             let Some(id) = positive_id(&media["id"]).filter(|id| !private.contains(id)) else {
                 continue;
             };
+            let pending = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE dedupe_key=?1)",
+                    [format!("anilist:favourite:{id}")],
+                    |row| row.get::<_, bool>(0),
+                )
+                .map_err(storage)?;
+            if pending {
+                continue;
+            }
             if tx
                 .execute(
                     "INSERT OR IGNORE INTO favourites(media_id,added_at) VALUES(?1,?2)",
@@ -122,6 +133,7 @@ pub(super) fn merge(
             }
         }
     }
+    super::privacy(session.privacy_epoch)?;
     tx.commit().map_err(storage)?;
     Ok(())
 }
@@ -240,20 +252,37 @@ fn enqueue(db: &Connection, provider: &str, id: i32, mal: Option<i32>) -> Result
 }
 
 pub(super) fn queue_library(
-    db: &Connection, id: i64, favourite: Option<bool>,
+    db: &Connection,
+    id: i64,
+    favourite: Option<bool>,
 ) -> Result<bool, RpcError> {
-    let id = i32::try_from(id).ok().filter(|id| *id > 0).ok_or_else(network)?;
+    let id = i32::try_from(id)
+        .ok()
+        .filter(|id| *id > 0)
+        .ok_or_else(network)?;
     if crate::runtime_privacy::active()
-        || db.query_row("SELECT EXISTS(SELECT 1 FROM private_titles WHERE media_id=?1)",
-            [id], |row| row.get::<_, bool>(0)).map_err(storage)?
-        || !db.query_row("SELECT EXISTS(SELECT 1 FROM accounts)", [],
-            |row| row.get::<_, bool>(0)).map_err(storage)?
+        || db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM private_titles WHERE media_id=?1)",
+                [id],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(storage)?
+        || !db
+            .query_row("SELECT EXISTS(SELECT 1 FROM accounts)", [], |row| {
+                row.get::<_, bool>(0)
+            })
+            .map_err(storage)?
         || crate::integrations::kv_in(db, "settings")?["accounts"]["autoSync"] == false
     {
         return Ok(false);
     }
     let mal = snapshot(db, id)?.and_then(|snapshot| positive_id(&snapshot["idMal"]));
-    let op = if favourite.is_some() { "favourite" } else { "entry" };
+    let op = if favourite.is_some() {
+        "favourite"
+    } else {
+        "entry"
+    };
     let mut payload = json!({"mediaId":id,"idMal":mal});
     if let Some(favourite) = favourite {
         payload["favourite"] = json!(favourite);
@@ -280,9 +309,15 @@ pub(super) fn queue_library(
 }
 
 pub(super) fn has_due(db: Option<&Connection>, provider: &str) -> Result<bool, RpcError> {
-    let Some(db) = db else { return Ok(false); };
-    db.query_row("SELECT EXISTS(SELECT 1 FROM sync_queue WHERE provider=?1 AND next_at<=?2)",
-        params![provider, now()], |row| row.get(0)).map_err(storage)
+    let Some(db) = db else {
+        return Ok(false);
+    };
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE provider=?1 AND next_at<=?2)",
+        params![provider, now()],
+        |row| row.get(0),
+    )
+    .map_err(storage)
 }
 
 pub(super) struct Job {

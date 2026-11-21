@@ -68,6 +68,10 @@ pub(super) async fn load(
             None,
         )
         .await?;
+    if !private {
+        super::legacy_session::restore(&session.view, &source, &service.home.join(&source.id))
+            .await;
+    }
     let alive = || {
         privacy_epoch == crate::runtime_privacy::epoch()
             && Instant::now() < deadline

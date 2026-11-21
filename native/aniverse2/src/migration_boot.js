@@ -16,12 +16,14 @@
     for (let i = 0; i < 250 && !shellReady(); i++) {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
-    if (!shellReady()) return;
+    if (!shellReady()) throw new Error('The copied History view did not finish loading.');
     const saved = Object.fromEntries(preferences.sort().map(key => [key, localStorage.getItem(key)]));
     const evidence = [settings.profile.name, sources.map(source => source.id).sort(), entries(), saved];
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(evidence)));
     await window.aniverse.invoke('migration.ready',
       [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join(''));
   };
-  addEventListener('DOMContentLoaded', () => void verify().catch(() => {}), { once: true });
+  addEventListener('DOMContentLoaded', () => void verify().catch(() => {
+    void window.aniverse.invoke('migration.abort').catch(() => {});
+  }), { once: true });
 })();

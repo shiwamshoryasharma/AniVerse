@@ -183,13 +183,9 @@ async fn find_title(
     learned: &mut Vec<(&'static str, String)>,
     alive: &impl Fn() -> bool,
 ) -> bool {
-    for title in titles.iter().take(3) {
+    for query in search_queries(titles) {
         if !alive() {
             return false;
-        }
-        let query = search_query(title);
-        if query.is_empty() {
-            continue;
         }
         let heading = json!({"op":"findTitle","titles":titles,"season":season});
         let target =
@@ -248,6 +244,11 @@ async fn find_title(
         if hits.is_none() && !submitted && alive() {
             let _ = key_enter(session).await;
             hits = poll(session, &heading, alive, 2200).await;
+        }
+        if hits.is_none() && alive()
+            && page(session, json!({"op":"viewAll"})).await.is_ok_and(|result| result["clicked"] == true)
+        {
+            hits = poll(session, &heading, alive, 3000).await;
         }
         if let Some(hits) = hits {
             if try_titles(session, &hits, titles, season, learned, alive).await {
@@ -570,33 +571,50 @@ fn slug(url: &Url) -> Option<String> {
 }
 
 fn season(titles: &[&str]) -> u64 {
-    static SEASON: OnceLock<Regex> = OnceLock::new();
-    let matcher =
-        SEASON.get_or_init(|| Regex::new(r"(?i)\b(?:season\s+|s)(\d{1,2})(?:\b|e\d)").unwrap());
+    static MARKER: OnceLock<Regex> = OnceLock::new();
+    let marker = MARKER.get_or_init(|| {
+        Regex::new(r"(?i)(?:\bseason\s*(\d{1,2}|[ivx]{1,4})\b|\b(\d{1,2})(?:st|nd|rd|th)\s+season\b|\bs(\d{1,2})(?:\s*e\d{1,4})?\b|(?:第\s*)?(\d{1,2})\s*期)").unwrap()
+    });
+    let roman = ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
+        "xi", "xii", "xiii", "xiv", "xv", "xvi", "xvii", "xviii", "xix", "xx"];
     titles
         .iter()
-        .flat_map(|title| matcher.captures_iter(title))
-        .filter_map(|hit| hit[1].parse().ok())
+        .flat_map(|title| marker.captures_iter(title))
+        .filter_map(|hit| {
+            let number = hit.iter().skip(1).flatten().next()?.as_str();
+            number.parse::<u64>().ok().or_else(|| {
+                roman.iter().position(|value| value.eq_ignore_ascii_case(number)).map(|n| n as u64)
+            })
+        })
+        .filter(|number| *number > 0)
         .max()
         .unwrap_or(1)
 }
 
-fn search_query(title: &str) -> String {
-    title
-        .chars()
-        .filter_map(|character| {
-            if matches!(character, '\'' | '’' | '`') {
-                None
-            } else if character.is_ascii_punctuation() {
-                Some(' ')
-            } else {
-                Some(character)
-            }
-        })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+fn search_queries(titles: &[&str]) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    let head = titles.first().map(|title| {
+        title.split([':', '–', '—']).next().unwrap_or(title).split(" - ").next().unwrap_or(title)
+    }).filter(|title| title.chars().count() >= 4);
+    for title in titles.iter().copied().take(5).chain(head) {
+        let query = title
+            .chars()
+            .filter_map(|character| {
+                if matches!(character, '\'' | '’' | '\u{60}' | '´') {
+                    None
+                } else if "“”\"!?.,;:()[]{}~|/\\-".contains(character) {
+                    Some(' ')
+                } else {
+                    Some(character)
+                }
+            })
+            .collect::<String>();
+        let query = query.split_whitespace().collect::<Vec<_>>().join(" ");
+        if query.chars().count() >= 3 && !result.iter().any(|value| value.eq_ignore_ascii_case(&query)) {
+            result.push(query);
+        }
+    }
+    result
 }
 
 pub(super) fn encoded(query: &str) -> String {
@@ -843,8 +861,15 @@ const PROBE: &str = r#"(() => {
     }
     if (video) {
       const quality = video.getVideoPlaybackQuality?.();
+      let bufferedAhead = 0;
+      for (let index = 0; index < video.buffered.length; index++) {
+        if (video.buffered.start(index) <= video.currentTime && video.currentTime <= video.buffered.end(index)) {
+          bufferedAhead = video.buffered.end(index) - video.currentTime;
+          break;
+        }
+      }
       return {currentTime:video.currentTime, duration:video.duration, paused:video.paused, ended:video.ended,
-        video:{width:video.videoWidth, height:video.videoHeight, readyState:video.readyState,
+        video:{width:video.videoWidth, height:video.videoHeight, readyState:video.readyState, bufferedAhead, playbackRate:video.playbackRate,
           totalFrames:quality?.totalVideoFrames ?? null, droppedFrames:quality?.droppedVideoFrames ?? null}};
     }
     if (depth >= 2) return null;

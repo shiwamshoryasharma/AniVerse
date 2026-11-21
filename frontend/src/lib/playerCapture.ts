@@ -22,7 +22,7 @@ async function previewGuest(ticket: string, requested: () => boolean): Promise<P
   if (!context) throw new Error('The Windows capture preview could not create a video surface.');
   const stream = canvas.captureStream(0);
   const track = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
-  let busy = false, done = false;
+  let busy = false, done = false, started = false;
   let first: () => void = () => undefined;
   let failed: (error: Error) => void = () => undefined;
   const ready = new Promise<void>((resolve, reject) => { first = resolve; failed = reject; });
@@ -47,10 +47,18 @@ async function previewGuest(ticket: string, requested: () => boolean): Promise<P
         }
         context.drawImage(bitmap, 0, 0);
         track.requestFrame();
-        first();
+        if (!started) {
+          started = true;
+          first();
+        }
       } finally { bitmap.close(); }
     } catch {
-      failed(new Error('The Windows source preview could not decode a frame.'));
+      if (started) {
+        dispose();
+        void call('player.captureStop', { ticket }).catch(() => undefined);
+      } else {
+        failed(new Error('The Windows source preview could not decode a frame.'));
+      }
     } finally { busy = false; }
   });
   const offEnded = onEvent('player.captureEnded', (event) => {
@@ -67,8 +75,7 @@ async function previewGuest(ticket: string, requested: () => boolean): Promise<P
     track.stop();
   };
   try {
-    await offFrame;
-    await ready;
+    await Promise.all([offFrame, ready]);
     clearTimeout(timer);
     if (done || !requested()) throw new Error('Compatibility capture was cancelled.');
     return { ticket, stream, dispose };
