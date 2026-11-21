@@ -55,23 +55,27 @@ export class SiteQuantumAudio {
     }
     if (action === 'off') {
       this.bindings.delete(guest);
-      if (previous) await previous.cleanup('globalThis.__avQuantum?.("off")');
+      if (previous) await previous.evaluateBound('globalThis.__avQuantum?.("off")');
       return OFF;
     }
-    const resolved = previous ?? (action === 'enable' ? await ownedPlayerTarget(guest) : null);
-    if (!resolved) return action === 'enable' ? WAITING : OFF;
-    const argument = JSON.stringify(action) + ',' + (intensity ?? 0);
-    const call = action === 'enable'
-      ? '(' + await this.guestAssets() + ')(' + argument + ')'
-      : 'globalThis.__avQuantum?.(' + argument + ')';
-    const raw = await resolved.evaluate(call,action === 'enable');
-    if (raw === null && action === 'enable') return WAITING;
-    const result = stateOf(raw);
-    if (result.state === 'active') this.bindings.set(guest,resolved);
-    else if (previous) {
+    if (previous) {
+      const operation = action === 'enable' ? 'resume' : action;
+      const raw = await previous.evaluateBound(`globalThis.__avQuantum?.("${operation}",${intensity ?? 0})`, action === 'enable');
+      // A loading or unresponsive frame can still own a live graph.
+      if (raw === null) return WAITING;
+      const state = stateOf(raw);
+      if (state.state === 'active' || state.state === 'waiting') return state;
       this.bindings.delete(guest);
-      await previous.cleanup('globalThis.__avQuantum?.("off")');
+      if (action !== 'enable') return state;
     }
+    if (action !== 'enable') return OFF;
+    const target = await ownedPlayerTarget(guest);
+    if (!target) return WAITING;
+    const code = '(' + await this.guestAssets() + ')("enable",' + (intensity ?? 0) + ')';
+    const raw = await target.evaluate(code,true);
+    if (raw === null) return WAITING;
+    const result = stateOf(raw);
+    if (result.state === 'active' || result.state === 'waiting') this.bindings.set(guest,target);
     return result;
   }
 }

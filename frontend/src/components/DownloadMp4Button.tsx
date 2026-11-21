@@ -1,3 +1,4 @@
+import { isDownloadableVideoUrl } from '../../../app/shared/downloadFormats';
 import { Download, LoaderCircle } from 'lucide-react';
 import { useId, useState } from 'react';
 import { errorText, modernWindows } from '../lib/bridge';
@@ -14,7 +15,7 @@ export function DownloadMp4Button({ url, sourceId, webContentsId, unavailableRea
   const [saving, setSaving] = useState(false);
   const [percent, setPercent] = useState<number | null>(null);
   const bridge = window.aniverse;
-  const direct = !!bridge?.saveMp4 && !!url && /^https:\/\/[^?#]+\.mp4(?:[?#]|$)/i.test(url);
+  const direct = !!bridge?.saveMp4 && !!url && isDownloadableVideoUrl(url);
   const active = webContentsId !== undefined && !!bridge?.saveSiteMp4;
   const available = direct || active;
   if (!modernWindows || (!available && !unavailableReason)) return null;

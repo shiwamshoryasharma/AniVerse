@@ -25,7 +25,7 @@ const sessions = new WeakMap<WebContents, GuestSession>();
 
 export interface PlayerTarget {
   evaluate(code: string, gesture?: boolean): Promise<unknown | null>;
-  cleanup(code: string): Promise<unknown | null>;
+  evaluateBound(code: string, gesture?: boolean): Promise<unknown>;
 }
 
 function isLive(guest: WebContents) {
@@ -153,17 +153,20 @@ export async function readOwnedPlayer(guest: WebContents, javascript: string): P
   return isFrameOffer(top) ? readFrame(guest,javascript) : top;
 }
 
-async function cleanupFrame(guest: WebContents, child: FrameSession, code: string) {
+async function readBoundFrame(guest: WebContents, child: FrameSession, code: string, gesture = false) {
   if (!isLive(guest)) return null;
   try {
     const dbg = guest.debugger;
-    if (!sessions.has(guest) || !dbg.isAttached()) return null;
+    const state = sessions.get(guest);
+    if (!state || !dbg.isAttached()) return undefined;
+    if (child.sessionId && state.subframes.get(child.frame)?.sessionId !== child.sessionId) return undefined;
     const {frameTree}: {frameTree:FrameTree} = await dbg.sendCommand('Page.getFrameTree',{},child.sessionId);
     const current = child.sessionId ? frameTree.frame : frameTree.childFrames?.find(frame => frame.frame.id === child.frame)?.frame;
-    if (current?.id !== child.frame || current.url !== child.url || current.loaderId !== child.loader) return null;
+    if (current?.id !== child.frame || current.loaderId !== child.loader || !eligible(current.url)) return undefined;
     const context = await dbg.sendCommand('Page.createIsolatedWorld',{frameId:child.frame,worldName:WORLD_NAME},child.sessionId);
     const result: Evaluation = await dbg.sendCommand('Runtime.evaluate',{
-      expression:code,contextId:context.executionContextId,awaitPromise:true,returnByValue:true,allowUnsafeEvalBlockedByCSP:false,
+      expression:code,contextId:context.executionContextId,awaitPromise:true,returnByValue:true,
+      userGesture:gesture,allowUnsafeEvalBlockedByCSP:false,
     },child.sessionId);
     return !result.exceptionDetails ? result.result?.value ?? null : null;
   } catch { return null; }
@@ -173,11 +176,12 @@ export async function ownedPlayerTarget(guest: WebContents): Promise<PlayerTarge
   const useFrame = await readTop(guest,'Boolean(document.querySelector("'+OWNER+'"))');
   if (useFrame === null || !isLive(guest)) return null;
   const root = guest.mainFrame, url = guest.getURL();
-  const current = () => isLive(guest) && guest.getURL() === url && guest.mainFrame === root;
+  const sameRoot = () => !guest.isDestroyed() && guest.mainFrame === root && eligible(guest.getURL());
+  const current = () => isLive(guest) && sameRoot() && guest.getURL() === url;
   if (!useFrame) {
     return {
       evaluate: (code,gesture) => current() ? readTop(guest,code,gesture) : Promise.resolve(null),
-      cleanup: code => current() ? readTop(guest,code) : Promise.resolve(null),
+      evaluateBound: (code,gesture) => sameRoot() ? readTop(guest,code,gesture) : Promise.resolve(undefined),
     };
   }
   let binding: FrameSession | undefined;
@@ -187,6 +191,6 @@ export async function ownedPlayerTarget(guest: WebContents): Promise<PlayerTarge
   };
   return {
     evaluate: (code,gesture) => current() ? readFrame(guest,code,gesture,accept) : Promise.resolve(null),
-    cleanup: code => binding && current() ? cleanupFrame(guest,binding,code) : Promise.resolve(null),
+    evaluateBound: (code,gesture) => binding && sameRoot() ? readBoundFrame(guest,binding,code,gesture) : Promise.resolve(undefined),
   };
 }

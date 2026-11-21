@@ -262,6 +262,12 @@ export interface ContinueItem {
   updatedAt: number;
 }
 
+export interface SearchRecommendationContext {
+  recent: number[];
+  watched: number[];
+  completed: number[];
+}
+
 export interface HistoryEntry {
   id: number;
   media: MediaSnapshot;

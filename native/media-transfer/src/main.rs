@@ -71,8 +71,7 @@ fn run() -> Result<(), RpcError> {
     {
         return Err(invalid("Choose an absolute destination ending in .mp4."));
     }
-    let url = media_url(&request.url)
-        .ok_or_else(|| invalid("Choose a clear public MP4 or HLS stream."))?;
+    let url = media_url(&request.url).ok_or_else(|| invalid("Choose a supported public video."))?;
     let observed = request
         .observed
         .as_deref()
@@ -89,7 +88,8 @@ fn run() -> Result<(), RpcError> {
             "The active video reference does not match the transfer.",
         ));
     }
-    let ffmpeg = if hls {
+    let format = convertible_format(&url);
+    let ffmpeg = if hls || format.is_some() {
         bind_remux_process_tree()?;
         Some(
             std::env::current_exe()
@@ -110,15 +110,27 @@ fn run() -> Result<(), RpcError> {
         let progress = |received, total| publish(json!({"received": received, "total": total}));
         timeout(Duration::from_secs(45 * 60), async {
             if let Some(ffmpeg) = ffmpeg.as_ref() {
-                remux::save(
-                    &transport,
-                    &url,
-                    observed.as_ref(),
-                    &request.destination,
-                    ffmpeg,
-                    progress,
-                )
-                .await
+                if let Some(format) = format {
+                    remux::save_container(
+                        &transport,
+                        &url,
+                        format,
+                        &request.destination,
+                        ffmpeg,
+                        progress,
+                    )
+                    .await
+                } else {
+                    remux::save(
+                        &transport,
+                        &url,
+                        observed.as_ref(),
+                        &request.destination,
+                        ffmpeg,
+                        progress,
+                    )
+                    .await
+                }
             } else {
                 transfer::save(&transport, &url, &request.destination, progress).await
             }
@@ -203,7 +215,25 @@ fn fixture_source(_url: &Url) -> bool {
 }
 
 pub(crate) fn is_active_media_url(url: &Url) -> bool {
-    public_media_url(url) && (has_extension(url, "mp4") || has_extension(url, "m3u8"))
+    public_media_url(url)
+        && (has_extension(url, "mp4")
+            || has_extension(url, "m3u8")
+            || convertible_format(url).is_some())
+}
+
+fn convertible_format(url: &Url) -> Option<&'static str> {
+    let (_, extension) = url.path().rsplit_once('.')?;
+    match extension.to_ascii_lowercase().as_str() {
+        "ts" | "m2ts" | "mts" => Some("mpegts"),
+        "webm" | "mkv" => Some("matroska"),
+        "mov" | "m4v" | "3gp" => Some("mov"),
+        "avi" => Some("avi"),
+        "mpg" | "mpeg" => Some("mpeg"),
+        "ogv" => Some("ogg"),
+        "flv" => Some("flv"),
+        "wmv" => Some("asf"),
+        _ => None,
+    }
 }
 
 fn has_extension(url: &Url, expected: &str) -> bool {

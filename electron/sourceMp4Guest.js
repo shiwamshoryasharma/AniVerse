@@ -20,7 +20,7 @@
     } catch { /* skip invalid media references */ }
     return null;
   };
-  const direct = plain(media, /\.(?:mp4|m3u8)$/i);
+  const direct = plain(media, /\.(?:mp4|m3u8|ts|m2ts|mts|webm|mkv|mov|m4v|avi|mpg|mpeg|ogv|flv|wmv|3gp)$/i);
   if (direct) return { media, url:direct };
   if (!media.startsWith('blob:')) return null;
 

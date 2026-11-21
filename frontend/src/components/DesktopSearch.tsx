@@ -17,7 +17,7 @@ export function DesktopSearch() {
   const input = useRef<HTMLInputElement>(null);
   const listbox = useId();
   const navigate = useNavigate();
-  const lang = useSettings().appearance.titleLanguage;
+  const { titleLanguage: lang, showAdult } = useSettings().appearance;
   const { data: privacy } = usePrivacy();
   const viewedId = Number(useLocation().pathname.match(/^\/(?:anime|watch)\/(\d+)(?:\/|$)/)?.[1]);
   const context = privacy?.privateMediaIds.includes(viewedId) ? { ...privacy, incognito: true } : privacy;
@@ -25,7 +25,7 @@ export function DesktopSearch() {
   const typing = term.length >= 2;
   const search = useSearch(open && typing && term === debounced ? debounced : '');
   const results = open && typing && term === debounced ? search.data ?? [] : [];
-  const discovery = useSearchDiscovery(open && !term, context);
+  const discovery = useSearchDiscovery(open && !term, context, showAdult);
   const completed = useCompletedResults(results, context);
   const items = typing ? results : term ? [] : discovery.items;
   const pending = typing ? (term !== debounced || search.isFetching) : !term && discovery.pending;
@@ -97,7 +97,7 @@ export function DesktopSearch() {
           const title = titleOf(media, lang);
           const alternate = [media.title.romaji, media.title.english, media.title.native].find(name => name && name !== title);
           const info = typing ? [alternate, formatLabel(media.format), media.seasonYear, media.episodes ? media.episodes + ' eps' : null]
-            : [media.genres.slice(0, 2).join(' · ') || formatLabel(media.format), media.seasonYear];
+            : [(media.genres ?? []).slice(0, 2).join(' · ') || formatLabel(media.format), media.seasonYear];
           return <div key={media.id} id={listbox + '-' + index} role="option" aria-selected={selection === index}
             className={cx('suggest-item', selection === index && 'active')}
             onMouseEnter={() => setActive(index)} onMouseDown={event => event.preventDefault()} onClick={() => go('/anime/' + media.id)}>
@@ -111,7 +111,8 @@ export function DesktopSearch() {
         })}
       </div>
       {!pending && items.length === 0 && <div className="desktop-search-empty" role="status">
-        {typing ? search.isError ? 'Search is temporarily unavailable.' : 'No matching titles.' : term ? 'Type at least two characters.' : 'Search for an anime by title.'}
+        {typing ? search.isError ? 'Search is temporarily unavailable.' : 'No matching titles.' : term ? 'Type at least two characters.' :
+          discovery.unavailable ? 'Suggestions are temporarily unavailable.' : 'No suggestions available. Search for an anime by title.'}
       </div>}
       {typing && <button type="button" className="suggest-foot desktop-search-all" onClick={() => go(viewAll)}>View all results<ArrowUpRight size={13} aria-hidden="true" /></button>}
     </div>}

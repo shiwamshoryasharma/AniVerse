@@ -11,7 +11,8 @@ export async function prepareMediaTransfer() {
   const target = 'x86_64-pc-windows-msvc';
   execFileSync('cargo', ['build', '--locked', '--release', '--target', target,
     '--manifest-path', path.join(root, 'native/media-transfer/Cargo.toml')], {
-    cwd: root, env: { ...process.env, CARGO_TARGET_DIR: out }, stdio: 'inherit', windowsHide: true,
+    cwd: root, env: { ...process.env, CARGO_TARGET_DIR: out,
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: '-C target-feature=+crt-static' }, stdio: 'inherit', windowsHide: true,
   });
   const resources = path.join(root, 'build/vendor/ffmpeg');
   await mkdir(resources, { recursive: true });

@@ -452,7 +452,6 @@ async function bootstrap() {
     },
     'site.focus': async ({ webContentsId, on }) => {
       const guest = guestFor(webContentsId);
-      if (!on) await quantum.stop(guest);
       return { focused: await navigator.focus(guest, on, null) };
     },
     'site.options': ({ webContentsId }) => navigator.options(guestFor(webContentsId)),
@@ -543,6 +542,7 @@ async function bootstrap() {
       store.setWatched(media, episode, watched);
       sync.queue('entry', media);
     },
+    'library.searchContext': () => store.searchContext(),
     'library.history': ({ limit, offset }) => store.listHistory(limit, offset),
     'library.clearHistory': ({ id }) => store.clearHistory(id),
     'library.dismissContinue': ({ mediaId }) => store.dismissContinue(mediaId),

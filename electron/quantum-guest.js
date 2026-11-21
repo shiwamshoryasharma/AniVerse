@@ -20,23 +20,24 @@
     if (!active) return {state:'off'};
     const {video, track, context, analyser, buffer, samples, source} = active;
     if (!video.isConnected || video.currentSrc !== source || video.mediaKeys ||
-        player() !== video || track.readyState !== 'live' || context.state !== 'running') {
+        track.readyState !== 'live' || context.state === 'closed') {
       stop();
       return {state:'off'};
     }
+    if (context.state !== 'running' || (track.muted && !video.paused && !video.seeking)) return {state:'waiting'};
     analyser.getFloatTimeDomainData(buffer);
     return {state:'active', mediaTime:video.currentTime, videoFrames:video.getVideoPlaybackQuality().totalVideoFrames,
       playing:!video.paused && !video.seeking, sampleRate:context.sampleRate, samples,
       signal:buffer.some(sample => Math.abs(sample) > 0.0001)};
   }
   async function enable(level) {
-    if (status().state === 'active') return apply('level', level);
+    if (active) return resume(level);
     const video = player(), run = ++sequence;
     if (!video || video.readyState < 2 || video.paused || video.muted || video.volume === 0)
       return {state:'waiting'};
     if (!isSecureContext || video.mediaKeys || video.srcObject || !video.captureStream)
       return {state:'unavailable'};
-    const source = video.currentSrc, volume = video.volume;
+    const source = video.currentSrc;
     let stream, context, effect, output, url, ownsMute = false;
     const listeners = new AbortController();
     const close = () => {
@@ -76,12 +77,12 @@
       try {
         await Promise.race([prepare(), new Promise((_, reject) => {timer = setTimeout(reject, 1800);})]);
       } finally { clearTimeout(timer); }
-      if (run !== sequence || video !== player() || video.currentSrc !== source || video.mediaKeys ||
-          video.muted || video.volume !== volume || track.muted || track.readyState !== 'live') throw Error();
+      if (run !== sequence || !video.isConnected || video.currentSrc !== source || video.mediaKeys ||
+          video.muted || track.muted || track.readyState !== 'live') throw Error();
       const capture = context.createMediaStreamSource(new MediaStream([track]));
       const gain = output = context.createGain();
       const analyser = context.createAnalyser();
-      gain.gain.value = volume;
+      gain.gain.value = 0;
       analyser.fftSize = 512;
       capture.connect(analyser).connect(effect).connect(gain);
       const graph = {video, track, context, effect, source, analyser, close,
@@ -91,20 +92,32 @@
       effect.port.onmessage = ({data}) => { if (Number.isSafeInteger(data)) graph.samples = data; };
       for (const event of ['emptied','loadstart','encrypted','ended']) video.addEventListener(event, leave, options);
       video.addEventListener('seeking', () => effect.port.postMessage('reset'), options);
-      video.addEventListener('volumechange', () => {
-        if (!video.muted || video.volume !== volume) leave();
-      }, options);
+      const updateOutput = () => {
+        if (active !== graph) return;
+        const processing = context.state === 'running' && !track.muted;
+        if (processing) {
+          if (!video.muted) video.muted = true;
+          ownsMute = true;
+          gain.gain.value = video.volume;
+        } else {
+          gain.gain.value = 0;
+          if (ownsMute) {
+            ownsMute = false;
+            video.muted = false;
+          }
+        }
+      };
+      video.addEventListener('volumechange', updateOutput, options);
       track.addEventListener('ended', leave, options);
-      track.addEventListener('mute', () => {
-        if (!video.paused && !video.seeking) leave();
-      }, options);
+      track.addEventListener('mute', updateOutput, options);
+      track.addEventListener('unmute', updateOutput, options);
       stream.addEventListener('removetrack', ({track: removed}) => { if (removed === track) leave(); }, options);
-      context.addEventListener('statechange', () => { if (context.state !== 'running') leave(); }, options);
+      context.addEventListener('statechange', updateOutput, options);
       effect.addEventListener('processorerror', leave, options);
       window.addEventListener('pagehide', leave, options);
-      video.muted = ownsMute = true;
       gain.connect(context.destination);
       active = graph;
+      updateOutput();
       return status();
     } catch {
       if (sequence === run) sequence++;
@@ -114,9 +127,21 @@
       if (url) { URL.revokeObjectURL(url); url = undefined; }
     }
   }
+  function resume(intensity) {
+    const current = status();
+    if (!active) return current;
+    active.effect.parameters.get('intensity').value = intensity;
+    if (active.context.state !== 'running' && !active.resuming) {
+      const graph = active;
+      graph.resuming = true;
+      void graph.context.resume().catch(() => {}).finally(() => {graph.resuming = false;});
+    }
+    return current;
+  }
   function apply(action, intensity) {
     if (action === 'off') stop();
     if (action === 'enable') return enable(intensity);
+    if (action === 'resume') return resume(intensity);
     if (action === 'level' && active) active.effect.parameters.get('intensity').value = intensity;
     return status();
   }

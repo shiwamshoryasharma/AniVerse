@@ -26,6 +26,15 @@ for (const [kind, options, extension] of [
   for (const name of await readdir(folder)) files.set('/' + kind + '/' + name, await readFile(path.join(folder, name)));
 }
 
+const webm = path.join(scratch, 'source.webm');
+execFileSync(ffmpeg, ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=96x54:rate=12',
+  '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '3',
+  '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '6', '-c:a', 'libopus', webm],
+{ windowsHide: true });
+files.set('/source.webm', await readFile(webm));
+files.set('/source.ts', files.get('/ts/part-0.ts'));
+files.set('/fake.webm', Buffer.from('#EXTM3U\nhttps://example.test/never.ts\n'));
+
 const requests = [];
 let stalled;
 const server = createServer((request, response) => {
@@ -85,6 +94,21 @@ try {
     assert.ok(streams.every(stream => Math.abs(stream.duration - 3) < 0.15));
   }
 
+  for (const extension of ['ts', 'webm']) {
+    const output = path.join(scratch, 'converted-' + extension + '.mp4');
+    const result = await start('/source.' + extension, output).done;
+    assert.equal(result.code, 0, JSON.stringify(result.events));
+    const { streams } = JSON.parse(execFileSync(ffprobe, [
+      '-v', 'error', '-show_entries', 'stream=codec_name,start_time', '-of', 'json', output,
+    ], { windowsHide: true, encoding: 'utf8' }));
+    assert.deepEqual(streams.map(stream => stream.codec_name), ['h264', 'aac']);
+    assert.ok(Math.abs(streams[0].start_time - streams[1].start_time) < 0.15);
+  }
+
+  const wrongContainer = path.join(scratch, 'wrong-container.mp4');
+  assert.notEqual((await start('/fake.webm', wrongContainer).done).code, 0);
+  await assert.rejects(stat(wrongContainer), { code: 'ENOENT' });
+
   const reference = await readFile(path.join(scratch, 'ts.mp4'));
   files.set('/direct.mp4', reference);
   const destination = path.join(scratch, 'direct.mp4');
@@ -118,7 +142,7 @@ try {
   assert.ok(!(await readdir(scratch)).some(name => name.startsWith('.aniverse-')));
 
   console.log(JSON.stringify({ passed: true, transportStream: true, fragmented: true,
-    audioVideoSync: true, directExactBytes: true, existingFilePreserved: true,
+    audioVideoSync: true, directTs: true, webmToMp4: true, disguisedPlaylistRejected: true, directExactBytes: true, existingFilePreserved: true,
     changedPlaylistRejected: true, encryptedRejected: true, cooperativeCancellation: true }, null, 2));
 } finally {
   for (const child of children) child.stdin.end();

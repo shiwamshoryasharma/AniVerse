@@ -2,6 +2,14 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.3.1 Windows (Electron) · 2026-11-22
+
+- Restore history-based search recommendations and reuse local catalogue data.
+- Keep Quantum Audio active during normal player interaction and improve headphone surround cues.
+- Bundle the video helper’s Windows runtime and convert supported direct video formats to MP4.
+
+[Windows release notes](docs/releases/2.3.1.md)
+
 ## 2.3.0 Windows (Electron) · 2026-11-22
 
 - Add the AniVerse2 appearance, search, blocking report, graphics and player tools to the Electron edition.

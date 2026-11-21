@@ -205,6 +205,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   }),
   'library.markWatched': z.object({ media: snapshot, episode: z.number().int().min(1).max(10000), watched: z.boolean() }),
   'library.history': z.object({ limit: z.number().int().min(1).max(200), offset: z.number().int().min(0) }),
+  'library.searchContext': none,
   'library.clearHistory': z.object({ id: id.nullable() }),
   'library.dismissContinue': z.object({ mediaId: id }),
   'library.favourites': none,

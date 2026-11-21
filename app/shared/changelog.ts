@@ -5,6 +5,13 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.3.1',date:'2026-11-22',title:'Better suggestions, sound and video downloads',
+   summary:'Search learns from your existing profile. Quantum Audio keeps playing as you interact with the player, and Save MP4 handles more sources.',
+   items:[
+    {kind:'fixed',icon:'fix',title:'Find more shows you might like',description:'Search uses recent watch history and continue-watching progress. Watched titles stay in regular search and are excluded from suggestions.',action:{label:'Browse anime',path:'/browse'}},
+    {kind:'improved',icon:'sparkles',title:'Quantum Audio headphone surround',description:'The Rust audio effect keeps dialogue centred and gives compatible surround tracks more distinct front, side and rear placement.'},
+    {kind:'fixed',icon:'cast',title:'Save more videos as MP4',description:'The bundled downloader runs on a clean Windows install and converts supported formats including direct TS and WebM.',action:{label:'Open Player settings',path:'/settings/player'}},
+   ]},
   {version:'2.3.0',date:'2026-11-22',title:'AniVerse 2 features on Electron',
    summary:'The Windows Electron edition gains the latest themes, search, playback tools and graphics controls.',
    items:[

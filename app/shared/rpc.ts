@@ -38,6 +38,7 @@ import type {
   ProbeResult,
   ProgressSave,
   Provider,
+  SearchRecommendationContext,
   Settings,
   SourceInfo,
   SourceCatalogueRequest,
@@ -124,6 +125,7 @@ export interface RpcContract {
   'library.saveProgress': [ProgressSave, { completedNow: boolean }];
   'library.markWatched': [{ media: MediaSnapshot; episode: number; watched: boolean }, void];
   'library.history': [{ limit: number; offset: number }, HistoryEntry[]];
+  'library.searchContext': [void, SearchRecommendationContext];
   'library.clearHistory': [{ id: number | null }, void];
   'library.dismissContinue': [{ mediaId: number }, void];
   'library.favourites': [void, FavouriteEntry[]];

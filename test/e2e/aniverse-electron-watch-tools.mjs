@@ -19,7 +19,7 @@ const bundle = await build({ stdin: {
     "<SiteQuantumAudioControl id={1} ready={ready} /><DownloadMp4Button",
     "url={ready && !stream ? 'https://fixture.test/episode.mp4' : null} webContentsId={stream ? 1 : undefined} sourceId='fixture-source'",
     "unavailableReason='This source has no public MP4 available to download.' />",
-    "</div><button onClick={() => setReady(true)}>Open fixture episode</button><button onClick={() => setStream(true)}>Open HLS fixture</button></ToastProvider>; }",
+    "</div><button onClick={() => setReady(value => !value)}>{ready ? 'Change playback variant' : 'Open fixture episode'}</button><button onClick={() => setStream(true)}>Open HLS fixture</button></ToastProvider>; }",
     "createRoot(document.querySelector('#root')).render(<Fixture />);",
   ].join('\n'),
 }, bundle: true, write: false, jsx: 'automatic' });
@@ -36,11 +36,14 @@ try {
   const page = await browser.newPage({ viewport: { width: 360, height: 480 } });
   await page.addInitScript(() => {
     window.saves = [];
+    window.quantumActions = [];
+    window.quantumStatus = 'active';
     window.aniverse = { modernWindows: true, platform: 'win32', on: () => () => {},
       saveMp4: async (...args) => (window.saves.push(args), true), saveSiteMp4: async id => (window.saves.push([id]), true),
       invoke: async (method, input) => {
         assertPlayerMethod(method);
-        return { state: input.action === 'enable' || input.action === 'status' ? 'active' : 'off' };
+        window.quantumActions.push(input.action);
+        return { state: input.action === 'status' ? window.quantumStatus : input.action === 'off' ? 'off' : 'active' };
       },
     };
     function assertPlayerMethod(method) {
@@ -71,6 +74,19 @@ try {
   await enable.click();
   await controls.getByText('Quantum Audio active').waitFor();
   report.visibleAudioControlWithExistingToggle = true;
+  await page.evaluate(() => { window.quantumStatus = 'waiting'; });
+  await controls.getByText('Waiting for website audio…').waitFor();
+  assert.equal(await enable.getAttribute('aria-pressed'), 'true');
+  await page.getByRole('button', { name: 'Change playback variant' }).click();
+  await page.evaluate(() => { window.quantumStatus = 'active'; });
+  await page.getByRole('button', { name: 'Open fixture episode' }).click();
+  await controls.getByText('Quantum Audio active').waitFor();
+  assert.ok((await page.evaluate(() => window.quantumActions)).includes('status'));
+  assert.ok(!(await page.evaluate(() => window.quantumActions)).includes('off'));
+  await enable.click();
+  assert.equal(await enable.getAttribute('aria-pressed'), 'false');
+  assert.equal(await page.evaluate(() => window.quantumActions.at(-1)), 'off');
+  report.quantumIntentSurvivesBufferingAndVariantChange = true;
 
   await download.click();
   await page.getByText('MP4 saved.').waitFor();

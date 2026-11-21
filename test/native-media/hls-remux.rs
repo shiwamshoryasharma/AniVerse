@@ -48,7 +48,13 @@ fn rejects_video_only_hls_instead_of_saving_it_without_audio() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(remux(&ffmpeg, directory.path(), &output))
+        .block_on(convert_local(
+            &ffmpeg,
+            directory.path(),
+            "episode.m3u8",
+            "hls",
+            &output
+        ))
         .is_err());
     assert!(
         !output.exists(),

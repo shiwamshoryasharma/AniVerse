@@ -1,60 +1,67 @@
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, type Query } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import type { MediaCard, MediaDetails, PrivacyState } from '../../../app/shared/types';
+import type { MediaCard, PrivacyState } from '../../../app/shared/types';
 import { call } from './bridge';
 import { keys } from './queries';
-import { addSearchHistory, completedInLibrary, rankSuggestions, searchCatalogue, type SearchHistory } from './searchDiscovery';
-
-const recentHistory = [...keys.history, 'search-discovery'] as const;
-const historyPageSize = 500;
-const privateSet = new Set<number>();
+import { completedInLibrary, rankSuggestions, searchCatalogue } from './searchDiscovery';
 
 function allowed(privacy: PrivacyState | undefined, id?: number) {
   return !!privacy && !privacy.incognito && (id == null || !privacy.privateMediaIds.includes(id));
 }
 
-export function useSearchDiscovery(open: boolean, privacy: PrivacyState | undefined) {
-  const client = useQueryClient();
+function useSearchProfile(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.searchContext, enabled, staleTime: 60_000, refetchOnWindowFocus: false, retry: false,
+    queryFn: () => call('library.searchContext'),
+  });
+}
+
+export function useSearchDiscovery(open: boolean, privacy: PrivacyState | undefined, showAdult: boolean) {
+
   const personalize = open && allowed(privacy);
-  const { data: catalogueData, isPending: readingCatalogue } = useQuery({
-    queryKey: keys.home, queryFn: () => call('meta.home'), staleTime: 5 * 60_000, enabled: open,
+  const home = useQuery({
+    queryKey: keys.home, queryFn: () => call('meta.home'), staleTime: 5 * 60_000,
+    enabled: query => open && !!privacy && query.state.data === undefined, refetchOnWindowFocus: false, retry: false,
   });
-  const { data: historyData, isPending: readingHistory } = useQuery({
-    queryKey: recentHistory, enabled: personalize, staleTime: 60_000, refetchOnWindowFocus: false, retry: false,
-    queryFn: async ({ signal }) => {
-      const history: SearchHistory = { watched: new Set(), recent: [] };
-      for (let offset = 0; ; offset += historyPageSize) {
-        if (signal.aborted || !allowed(client.getQueryData<PrivacyState>(['privacy']))) return null;
-        const page = await call('library.history', { limit: historyPageSize, offset });
-        addSearchHistory(history, page);
-        if (page.length < historyPageSize || offset >= 1_000_000) return history;
-      }
-    },
-  });
-  const catalogue = useMemo(() => searchCatalogue(catalogueData), [catalogueData]);
-  const privateIds = useMemo(() => privacy ? new Set(privacy.privateMediaIds) : privateSet, [privacy]);
-  const history = personalize ? historyData : null;
+  const profile = useSearchProfile(personalize);
+  const history = personalize ? profile.data : undefined;
+  const catalogue = useMemo(() => searchCatalogue(home.data), [home.data]);
+  const byId = useMemo(() => new Map(catalogue.map(media => [media.id, media])), [catalogue]);
+  const privateIds = useMemo(() => new Set(privacy?.privateMediaIds), [privacy]);
   const recent = history?.recent.filter(id => !privateIds.has(id)) ?? [];
-  const known = recent.map(id => client.getQueryData<MediaDetails>(keys.details(id)) ?? catalogue.find(media => media.id === id));
-  const missing = recent.filter((_, index) => !known[index]).slice(0, 2);
-  const learned = useQueries({ queries: missing.map(id => ({
-    queryKey: ['search-discovery-metadata', id], staleTime: 30 * 60_000, retry: false, refetchOnWindowFocus: false,
-    queryFn: () => allowed(client.getQueryData<PrivacyState>(['privacy']), id) ? call('meta.details', { id }) : null,
+  const missing = recent.filter(id => !byId.get(id)?.genres?.length).slice(0, 2);
+  const enrich = new Set(missing.length ? missing : recent.slice(0, 1));
+  const learned = useQueries({ queries: recent.map(id => ({
+    queryKey: keys.details(id), staleTime: 30 * 60_000, retry: false, refetchOnWindowFocus: false,
+    enabled: (query: Query) => enrich.has(id) && query.state.data === undefined,
+    queryFn: () => call('meta.details', { id }),
   })) });
-  const details = learned.flatMap(({ data }) => data && !privateIds.has(data.id) ? [data] : []);
-  const seeds = recent.map((id, index) => known[index] ?? details.find(media => media.id === id));
-  const related = [...known, ...details].flatMap(media => media && 'recommendations' in media ? (media as MediaDetails).recommendations : []);
+  const seeds = recent.map((id, index) => learned[index]?.data ?? byId.get(id));
+  const related = learned.flatMap(({ data }) => data?.recommendations ?? []);
   const excluded = useMemo(() => new Set([...(history?.watched ?? []), ...privateIds]), [history, privateIds]);
-  const pending = open && (!privacy || (readingCatalogue && !details.length) || (personalize && readingHistory));
-  return !open || pending || (personalize && !history) ? { items: [], personalized: false, pending } : { ...rankSuggestions(catalogue, seeds, related, excluded), pending };
+  const ready = open && !!privacy && (!personalize || !!history);
+  const ranked = ready ? rankSuggestions(catalogue, seeds, related, excluded, showAdult) : { items: [], personalized: false };
+  return {
+    ...ranked,
+    pending: open && (!privacy || (personalize && profile.isPending) || (!ranked.items.length && ready &&
+      (home.isFetching || learned.some(query => query.isFetching)))),
+    unavailable: (personalize && profile.isError && !history) || (ready && home.isError && !ranked.items.length),
+  };
 }
 
 export function useCompletedResults(items: MediaCard[], privacy: PrivacyState | undefined) {
-  const client = useQueryClient();
   const eligible = items.filter(media => allowed(privacy, media.id));
-  const states = useQueries({ queries: eligible.map(({ id }) => ({
-    queryKey: [...keys.libraryState(id), 'search'], staleTime: 60_000, retry: false, refetchOnWindowFocus: false,
-    queryFn: () => allowed(client.getQueryData<PrivacyState>(['privacy']), id) ? call('library.state', { mediaId: id }) : null,
+  const profile = useSearchProfile(eligible.length > 0);
+  const completed = useMemo(() => new Set(profile.data?.completed), [profile.data]);
+  const watched = useMemo(() => new Set(profile.data?.watched), [profile.data]);
+  const legacy = eligible.filter(media => watched.has(media.id) && !completed.has(media.id) &&
+    media.status === 'FINISHED' && !!media.episodes);
+  const states = useQueries({ queries: legacy.map(({ id }) => ({
+    queryKey: keys.libraryState(id), staleTime: 60_000, retry: false, refetchOnWindowFocus: false,
+    queryFn: () => call('library.state', { mediaId: id }),
   })) });
-  return new Set(eligible.filter((media, index) => completedInLibrary(media, states[index]?.data)).map(media => media.id));
+  return new Set([
+    ...eligible.filter(media => completed.has(media.id)).map(({ id }) => id),
+    ...legacy.filter((media, index) => completedInLibrary(media, states[index]?.data)).map(({ id }) => id),
+  ]);
 }

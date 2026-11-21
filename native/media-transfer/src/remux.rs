@@ -99,7 +99,55 @@ pub(super) async fn save(
     tokio::fs::write(staging.path().join("episode.m3u8"), local)
         .await
         .map_err(|_| disk())?;
-    remux(ffmpeg, staging.path(), &output).await?;
+    convert_local(ffmpeg, staging.path(), "episode.m3u8", "hls", &output).await?;
+    publish_mp4(output, destination).await?;
+    progress(total, Some(total));
+    Ok(())
+}
+
+pub(super) async fn save_container(
+    client: &Client,
+    url: &Url,
+    format: &str,
+    destination: &Path,
+    ffmpeg: &Path,
+    mut progress: impl FnMut(u64, Option<u64>),
+) -> Result<(), RpcError> {
+    if tokio::fs::try_exists(destination)
+        .await
+        .map_err(|_| disk())?
+    {
+        return Err(exists());
+    }
+    let parent = destination.parent().ok_or_else(disk)?;
+    let scratch = tempfile::Builder::new()
+        .prefix(".aniverse-video-")
+        .tempdir_in(parent)
+        .map_err(|_| disk())?;
+    let output = tempfile::Builder::new()
+        .prefix(".aniverse-mp4-")
+        .tempfile_in(parent)
+        .map_err(|_| disk())?
+        .into_temp_path();
+    progress(0, None);
+    let mut remaining = MAX_BYTES;
+    copy_segment(
+        client,
+        url,
+        &scratch.path().join("input.video"),
+        &mut remaining,
+        MAX_BYTES,
+    )
+    .await?;
+    progress(1, Some(2));
+
+    convert_local(ffmpeg, scratch.path(), "input.video", format, &output).await?;
+    publish_mp4(output, destination).await?;
+    progress(2, Some(2));
+    Ok(())
+}
+
+async fn publish_mp4(output: tempfile::TempPath, destination: &Path) -> Result<(), RpcError> {
     let mut file = tokio::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -126,7 +174,6 @@ pub(super) async fn save(
     })
     .await
     .map_err(|_| disk())??;
-    progress(total, Some(total));
     Ok(())
 }
 
@@ -203,9 +250,7 @@ async fn receive(client: &Client, url: &Url) -> Result<Response, RpcError> {
             .get(header::CONTENT_ENCODING)
             .is_some_and(|value| !value.as_bytes().eq_ignore_ascii_case(b"identity"))
     {
-        return Err(invalid(
-            "The source did not provide publicly accessible HLS media.",
-        ));
+        return Err(invalid("The source did not provide accessible video."));
     }
     Ok(response)
 }
@@ -221,44 +266,80 @@ impl Drop for RemuxChild {
     }
 }
 
-async fn remux(ffmpeg: &Path, directory: &Path, output: &Path) -> Result<(), RpcError> {
+async fn convert_local(
+    ffmpeg: &Path,
+    directory: &Path,
+    input: &str,
+    format: &str,
+    output: &Path,
+) -> Result<(), RpcError> {
+    let command = |codec: &[&str]| {
+        let mut command = ffmpeg_command(ffmpeg, directory);
+        if format == "hls" {
+            command.args(["-allowed_extensions", "ts,m4s,mp4"]);
+        }
+        // The demuxer and files come from the worker. No external protocol is enabled.
+        let audio = if format == "hls" { "0:a" } else { "0:a?" };
+        command.args([
+            "-threads", "2", "-f", format, "-i", input, "-map", "0:v:0", "-map", audio,
+        ]);
+        command.args(codec);
+        finish_command(command, output)
+    };
+    let copy: &[&str] = if format == "hls" {
+        &["-c", "copy"]
+    } else {
+        &["-c", "copy", "-tag:v", "avc1", "-tag:a", "mp4a"]
+    };
+    if run_ffmpeg(command(copy)).await.is_ok() {
+        return Ok(());
+    }
+    run_ffmpeg(command(&[
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a",
+        "aac", "-b:a", "192k", "-threads", "4",
+    ]))
+    .await
+}
+
+fn ffmpeg_command(ffmpeg: &Path, directory: &Path) -> Command {
+    let mut command = Command::new(ffmpeg);
+    command
+        .creation_flags(CREATE_NO_WINDOW)
+        .current_dir(directory)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .args([
+            "-nostdin",
+            "-y",
+            "-loglevel",
+            "error",
+            "-xerror",
+            "-protocol_whitelist",
+            "file",
+        ]);
+    command
+}
+
+fn finish_command(mut command: Command, output: &Path) -> Command {
+    command
+        .args([
+            "-movflags",
+            "+faststart",
+            "-fs",
+            &MAX_BYTES.to_string(),
+            "-f",
+            "mp4",
+        ])
+        .arg(output);
+    command
+}
+
+async fn run_ffmpeg(mut command: Command) -> Result<(), RpcError> {
     let mut child = RemuxChild(
-        Command::new(ffmpeg)
-            .creation_flags(CREATE_NO_WINDOW)
-            .current_dir(directory)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .args([
-                "-nostdin",
-                "-y",
-                "-loglevel",
-                "error",
-                "-xerror",
-                "-protocol_whitelist",
-                "file",
-                "-allowed_extensions",
-                "ts,m4s,mp4",
-                "-f",
-                "hls",
-                "-i",
-                "episode.m3u8",
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a",
-                "-c",
-                "copy",
-                "-movflags",
-                "+faststart",
-                "-fs",
-                &MAX_BYTES.to_string(),
-                "-f",
-                "mp4",
-            ])
-            .arg(output)
+        command
             .spawn()
-            .map_err(|_| invalid("AniVerse2 could not start its bundled MP4 remuxer."))?,
+            .map_err(|_| invalid("AniVerse could not start its bundled video converter."))?,
     );
     timeout(Duration::from_secs(10 * 60), async {
         loop {
@@ -281,19 +362,16 @@ fn exists() -> RpcError {
     RpcError::new("config", "That file already exists. Choose a new filename.")
 }
 fn disk() -> RpcError {
-    RpcError::new("config", "Could not save the HLS episode to that folder.")
+    RpcError::new("config", "Could not save the video to that folder.")
 }
 fn network() -> RpcError {
     RpcError::new(
         "network",
-        "The source ended the HLS download before it completed.",
+        "The source ended the video download before it completed.",
     )
 }
 fn oversized() -> RpcError {
-    RpcError::new(
-        "network",
-        "The HLS media exceeds the offline download size limit.",
-    )
+    RpcError::new("network", "The video exceeds the download size limit.")
 }
 
 #[cfg(test)]

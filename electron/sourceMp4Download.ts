@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline';
 import { link, mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { downloadableVideoPath } from '../app/shared/downloadFormats';
 import type { RustPolicy } from '../app/core/security/rustPolicy';
 import { SourceNetworkGuard } from './sourceNetwork';
 import { readOwnedPlayer } from './ownedPlayerFrame';
@@ -78,9 +79,11 @@ export class SourceMp4Download {
 
 
   saveDirect(owner: WebContents, url: string, source?: string): Promise<boolean> {
-    const target = this.publicUrl(url, /\.mp4$/i);
-    if (!target || (source && !this.policy.decide({ context: 'mp4', url: target.href, source }).allowed)) {
-      throw Error('Choose a public HTTPS MP4 file.');
+    const target = this.publicUrl(url, downloadableVideoPath);
+    const scoped = !source || (target && (new URL(source).origin === target.origin ||
+      this.policy.decide({ context: 'mp4', url: target.href, source }).allowed));
+    if (!target || !scoped) {
+      throw Error('Choose a supported public HTTPS video to save as MP4.');
     }
     return this.saveMedia(owner, { media: target.href, url: target.href }, () => !owner.isDestroyed());
   }
@@ -88,7 +91,7 @@ export class SourceMp4Download {
   async saveActive(guest: WebContents, current: () => boolean): Promise<boolean> {
     if (!current()) return false;
     const selected = await this.inspect(guest);
-    if (!selected || !current()) throw Error('Play a clear MP4 or supported HLS episode before saving.');
+    if (!selected || !current()) throw Error('Play a supported video before saving. Some sources restrict downloads.');
     return this.saveMedia(guest, selected, async () => {
       if (!current()) return false;
       const refreshed = await this.inspect(guest);
@@ -101,10 +104,10 @@ export class SourceMp4Download {
     if (!observed || typeof observed !== 'object') return null;
     const raw = observed as Record<string, unknown>;
     if (typeof raw.media !== 'string' || raw.media.length > 4096) return null;
-    const url = this.publicUrl(raw.url, /\.(?:mp4|m3u8)$/i);
+    const url = this.publicUrl(raw.url, downloadableVideoPath);
     if (!url) return null;
     if (!raw.media.startsWith('blob:')) {
-      return this.publicUrl(raw.media, /\.(?:mp4|m3u8)$/i)?.href === url.href
+      return this.publicUrl(raw.media, downloadableVideoPath)?.href === url.href
         ? { media: raw.media, url: url.href } : null;
     }
     const segment = this.publicUrl(raw.observed, /\.(?:ts|m4s|cmfv)$/i);
@@ -140,7 +143,7 @@ export class SourceMp4Download {
     this.busy = true;
     try {
       const basename = path.posix.basename(new URL(selected.url).pathname).slice(0, 96)
-        .replace(/[^a-zA-Z0-9 ._-]/g, '_').replace(/\.(?:mp4|m3u8)$/i, '') || 'episode';
+        .replace(/[^a-zA-Z0-9 ._-]/g, '_').replace(/\.[a-z0-9]+$/i, '') || 'episode';
       const { canceled, filePath } = await dialog.showSaveDialog(parent, {
         title: 'Save MP4 as',
         defaultPath: path.join(this.folder() ?? app.getPath('downloads'), 'AniVerse - ' + basename + '.mp4'),
@@ -186,6 +189,7 @@ export class SourceMp4Download {
       }
       const code = await result;
       if (owner.isDestroyed()) return false;
+      if (code === -1073741515 || code === 3221225781) throw Error('Windows could not load the bundled video download helper. Update or reinstall AniVerse.');
       if (code !== 0 || !completed) throw Error(message);
       return true;
     } finally {

@@ -9,6 +9,7 @@ import type {
   ProgressEntry,
   ProgressSave,
   Provider,
+  SearchRecommendationContext,
   SourceOverridePatch,
 } from '../../shared/types';
 import { nowSec } from '../util';
@@ -447,6 +448,33 @@ export class Store {
       if (items.length >= limit) break;
     }
     return items;
+  }
+
+  searchContext(): SearchRecommendationContext {
+    if (this.incognito) return { recent: [], watched: [], completed: [] };
+    const rows = this.all<{ id: number; watchedAt: number; completed: number }>(
+      `WITH visits AS (
+         SELECT media_id, MAX(watched_at) AS at FROM history GROUP BY media_id
+         UNION ALL
+         SELECT media_id, MAX(updated_at) FROM progress GROUP BY media_id
+         UNION ALL
+         SELECT media_id, 0 FROM library WHERE status = 'COMPLETED' OR progress > 0
+       ), watched AS (
+         SELECT media_id, MAX(at) AS at FROM visits GROUP BY media_id
+       )
+       SELECT watched.media_id AS id, watched.at AS watchedAt,
+         COALESCE(library.status = 'COMPLETED', 0) AS completed
+       FROM watched LEFT JOIN library ON library.media_id = watched.media_id
+       WHERE NOT EXISTS(SELECT 1 FROM private_titles WHERE media_id = watched.media_id)
+       ORDER BY watched.at DESC, watched.media_id DESC`,
+    );
+    const dismissed = this.getKv<Record<string, number>>('continue-dismissed', {});
+    const clearedAt = this.getKv<number>('continue-cleared-at', 0);
+    return {
+      recent: rows.filter(({ id, watchedAt }) => watchedAt > Math.max(clearedAt, dismissed[id] ?? 0)).slice(0, 6).map(({ id }) => id),
+      watched: rows.map(({ id }) => id),
+      completed: rows.filter(({ completed }) => completed).map(({ id }) => id),
+    };
   }
 
   listHistory(limit: number, offset: number): HistoryEntry[] {

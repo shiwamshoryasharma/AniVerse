@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, ExternalLink, House, Lock, RotateCw, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { isDownloadableVideoUrl } from '../../../app/shared/downloadFormats';
 import type { SourceInfo } from '../../../app/shared/types';
 import { call, modernWindows } from '../lib/bridge';
 import { cx, hostOf } from '../lib/format';
@@ -51,8 +52,7 @@ function publicSiteMp4(current: string, source: SourceInfo): string | null {
   if (source.kind !== 'web' || !source.partition.startsWith('persist:')) return null;
   try {
     const url = new URL(current);
-    if (url.protocol === 'https:' && url.origin === new URL(source.url).origin &&
-        !url.username && !url.password && !url.search && !url.hash && /\.mp4$/i.test(url.pathname)) return url.href;
+    if (url.origin === new URL(source.url).origin && isDownloadableVideoUrl(url.href)) return url.href;
   } catch { /* No committed web address yet. */ }
   return null;
 }
