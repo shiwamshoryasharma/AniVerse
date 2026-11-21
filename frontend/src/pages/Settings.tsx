@@ -637,7 +637,7 @@ function UpdatesGroup() {
         )}
       </Setting>
       {platform === 'win32' && !off && (
-        <Setting title="AniVerse2" desc="Checks the separate Windows release and prepares to carry over your saved sources and history.">
+        <Setting title="AniVerse2" desc="Install AniVerse2 alongside AniVerse and carry over your saved sources and history.">
           <button className="btn sm" disabled={working || u.status === 'downloaded'} onClick={migrate}>
             <ArrowUp size={14} /> Update AniVerse to AniVerse2
           </button>

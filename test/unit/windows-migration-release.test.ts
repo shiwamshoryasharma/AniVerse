@@ -35,6 +35,24 @@ describe('AniVerse2 Windows release channel', () => {
     expect((await lookup(send))?.url).toBe('https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v9.3.0/' + installer);
   });
 
+  it('falls back to the signed GitHub index on a throttled API and never retries it', async () => {
+    const send = from((url) => url.hostname === 'api.github.com'
+      ? new Response(null, { status: 403, headers: { 'x-ratelimit-remaining': '0' } })
+      : Response.json(reply));
+    expect((await lookup(send))?.url).toBe('https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v9.3.0/' + installer);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(String(send.mock.calls[1][0])).toBe('https://raw.githubusercontent.com/shiwamshoryasharma/AniVerse/codex/aniverse2-windows-updates/aniverse2-windows-migration.json');
+  });
+
+  it('reports no release when the signed index is absent and rejects a tampered index', async () => {
+    const missing = from((url) => new Response(null, { status: url.hostname === 'api.github.com' ? 429 : 404 }));
+    await expect(lookup(missing)).resolves.toBeNull();
+    const tampered = from((url) => url.hostname === 'api.github.com'
+      ? new Response(null, { status: 403 })
+      : Response.json({ ...reply, signature: Buffer.alloc(256, 1).toString('base64') }));
+    await expect(lookup(tampered)).rejects.toThrow(/signature is invalid/);
+  });
+
   it('rejects redirects outside the approved HTTPS origins', async () => {
     const send = from((url) => url.hostname === 'api.github.com'
       ? Response.json([release('aniverse2-v9.3.0')])

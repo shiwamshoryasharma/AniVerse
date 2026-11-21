@@ -3,7 +3,10 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { open, rm } from 'node:fs/promises';
 import path from 'node:path';
+import type { SourceInfo } from '../app/shared/types';
 import type { AppPaths } from './paths';
+import { compareMigrationVersions } from './migrationVerification';
+import { exportWebsiteSessions } from './migrationWebsiteSessions';
 import type { UpdateService } from './updater';
 import { downloadMigrationInstaller, findMigrationOffer } from './migrationRelease';
 
@@ -25,7 +28,11 @@ async function preferences(window: BrowserWindow) {
 export class MigrationBridge {
   private running = false;
 
-  constructor(private readonly paths: AppPaths, private readonly updates: UpdateService) {}
+  constructor(
+    private readonly paths: AppPaths,
+    private readonly updates: UpdateService,
+    private readonly websiteSources: () => readonly SourceInfo[] = () => [],
+  ) {}
 
   async start(window: BrowserWindow | null): Promise<'no-release' | 'cancelled' | 'starting'> {
     if (process.platform !== 'win32' || process.arch !== 'x64' || this.updates.snapshot().status === 'disabled' ||
@@ -38,7 +45,7 @@ export class MigrationBridge {
       const confirmation = await dialog.showMessageBox(window, {
         type: 'question', title: 'Update AniVerse to AniVerse2',
         message: `Install AniVerse2 ${candidate.offer.version}?`,
-        detail: 'AniVerse will close to transfer your saved sources, library, history, and settings. AniVerse2 verifies the transfer before removing the previous app.',
+        detail: 'AniVerse will close while setup copies your saved sources, library, history, and settings. AniVerse stays installed and you can choose whether to remove it later.',
         buttons: ['Cancel', 'Download and update'], cancelId: 0, defaultId: 0, noLink: true,
       });
       if (confirmation.response !== 1) return 'cancelled';
@@ -50,6 +57,9 @@ export class MigrationBridge {
           legacyExecutable: app.getPath('exe'), dataDir: this.paths.dataDir, configDir: this.paths.configDir,
           preferences: await preferences(window), signedRelease: candidate.signed,
         };
+        if (compareMigrationVersions(candidate.offer.version, '3.0.5') >= 0) {
+          await exportWebsiteSessions(this.paths.dataDir, staging, descriptor.nonce, this.websiteSources());
+        }
         const marker = await open(handoff, 'wx', 0o600);
         try {
           await marker.writeFile(JSON.stringify(descriptor), 'utf8');

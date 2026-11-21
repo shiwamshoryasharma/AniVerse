@@ -5,6 +5,12 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.2.5',date:'2026-11-21',title:'Move to AniVerse2 when you choose',
+   summary:'Windows checks the signed AniVerse2 release even when GitHub limits release-list requests.',
+   items:[
+    {kind:'fixed',icon:'shield',title:'Find the signed AniVerse2 setup',description:'The AniVerse2 button falls back to the signed Windows release manifest when GitHub rate-limits the release list.',action:{label:'Open Updates',path:'/settings/about'}},
+    {kind:'improved',icon:'layout',title:'Keep AniVerse available',description:'AniVerse2 copies your saved profile into its own installation. AniVerse stays installed until you choose to remove it.'},
+   ]},
   {version:'2.2.4',date:'2026-11-20',title:'Prepare to move to AniVerse2',
    summary:'The final Windows Electron release adds the signed AniVerse2 migration option.',
    items:[

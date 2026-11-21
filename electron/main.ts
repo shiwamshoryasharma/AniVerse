@@ -322,7 +322,7 @@ async function bootstrap() {
     updates.applySettings(s);
   });
 
-  const migration = new MigrationBridge(paths, updates);
+  const migration = new MigrationBridge(paths, updates, () => store.isIncognito() ? [] : registry.list());
   const protocols = new MediaProtocols(paths.renderer, paths.profileDir,security);
   protocols.install();
   const catalogue=new SourceCatalogue(()=>sessions.sourceList(),sessions,security,protocols.artwork,anilist);
