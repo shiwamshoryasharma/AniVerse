@@ -1,11 +1,11 @@
 {
-  "version": "3.0.4",
-  "pub_date": "2026-11-21T11:40:16.1142785+00:00",
-  "notes": "# AniVerse2 3.0.4 Preview for Windows x64\n\nThis playback update restores AniList title details in AniVerse2 and opens configured websites in the embedded WebView2 player. It adds source navigation and SUB/DUB selection where the website exposes those options. AniVerse2 keeps the saved source TXT and profile when updating from the earlier preview.\n\nUse Settings → About → Updates in AniVerse2, or run the Windows x64 setup from this release. The installer uses the existing preview identity and retains AniVerse 1 for rollback. Full browser-session migration, account sync, casting parity and automatic AniVerse 1 removal are still in development.",
+  "version": "3.0.5",
+  "pub_date": "2026-11-21T12:56:00.7713356+00:00",
+  "notes": "# AniVerse2 3.0.5 Preview for Windows x64\n\n- Restores Windows playback buffer metrics and fixes a Watch screen crash.\n- Improves series lookup using title aliases, shorter searches, and the website's full results.\n- Adds interface scaling under Settings → Graphics & GPU and fits the startup window to the display.\n- Adds AniVerse Quantum Audio for headphone playback in the built-in local player. A Rust audio processor adds binaural depth and light bass while the existing player controls timing. Websites keep their original audio.\n- Adds video-only mirroring for eligible website players through Chrome. Audio continues in AniVerse2. Physical receiver coverage varies.\n- Accepts eligible encrypted website-session cookies from the AniVerse 2.2.5 bridge. AniVerse 1 stays installed alongside AniVerse2.\n\nExisting AniVerse2 users can update from Settings → About → Updates. The signed Windows x64 setup uses the existing preview identity.",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSGhZRXlkelA5RXE1ODhGNTJsNGNBb0cvK05OVk96NnprZDlxV1lTUVZ6L0NEL1lIYzU4Mng0d1lHcGtJamJJNmlUWnlmZEhKbHk0ek1vbGNtQWI5VGdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjYxMjE2CWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjQteDY0LmV4ZQl2ZXJzaW9uOjMuMC40ClkwZVNGeG1QL0VxbFNxa2FiTkNWcnNXNkY3ZUdZQmZyMlNnOVJURERyL0lib1RSQUwzcGcwdXVuczFlSVV1dzA4bTlFdE5Relkxc2tDTGg5RUtNVEFRPT0K",
-      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.4/AniVerse-Tauri-Setup-3.0.4-x64.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSHZ2N0JiY0tDTUJwMXRGYktxWTZsY20xNTFlZm5BY3JieTZrQ0lWNmlHdjNBR21KV2pBYmQ5S243YkRHWnJRV3JqaVlEVjdaN0hlZmhraFlSeVNWaWdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MjY1NzYwCWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjUteDY0LmV4ZQl2ZXJzaW9uOjMuMC41CkttOEJUbEQ2TllwUUpEK1RJMnRYNS9FVmswSHlpYnk1WHl5V1U2RERHS29PNEc0SGpsaTRxNmNMZ1FEYnYySHhsRjZjM3pwcGlpb21acFZkUEphckJ3PT0K",
+      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.5/AniVerse-Tauri-Setup-3.0.5-x64.exe"
     }
   }
 }
