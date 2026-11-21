@@ -8,13 +8,27 @@
 
 A browser with anime discovery and isolated website sessions. Windows includes a local workspace; Android tablets have a touch interface and offline travel library.
 
-[Windows download](https://github.com/shiwamshoryasharma/AniVerse/releases/latest) · [Android tablet APK](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/android-v0.4.7) · [Getting started](#getting-started) · [Features](#version-221-windows-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
+[AniVerse 1 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/v2.2.5) · [AniVerse 2 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/aniverse2-v3.0.7) · [Android tablet APK](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/android-v0.4.7) · [Getting started](#getting-started) · [Features](#version-221-windows-features) · [Documentation](#documentation) · [Disclaimer](DISCLAIMER.md)
 
-Windows 10 / 11 · Android 15+ tablets · React · Kotlin / Electron · GPL-3.0-or-later
+Windows 10 / 11 · Android 15+ tablets · React · Electron / Tauri / Kotlin · GPL-3.0-or-later
 
 </div>
 
 ![AniVerse home](docs/screenshots/home.webp)
+
+## AniVerse 1 and AniVerse 2 for Windows
+
+AniVerse 1 is the original Electron edition. AniVerse 2 uses Tauri, Rust and WebView2, with a separate signed Windows update channel. Both bring the sources you configure and your personal collection into one desktop app.
+
+| | AniVerse 1 | AniVerse 2 |
+| --- | --- | --- |
+| Install | [AniVerse 1 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/v2.2.5) | [AniVerse 2 for Windows](https://github.com/shiwamshoryasharma/AniVerse/releases/tag/aniverse2-v3.0.7) |
+| Interface | Classic, Studio and Cinema, with visual presets | Five responsive layouts, distinct dark themes and independent colour controls with live preview |
+| Website discovery | Isolated source sessions and learned navigation | Origin-scoped Rust learning reuses verified page structure and caches recent SUB/DUB availability |
+| Playback | The site's player and supported local media | The site's player, supported local media and optional Quantum Audio on compatible players |
+| Updates | Signed Electron channel and optional migration from 2.2.5 | Signed Tauri channel under **Settings → About → Updates** |
+
+To move from AniVerse 1, open **Settings → About → Updates → Update AniVerse to AniVerse2** in version 2.2.5. The migration copies supported profile data, including saved sources and history, and keeps your AniVerse 1 installation available.
 
 ## User-selected sources and content
 
