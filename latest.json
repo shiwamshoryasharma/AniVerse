@@ -1,11 +1,11 @@
 {
-  "version": "3.0.6",
-  "pub_date": "2026-11-21T15:38:00.2799018+00:00",
-  "notes": "# AniVerse2 3.0.6 for Windows x64\n\n- Adds AniVerse Quantum Audio to compatible website players. Open the waveform control in Watch to enable the effect. Supported players keep the effect active when switching between SUB and DUB, and sites that block audio processing keep their original audio.\n- Fixes player-only mode so a late-loading website player fills the viewing area and the source header, episode list and chat stay out of view. Show Site restores the full page.\n\nExisting AniVerse2 installations can use Settings → About → Updates. This signed Windows x64 installer keeps the existing installation and updater identity.",
+  "version": "3.0.7",
+  "pub_date": "2026-11-21T16:41:12.7591369+00:00",
+  "notes": "# AniVerse2 3.0.7 for Windows x64\n\n- Adds Dock and Atlas, bringing the layout picker to five options, and expands the dark theme collection.\n- Adds ten colour swatches, custom colours, and individual controls for the header, navigation, sidebar, pages, cards, buttons, icons, and floating menus.\n- Restyles the title preview and header search. The search field suggests unwatched anime based on recent watch history and genres. Typed results still include watched titles and label completed series.\n- Reuses verified source layouts and recent SUB/DUB observations in Rust, with a fresh lookup when a saved pattern stops fitting.\n- Adds a filterable session report under **Settings → Privacy & blocking**.\n- Adds an AniVerse2-branded Windows setup with a skippable MP4 intro for manual installs.\n- Enables AniList and MyAnimeList sign-in using the existing AniVerse client configuration. Restores MyAnimeList token refresh for migrated profiles and reports sync errors per provider.\n\nExisting AniVerse2 installs can update from **Settings → About → Updates**.",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.6/AniVerse-Tauri-Setup-3.0.6-x64.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSG0reVJUOWU5SFU0c1dNak9QYllOeEQ2VXNjNnZiWHJqR1dzRnNFWEhGV2dCenorMkd4YzcrNWtWd0RDU0E5MXFUWDloN2xnenZnWUEzTUkwNTZQK2c4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1Mjc1NDgwCWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjYteDY0LmV4ZQl2ZXJzaW9uOjMuMC42CmphQWJSemJqVjlCV1NsK3R4VlFMenRtVVJrNXlDWERnanU3c2p6bjlDSFBmNjdOYndOWTk4QlIyK292VEt2UU5sVWVpSmE2UjRDak9JTmhMTEFrNUJ3PT0K"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSHFCcml3U2VSejJVSWNrT3NhU3lXbUdyOFVDZnF6ZkpER0R4QVpYUnJZWHBsT2NZSStyVmlXYUZkYmVQbFk2Qy9lSGpJdS91ZFkreVlvem1zZFk2NkFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1Mjc5MjcyCWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjcteDY0LmV4ZQl2ZXJzaW9uOjMuMC43ClNHNU9HbjZsRkVndHYzQUdUMXVpMmd4bDFyOUxUdzByUC9IS2NXNjdjZzVsbU51MDlPaVk4NERodGZoNDlRNGlTbitGamp6ZzhwUWJzY1k4ZlByOUR3PT0K",
+      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.7/AniVerse-Tauri-Setup-3.0.7-x64.exe"
     }
   }
 }
