@@ -14,6 +14,8 @@ class QuantumAudioProcessor extends AudioWorkletProcessor {
     this.input = new Float32Array(this.dsp.memory.buffer, this.dsp.qa_input_ptr(), 8 * this.block);
     this.output = new Float32Array(this.dsp.memory.buffer, this.dsp.qa_output_ptr(), 2 * this.block);
     this.port.onmessage = ({ data }) => { if (data === 'reset') this.dsp.qa_reset(); };
+    this.report = processorOptions.report === true;
+    this.samples = this.reported = 0;
     this.port.postMessage('ready');
   }
 
@@ -42,6 +44,13 @@ class QuantumAudioProcessor extends AudioWorkletProcessor {
       for (let index = offset; index < offset + size; index++) {
         target[0][index] = source[0][index];
         target[1][index] = (source[1] ?? source[0])[index];
+      }
+    }
+    if (this.report) {
+      this.samples += frames;
+      if (this.samples - this.reported >= sampleRate / 20) {
+        this.reported = this.samples;
+        this.port.postMessage(this.samples);
       }
     }
     return true;

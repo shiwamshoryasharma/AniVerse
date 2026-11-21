@@ -6,6 +6,7 @@ mod legacy_session;
 mod native;
 mod navigation;
 mod private_views;
+mod quantum;
 mod session_data;
 pub(crate) mod upscale;
 
@@ -70,6 +71,8 @@ struct Session {
     atomic: Arc<GuestState>,
     world: Mutex<Option<(u64, i64)>>,
     active_episode: Mutex<Option<(i64, usize)>>,
+    quantum: Mutex<Option<(u64, bool)>>,
+    audio_frame: tokio::sync::Mutex<Option<native::AudioFrameWorld>>,
     command: tokio::sync::Mutex<()>,
     focus: AtomicBool,
     lease: Option<private_views::Lease>,
@@ -151,6 +154,7 @@ pub(crate) fn handles(method: &str) -> bool {
             | "site.choose"
             | "site.focus"
             | "player.upscale"
+            | "player.quantum"
             | "player.capturePrepare"
             | "player.captureStop"
             | "player.probe"
@@ -366,21 +370,27 @@ impl Service {
         if method == "site.openEpisode" {
             let job = session.job.fetch_add(1, Ordering::AcqRel) + 1;
             let _guard = session.command.lock().await;
+            quantum::stop(&session).await;
             return navigation::open(owner, root, &session, &input, job).await;
         }
         let _guard = session.command.lock().await;
         let result = match method {
             "site.options" => navigation::options(&session, None).await?.0,
             "site.episodes" => navigation::episodes(owner, &session).await,
-            "site.choose" => navigation::choose(owner, &session, &input).await?,
+            "site.choose" => {
+                quantum::stop(&session).await;
+                navigation::choose(owner, &session, &input).await?
+            }
             "site.focus" => {
                 let on = input["on"].as_bool().ok_or_else(invalid)?;
                 if !on {
+                    quantum::stop(&session).await;
                     capture::revoke_mirror(&session);
                 }
                 json!({"focused": navigation::focus(&session, on).await?})
             }
             "player.upscale" => upscale::apply(&session, &input["options"]).await?,
+            "player.quantum" => quantum::request(&session, &input).await?,
             "player.capturePrepare" => capture::prepare(self, owner, &session).await?,
             "player.probe" => navigation::probe(&session).await,
             "player.control" => json!(navigation::control(&session, &input).await?),
@@ -562,6 +572,8 @@ impl Service {
             atomic: state,
             world: Mutex::new(None),
             active_episode: Mutex::new(None),
+            quantum: Mutex::new(None),
+            audio_frame: tokio::sync::Mutex::new(None),
             command: tokio::sync::Mutex::new(()),
             focus: AtomicBool::new(false),
             lease,

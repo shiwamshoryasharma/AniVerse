@@ -57,3 +57,6 @@
 }
 .quantum-audio-menu label { display: grid; gap: 5px; min-width: 0; }
 .player:has(.quantum-audio-control [aria-expanded='true']) .player-controls { opacity: 1; pointer-events: auto; }
+
+.site-quantum-audio, .site-quantum-settings { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.site-quantum-settings [role='slider'] { min-width: 78px; }

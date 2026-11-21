@@ -48,8 +48,8 @@ const ARM: &str = r#"(focused => {
         !video.checkVisibility({checkVisibilityCSS:true, checkOpacity:true})) return false;
     if (!focused) return true;
     const player = video.closest('[data-aniverse-player]');
-    const sheet = document.getElementById('aniverse-source-focus')?.sheet;
-    if (!video.hasAttribute('data-aniverse-media') || !player || !sheet || sheet.disabled) return false;
+    const sheet = globalThis.__avSiteFocusSheet;
+    if (!video.hasAttribute('data-aniverse-media') || !player || !sheet || sheet.disabled || !document.adoptedStyleSheets.includes(sheet)) return false;
     const fills = (element) => {
       const rect = element.getBoundingClientRect();
       return innerWidth >= 240 && innerHeight >= 135 && Math.abs(rect.left) < 2 &&

@@ -9,6 +9,7 @@ import path from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright-core';
 import {verifyGuestMirror} from './fixtures/aniverse2-capture-mirror.mjs';
+import {createSiteFocusFixture} from './fixtures/aniverse2-site-focus.mjs';
 
 const cache = path.resolve('test/cache/aniverse2');
 const run = await mkdtemp(path.join(cache, 'rendered-player-'));
@@ -16,6 +17,7 @@ const profile = path.join(run, 'profile');
 const clips = Object.fromEntries(await Promise.all(['sub', 'dub'].map(async key =>
   [key, await readFile(path.join(cache, 'player-media-fixtures', key + '.mp4'))])));
 const transfers = [];
+const focusFixture = process.env.ANIVERSE2_CHECK_SITE_FOCUS === '1' ? createSiteFocusFixture() : null;
 const checkSession = process.env.ANIVERSE2_CHECK_SOURCE_SESSION === '1';
 const checkPrivate = process.env.ANIVERSE2_CHECK_TITLE_LEASE === '1';
 const checkIncognito = process.env.ANIVERSE2_CHECK_INCOGNITO === '1';
@@ -47,6 +49,7 @@ for (const button of buttons) button.addEventListener('click', () => {
 </script>`;
 function serve(req, res) {
   const [route] = (req.url ?? '').split('?');
+  if (focusFixture?.serve(req,res,route)) return;
   if (checkUpscale && route === '/upscale-fixture-status') {
     const fields = new URL(req.url,'http://fixture.test').searchParams;
     upscaleStates.push(Object.fromEntries(fields));
@@ -486,6 +489,10 @@ try {
     await rpc('site.surface',{action:'detach',webContentsId:regular.webContentsId});
     await assert.rejects(rpc('site.surface',{action:'attach',sourceId:source.id,partition:scoped.partition,bounds}));
     report.checks.incognitoHistoryCookiesAndRevoke=true;
+  }
+  if (focusFixture) {
+    await focusFixture.verify(rpc,poll,source,bounds);
+    report.checks.strictCspLatePlayerFocusAndRelease = true;
   }
   report.passed = true;
 } catch (error) {

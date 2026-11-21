@@ -245,8 +245,11 @@ async fn find_title(
             let _ = key_enter(session).await;
             hits = poll(session, &heading, alive, 2200).await;
         }
-        if hits.is_none() && alive()
-            && page(session, json!({"op":"viewAll"})).await.is_ok_and(|result| result["clicked"] == true)
+        if hits.is_none()
+            && alive()
+            && page(session, json!({"op":"viewAll"}))
+                .await
+                .is_ok_and(|result| result["clicked"] == true)
         {
             hits = poll(session, &heading, alive, 3000).await;
         }
@@ -575,15 +578,20 @@ fn season(titles: &[&str]) -> u64 {
     let marker = MARKER.get_or_init(|| {
         Regex::new(r"(?i)(?:\bseason\s*(\d{1,2}|[ivx]{1,4})\b|\b(\d{1,2})(?:st|nd|rd|th)\s+season\b|\bs(\d{1,2})(?:\s*e\d{1,4})?\b|(?:第\s*)?(\d{1,2})\s*期)").unwrap()
     });
-    let roman = ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
-        "xi", "xii", "xiii", "xiv", "xv", "xvi", "xvii", "xviii", "xix", "xx"];
+    let roman = [
+        "", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii", "xiii",
+        "xiv", "xv", "xvi", "xvii", "xviii", "xix", "xx",
+    ];
     titles
         .iter()
         .flat_map(|title| marker.captures_iter(title))
         .filter_map(|hit| {
             let number = hit.iter().skip(1).flatten().next()?.as_str();
             number.parse::<u64>().ok().or_else(|| {
-                roman.iter().position(|value| value.eq_ignore_ascii_case(number)).map(|n| n as u64)
+                roman
+                    .iter()
+                    .position(|value| value.eq_ignore_ascii_case(number))
+                    .map(|n| n as u64)
             })
         })
         .filter(|number| *number > 0)
@@ -593,9 +601,18 @@ fn season(titles: &[&str]) -> u64 {
 
 fn search_queries(titles: &[&str]) -> Vec<String> {
     let mut result: Vec<String> = Vec::new();
-    let head = titles.first().map(|title| {
-        title.split([':', '–', '—']).next().unwrap_or(title).split(" - ").next().unwrap_or(title)
-    }).filter(|title| title.chars().count() >= 4);
+    let head = titles
+        .first()
+        .map(|title| {
+            title
+                .split([':', '–', '—'])
+                .next()
+                .unwrap_or(title)
+                .split(" - ")
+                .next()
+                .unwrap_or(title)
+        })
+        .filter(|title| title.chars().count() >= 4);
     for title in titles.iter().copied().take(5).chain(head) {
         let query = title
             .chars()
@@ -610,7 +627,11 @@ fn search_queries(titles: &[&str]) -> Vec<String> {
             })
             .collect::<String>();
         let query = query.split_whitespace().collect::<Vec<_>>().join(" ");
-        if query.chars().count() >= 3 && !result.iter().any(|value| value.eq_ignore_ascii_case(&query)) {
+        if query.chars().count() >= 3
+            && !result
+                .iter()
+                .any(|value| value.eq_ignore_ascii_case(&query))
+        {
             result.push(query);
         }
     }
@@ -655,7 +676,8 @@ pub(super) async fn options(
     choice: Option<(&str, &str)>,
 ) -> Result<(Value, bool), RpcError> {
     let script = r#"(() => {
-      const sheet = document.getElementById('aniverse-source-focus')?.sheet;
+      const sheet = globalThis.__avSiteFocusSheet;
+      const wasDisabled = sheet?.disabled;
       if (sheet) sheet.disabled = true;
       try {
         const list = globalThis.__avSiteAudio(globalThis.__avSitePage({op:'siteOptions'}));
@@ -668,7 +690,7 @@ pub(super) async fn options(
           document.querySelector('[data-aniverse-pick="' + desired.pick + '"]');
         if (element) { element.scrollIntoView({ block: 'center' }); element.click(); }
         return { list, clicked: !!element };
-      } finally { if (sheet) sheet.disabled = false; }
+      } finally { if (sheet) sheet.disabled = wasDisabled; }
     })()"#.replace("CHOICE", &json!(choice).to_string());
 
     let result = native::evaluate(session, script).await?;
@@ -728,10 +750,8 @@ pub(super) async fn choose(
             }
         }
     }
-    let focused = session.focus.load(Ordering::Relaxed);
-    if focused {
-        let _ = focus(session, true).await;
-    }
+    let focused =
+        session.focus.load(Ordering::Relaxed) && focus(session, true).await.unwrap_or(false);
     let episode = session
         .active_episode
         .lock()
@@ -819,23 +839,27 @@ fn insert_audio(cards: &mut Value, episode: usize, controls: &Value) {
 
 pub(super) async fn focus(session: &Session, on: bool) -> Result<bool, RpcError> {
     session.focus.store(on, Ordering::Relaxed);
-    let action = if on {
-        json!({"op":"markPlayer","keep":true})
-    } else {
-        json!({"op":"releasePlayer"})
-    };
     let css = json!(CSS);
     let script = format!(
         r#"(() => {{
-        const old = document.getElementById('aniverse-source-focus');
-        if (old) old.remove();
-        const result = globalThis.__avSitePage({action});
-        if (!{on} || !result?.found) return false;
-        const style = document.createElement('style');
-        style.id = 'aniverse-source-focus';
-        style.textContent = {css};
-        document.documentElement.appendChild(style);
-        return true;
+        const prior = globalThis.__avSiteFocusSheet;
+        if (!{on}) {{
+            globalThis.__avSitePage({{op:"releasePlayer"}});
+            if (prior) document.adoptedStyleSheets = document.adoptedStyleSheets.filter(sheet => sheet !== prior);
+            delete globalThis.__avSiteFocusSheet;
+            return false;
+        }}
+        // Install before marking, including when the player's DOM has not hydrated yet.
+        const sheet = prior ?? new CSSStyleSheet();
+        if (!prior) sheet.replaceSync({css});
+        if (!document.adoptedStyleSheets.includes(sheet)) document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+        globalThis.__avSiteFocusSheet = sheet;
+        const result = globalThis.__avSitePage({{op:"markPlayer",keep:true}});
+        const player = document.querySelector('[data-aniverse-player]');
+        if (!result?.found || !player) return false;
+        const box = player.getBoundingClientRect();
+        return Math.abs(box.x) <= 2 && Math.abs(box.y) <= 2 &&
+            Math.abs(box.width - innerWidth) <= 2 && Math.abs(box.height - innerHeight) <= 2;
     }})()"#
     );
     native::evaluate(session, script)

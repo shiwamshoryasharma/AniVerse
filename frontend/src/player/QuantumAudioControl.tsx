@@ -2,17 +2,7 @@ import { AudioLines } from 'lucide-react';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Range } from '../components/controls';
 import { isAniVerse2 } from '../lib/bridge';
-import { canUseQuantumAudio, openQuantumAudio } from './quantumAudio';
-
-const intensityKey = 'aniverse2.quantum-intensity';
-
-function initialIntensity() {
-  try {
-    const stored = localStorage.getItem(intensityKey);
-    if (stored !== null && /^\d{1,3}$/.test(stored)) return Math.min(100, Number(stored));
-  } catch { /* Preferences are optional. */ }
-  return 50;
-}
+import { canUseQuantumAudio, initialQuantumIntensity, openQuantumAudio, saveQuantumIntensity } from './quantumAudio';
 
 export function QuantumAudioUnavailable() {
   if (!isAniVerse2) return null;
@@ -28,7 +18,7 @@ export function QuantumAudioControl({ video, url }: { video: RefObject<HTMLVideo
   const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
-  const [intensity, setIntensity] = useState(initialIntensity);
+  const [intensity, setIntensity] = useState(initialQuantumIntensity);
   const supported = isAniVerse2 && canUseQuantumAudio(url);
   useEffect(() => () => {
     generation.current++;
@@ -75,7 +65,7 @@ export function QuantumAudioControl({ video, url }: { video: RefObject<HTMLVideo
         <label>Intensity <Range ariaLabel="Quantum Audio intensity" value={intensity} min={0} max={100} step={1}
           onChange={value => {
             setIntensity(value);
-            try { localStorage.setItem(intensityKey, String(value)); } catch { /* Optional preference. */ }
+            saveQuantumIntensity(value);
           }} /></label>}
     </div>}
   </div>;

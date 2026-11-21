@@ -373,29 +373,47 @@ pub(super) async fn devtools(
     method: &'static str,
     params: Value,
 ) -> Result<Value, RpcError> {
+    devtools_for(view, None, method, params).await
+}
+
+async fn devtools_for(
+    view: &Webview,
+    session: Option<String>,
+    method: &'static str,
+    params: Value,
+) -> Result<Value, RpcError> {
     let (send, recv) = oneshot::channel();
     view.with_webview(move |platform| {
         let result = unsafe {
             platform.controller().CoreWebView2().and_then(|core| {
-                core.CallDevToolsProtocolMethod(
-                    &HSTRING::from(method),
-                    &HSTRING::from(params.to_string()),
-                    &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(
-                        move |status, reply| {
-                            let result = status
-                                .map_err(|_| failure("The source page changed."))
-                                .and_then(|_| {
-                                    if reply.len() > EVAL_LIMIT {
-                                        return Err(failure("Source page result is too large."));
-                                    }
-                                    serde_json::from_str(&reply)
-                                        .map_err(|_| failure("Could not inspect the source page."))
-                                });
-                            let _ = send.send(result);
-                            Ok(())
-                        },
-                    )),
-                )
+                let method = HSTRING::from(method);
+                let params = HSTRING::from(params.to_string());
+                let callback = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(
+                    move |status, reply| {
+                        let result = status
+                            .map_err(|_| failure("The source page changed."))
+                            .and_then(|_| {
+                                if reply.len() > EVAL_LIMIT {
+                                    return Err(failure("Source page result is too large."));
+                                }
+                                serde_json::from_str(&reply)
+                                    .map_err(|_| failure("Could not inspect the source page."))
+                            });
+                        let _ = send.send(result);
+                        Ok(())
+                    },
+                ));
+                if let Some(id) = session {
+                    core.cast::<ICoreWebView2_11>()?
+                        .CallDevToolsProtocolMethodForSession(
+                            &HSTRING::from(id),
+                            &method,
+                            &params,
+                            &callback,
+                        )
+                } else {
+                    core.CallDevToolsProtocolMethod(&method, &params, &callback)
+                }
             })
         };
         let _ = result;
@@ -427,6 +445,20 @@ async fn evaluate_script(
     expression: String,
     user_gesture: bool,
 ) -> Result<Value, RpcError> {
+    let context = site_world(session).await?;
+    let result = devtools(&session.view, "Runtime.evaluate", json!({
+        "expression": expression, "contextId": context, "returnByValue": true, "userGesture": user_gesture,
+    })).await?;
+    if !result["exceptionDetails"].is_null() || result["result"].is_null() {
+        if let Ok(mut stored) = session.world.lock() {
+            *stored = None;
+        }
+        return Err(failure("The source page changed."));
+    }
+    Ok(result["result"]["value"].clone())
+}
+
+async fn site_world(session: &Session) -> Result<i64, RpcError> {
     let generation = session.page_generation.load(Ordering::Relaxed);
     let cached = session.world.lock().ok().and_then(|entry| *entry);
     let context = if let Some((_, context)) = cached.filter(|(seen, _)| *seen == generation) {
@@ -457,14 +489,242 @@ async fn evaluate_script(
         }
         context
     };
-    let result = devtools(&session.view, "Runtime.evaluate", json!({
-        "expression": expression, "contextId": context, "returnByValue": true, "userGesture": user_gesture,
-    })).await?;
-    if !result["exceptionDetails"].is_null() || result["result"].is_null() {
-        if let Ok(mut stored) = session.world.lock() {
-            *stored = None;
-        }
+    Ok(context)
+}
+
+pub(super) struct AudioFrameWorld {
+    generation: u64,
+    frame: String,
+    target: Option<String>,
+    context: i64,
+}
+
+fn audio_generation(session: &Session, generation: u64) -> bool {
+    !session.closed.load(Ordering::Acquire)
+        && session.page_generation.load(Ordering::Acquire) == generation
+}
+
+async fn audio_eval(
+    session: &Session,
+    generation: u64,
+    target: Option<String>,
+    context: i64,
+    expression: String,
+    user_gesture: bool,
+) -> Result<Value, RpcError> {
+    if !audio_generation(session, generation) {
         return Err(failure("The source page changed."));
     }
+    let result = devtools_for(
+        &session.view,
+        target,
+        "Runtime.evaluate",
+        json!({
+            "expression": expression, "contextId": context, "returnByValue": true,
+            "awaitPromise": true, "userGesture": user_gesture, "allowUnsafeEvalBlockedByCSP": false,
+        }),
+    )
+    .await?;
+    if !audio_generation(session, generation)
+        || !result["exceptionDetails"].is_null()
+        || result["result"].is_null()
+    {
+        return Err(failure(
+            "Could not run Quantum Audio in the selected player.",
+        ));
+    }
     Ok(result["result"]["value"].clone())
+}
+
+pub(super) async fn evaluate_audio_top(
+    session: &Session,
+    generation: u64,
+    expression: String,
+    user_gesture: bool,
+) -> Result<Value, RpcError> {
+    let context = site_world(session).await?;
+    audio_eval(session, generation, None, context, expression, user_gesture).await
+}
+
+async fn marked_audio_frame(session: &Session, generation: u64) -> Result<String, RpcError> {
+    let context = site_world(session).await?;
+    let selected = devtools(&session.view, "Runtime.evaluate", json!({
+        "expression": "(() => { const items=document.querySelectorAll('[data-aniverse-media]'); const item=items[0]; return items.length===1 && item instanceof HTMLIFrameElement && item.isConnected && item.contentWindow ? item : null; })()",
+        "contextId": context, "allowUnsafeEvalBlockedByCSP": false,
+    })).await?;
+    let object = selected["result"]["objectId"]
+        .as_str()
+        .filter(|id| id.len() <= 160)
+        .ok_or_else(|| failure("There is no selected source player frame."))?;
+    let result = devtools(
+        &session.view,
+        "DOM.describeNode",
+        json!({"objectId":object,"depth":0}),
+    )
+    .await;
+    let _ = devtools(
+        &session.view,
+        "Runtime.releaseObject",
+        json!({"objectId":object}),
+    )
+    .await;
+    let description = result?;
+    let node = &description["node"];
+    let marked = node["attributes"].as_array().is_some_and(|attrs| {
+        attrs
+            .iter()
+            .step_by(2)
+            .any(|name| name == "data-aniverse-media")
+    });
+    if !audio_generation(session, generation) || !marked || node["nodeName"] != "IFRAME" {
+        return Err(failure("The selected source player frame changed."));
+    }
+    protocol_id(&node["frameId"])
+        .ok_or_else(|| failure("Could not identify the selected source frame."))
+}
+
+fn protocol_id(value: &Value) -> Option<String> {
+    value
+        .as_str()
+        .filter(|id| {
+            !id.is_empty()
+                && id.len() <= 128
+                && id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
+        .map(str::to_owned)
+}
+
+async fn audio_world(
+    session: &Session,
+    generation: u64,
+    frame: String,
+) -> Result<AudioFrameWorld, RpcError> {
+    let options = json!({"frameId":frame,"worldName":"aniverse-quantum-audio"});
+    let method = "Page.createIsolatedWorld";
+    if let Some(context) = devtools(&session.view, method, options.clone())
+        .await
+        .ok()
+        .and_then(|world| world["executionContextId"].as_i64())
+    {
+        return Ok(AudioFrameWorld {
+            generation,
+            frame,
+            target: None,
+            context,
+        });
+    }
+    let targets = devtools(&session.view, "Target.getTargets", json!({})).await?;
+    if !audio_generation(session, generation)
+        || !targets["targetInfos"].as_array().is_some_and(|items| {
+            items
+                .iter()
+                .any(|target| target["targetId"] == frame && target["type"] == "iframe")
+        })
+    {
+        return Err(failure("The selected source player frame is unavailable."));
+    }
+    let attached = devtools(
+        &session.view,
+        "Target.attachToTarget",
+        json!({"targetId":frame,"flatten":true}),
+    )
+    .await?;
+    let target = protocol_id(&attached["sessionId"])
+        .ok_or_else(|| failure("Could not attach to the selected source player frame."))?;
+    match devtools_for(&session.view, Some(target.clone()), method, options)
+        .await
+        .ok()
+        .and_then(|world| world["executionContextId"].as_i64())
+    {
+        Some(context) => Ok(AudioFrameWorld {
+            generation,
+            frame,
+            target: Some(target),
+            context,
+        }),
+        None => {
+            detach_audio_target(session, Some(target)).await;
+            Err(failure(
+                "Could not isolate the selected source player frame.",
+            ))
+        }
+    }
+}
+
+async fn detach_audio_target(session: &Session, target: Option<String>) {
+    if let Some(target) = target {
+        let _ = devtools(
+            &session.view,
+            "Target.detachFromTarget",
+            json!({"sessionId":target}),
+        )
+        .await;
+    }
+}
+
+pub(super) async fn evaluate_audio_frame(
+    session: &Session,
+    generation: u64,
+    expression: String,
+    user_gesture: bool,
+) -> Result<Value, RpcError> {
+    let mut pinned = session.audio_frame.lock().await;
+    let frame = marked_audio_frame(session, generation).await?;
+    if pinned
+        .as_ref()
+        .is_some_and(|world| world.generation != generation)
+    {
+        let target = pinned.take().and_then(|world| world.target);
+        detach_audio_target(session, target).await;
+    }
+    if let Some(world) = pinned.as_ref() {
+        if world.frame != frame {
+            return Err(failure("The selected source player frame changed."));
+        }
+    } else {
+        *pinned = Some(audio_world(session, generation, frame).await?);
+    }
+    let world = pinned
+        .as_ref()
+        .ok_or_else(|| failure("The source player frame is unavailable."))?;
+    audio_eval(
+        session,
+        generation,
+        world.target.clone(),
+        world.context,
+        expression,
+        user_gesture,
+    )
+    .await
+}
+
+// Teardown uses only the previously approved context, even after its DOM mark is removed.
+pub(super) async fn release_audio_frame(
+    session: &Session,
+    generation: u64,
+    expression: String,
+) -> Result<Value, RpcError> {
+    let mut pinned = session.audio_frame.lock().await;
+    let Some(world) = pinned
+        .as_ref()
+        .filter(|world| world.generation == generation)
+    else {
+        return Ok(Value::Null);
+    };
+    let result = audio_eval(
+        session,
+        generation,
+        world.target.clone(),
+        world.context,
+        expression,
+        false,
+    )
+    .await;
+    if result.is_ok() || !audio_generation(session, generation) {
+        let target = pinned.take().and_then(|world| world.target);
+        detach_audio_target(session, target).await;
+    }
+    result
 }

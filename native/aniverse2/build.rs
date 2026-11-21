@@ -18,6 +18,8 @@ fn main() {
         "site-page.js",
         "site-focus.css",
         "site-upscale.js",
+        "quantum-worklet.js",
+        "quantum-audio.wasm",
         "site-audio.js",
         "site-catalogue.js",
         "chrome-player.js",

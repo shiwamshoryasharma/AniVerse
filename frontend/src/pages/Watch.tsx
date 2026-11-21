@@ -43,7 +43,7 @@ import { useToast } from '../lib/useToast';
 import { useCollectionPlayback } from '../lib/collectionPlayback';
 import { interfaceStyle } from '../../../app/shared/interface';
 import { EpisodeCast } from '../components/EpisodeCast';
-import { QuantumAudioUnavailable } from '../player/QuantumAudioControl';
+import { SiteQuantumAudioControl } from '../player/SiteQuantumAudioControl';
 import { DownloadMp4Button } from '../components/DownloadMp4Button';
 import { SiteAnime4K } from '../components/Anime4K';
 import { VideoPlayer, type PlayerControls } from '../player/VideoPlayer';
@@ -513,7 +513,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
       <div className="watch-heading"><div><span className="eyebrow">NOW WATCHING</span><h1 className="ellipsis">{title}<span>Episode {episode}</span></h1></div>
         <PrivateTitleButton mediaId={media.id}/>
         {offeredDownload && <DownloadMp4Button url={offeredDownload} sourceId={sourceId ?? undefined} />}
-        {isSite && <QuantumAudioUnavailable />}
+        {isSite && <SiteQuantumAudioControl id={webContentsId} ready={!!navKey && navReady === navKey && !siteBusy && !choosing} />}
         <EpisodeCast key={media.id + ':' + episode + ':' + (sourceId ?? localId)} native={player} webContentsId={webContentsId} title={`${title} · Episode ${episode}`} />
       </div>
       <div className={cx('watch', theater && 'theater')}>

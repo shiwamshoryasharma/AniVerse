@@ -100,3 +100,16 @@ export async function openQuantumAudio(video: HTMLVideoElement, expectedUrl: str
     throw error;
   }
 }
+const intensityKey = 'aniverse2.quantum-intensity';
+
+export function initialQuantumIntensity() {
+  try {
+    const stored = localStorage.getItem(intensityKey);
+    if (stored !== null && /^\d{1,3}$/.test(stored)) return Math.min(100, Number(stored));
+  } catch { /* Preferences are optional. */ }
+  return 50;
+}
+
+export function saveQuantumIntensity(value: number) {
+  try { localStorage.setItem(intensityKey, String(value)); } catch { /* Optional preference. */ }
+}
