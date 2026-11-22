@@ -1,3 +1,4 @@
+import type { EpisodeDownloadContext } from '../app/shared/download-filename';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { EVENT_CHANNEL, RPC_CHANNEL, type AniverseBridge, type EventName, type RpcError } from '../app/shared/rpc';
 
@@ -33,8 +34,8 @@ const bridge: AniverseBridge = {
   platform: process.platform,
   ...(process.platform === 'win32' ? {
     modernWindows: true,
-    saveMp4: (url: string, sourceId?: string) => bridge.invoke('player.saveMp4', { url, sourceId }),
-    saveSiteMp4: (webContentsId: number) => bridge.invoke('player.saveSiteMp4', { webContentsId }),
+    saveMp4: (url: string, sourceId?: string, filenameContext?: EpisodeDownloadContext) => bridge.invoke('player.saveMp4', { url, sourceId, filenameContext }),
+    saveSiteMp4: (webContentsId: number, filenameContext?: EpisodeDownloadContext) => bridge.invoke('player.saveSiteMp4', { webContentsId, filenameContext }),
     onMp4Progress: (listener: (progress: import('../app/shared/rpc').EventContract['mp4.progress']) => void) => bridge.on('mp4.progress', listener),
     hoverSourceAudio: (sourceId: string, mediaId: number) => bridge.invoke('sources.hoverAudio', { sourceId, mediaId }),
   } : {}),

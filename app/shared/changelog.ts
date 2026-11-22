@@ -5,6 +5,12 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.3.5',date:'2026-11-22',title:'Save the same episode reliably',
+   summary:'Save As stays bound to the playing video while its audio and subtitle requests continue.',
+   items:[
+    {kind:'fixed',icon:'fix',title:'Keep normal playback valid during Save As',description:'New audio playlists, captions and small duration corrections no longer look like a different video. A real episode, frame or playback-source change still cancels the download.'},
+    {kind:'improved',icon:'layout',title:'Organize saved episodes',description:'Watch downloads suggest a Windows-safe series name followed by the season and episode, such as Series Name - S02E07.mp4. Valid Unicode names are preserved.'},
+   ]},
   {version:'2.3.4',date:'2026-11-22',title:'Keep downloads tied to the selected playlist',
    summary:'A protected or invalid playing playlist stops the download instead of selecting older captured media.',
    items:[

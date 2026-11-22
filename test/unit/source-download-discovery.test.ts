@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
+import { createContext, runInContext, runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 const script = readFileSync('electron/sourceMp4Guest.js', 'utf8');
@@ -9,7 +10,7 @@ function inspect(resources: string[], overrides: Record<string, unknown> = {}) {
     readyState: 4, videoWidth: 640, duration: 120, currentSrc: 'blob:https://player.example.test/playing',
     mediaKeys: null, srcObject: null, textTracks: [track],
     querySelectorAll: () => [{ track, src: 'https://captions.example.test/en.vtt?opaque=1' }], ...overrides };
-  return runInNewContext(script, { URL, HTMLIFrameElement: class {},
+  return runInNewContext(script, { URL, crypto: { randomUUID }, HTMLIFrameElement: class {},
     document: { querySelector: () => null, querySelectorAll: () => [video] },
     performance: { getEntriesByType: () => resources.map(name => ({ name, initiatorType: 'xmlhttprequest' })) } });
 }
@@ -39,4 +40,17 @@ describe('owned playing HLS discovery', () => {
     expect(result.observations).toHaveLength(32);
     expect(result.observations.some((url: string) => url.includes('password'))).toBe(false);
   });
+});
+
+it('separates stable video identity from changing audio playlist observations',()=>{
+  let video={clientWidth:640,clientHeight:360,checkVisibility:()=>true,readyState:4,videoWidth:320,duration:120,currentSrc:'blob:https://source.example.test/selected',mediaKeys:null,srcObject:null,querySelectorAll:()=>[]};
+  const resources=['https://media.example.test/master.m3u8','https://media.example.test/video.m3u8','https://media.example.test/1.webp'];
+  const context=createContext({document:{querySelector:()=>null,querySelectorAll:()=>[video]},HTMLIFrameElement:class{},URL,crypto:{randomUUID},performance:{getEntriesByType:()=>resources.map(name=>({name,initiatorType:'fetch'}))}});
+  const selected=runInContext(script,context);
+  resources.push('https://media.example.test/audio.m3u8','https://media.example.test/2.png');
+  const advanced=runInContext(script,context);
+  expect(advanced.identity).toBe(selected.identity);
+  expect(advanced.url).not.toBe(selected.url);
+  video={...video};
+  expect(runInContext(script,context).identity).not.toBe(selected.identity);
 });

@@ -12,6 +12,8 @@ const format = z.enum(['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA', 'MUSI
 const listStatus = z.enum(['CURRENT', 'PLANNING', 'COMPLETED', 'PAUSED', 'DROPPED', 'REPEATING']);
 const provider = z.enum(['anilist', 'mal']);
 const sourceId = z.string().regex(/^[a-z0-9-]{1,80}$/);
+const filenameContext = z.object({ title: z.string().trim().min(1).max(300),
+  season: z.number().int().min(1).max(99).optional(), episode: z.number().int().min(1).max(10_000) }).strict().optional();
 
 const snapshot = z.object({
   id,
@@ -235,8 +237,8 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'player.openFile': none,
   'player.mp4Folder': z.object({ action: z.enum(['get', 'choose', 'reset']) }),
 
-  'player.saveMp4': z.object({ url, sourceId: text(200).min(1).optional() }).strict(),
-  'player.saveSiteMp4': z.object({ webContentsId: id }).strict(),
+  'player.saveMp4': z.object({ url, sourceId: text(200).min(1).optional(), filenameContext }).strict(),
+  'player.saveSiteMp4': z.object({ webContentsId: id, filenameContext }).strict(),
   'player.quantum': z.object({ webContentsId: id, action: z.enum(['enable', 'off', 'level', 'status']), intensity: z.number().finite().min(0).max(1).optional() }).strict(),
   'sources.hoverAudio': z.object({ sourceId: text(200).min(1), mediaId: id }).strict(),
 

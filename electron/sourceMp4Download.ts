@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline';
 import { link, mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { episodeDownloadFilename, type EpisodeDownloadContext } from '../app/shared/download-filename';
 import { downloadableVideoPath } from '../app/shared/downloadFormats';
 import type { RustPolicy } from '../app/core/security/rustPolicy';
 import { SourceNetworkGuard } from './sourceNetwork';
@@ -12,7 +13,7 @@ import { readOwnedPlayer } from './ownedPlayerFrame';
 
 declare const __ANIVERSE_DOWNLOAD_SCRIPT__: string;
 type SubtitleChoice = { url?: string; language?: string; label?: string };
-type MediaCandidate = { media: string; url: string; observed?: string; playlists?: string[]; observations?: string[]; subtitle?: SubtitleChoice; expectedDuration?: number };
+type MediaCandidate = { identity?: string; media: string; url: string; observed?: string; playlists?: string[]; observations?: string[]; subtitle?: SubtitleChoice; expectedDuration?: number };
 type Mp4Progress = { received: number; total: number | null };
 
 const maxBytes = 8 * 1024 ** 3;
@@ -79,37 +80,41 @@ export class SourceMp4Download {
   }
 
 
-  saveDirect(owner: WebContents, url: string, source?: string): Promise<boolean> {
+  saveDirect(owner: WebContents, url: string, source?: string, filenameContext?: EpisodeDownloadContext): Promise<boolean> {
     const target = this.publicUrl(url, downloadableVideoPath);
     const scoped = !source || (target && (new URL(source).origin === target.origin ||
       this.policy.decide({ context: 'mp4', url: target.href, source }).allowed));
     if (!target || !scoped) {
       throw Error('Choose a supported public HTTPS video to save as MP4.');
     }
-    return this.saveMedia(owner, { media: target.href, url: target.href }, () => !owner.isDestroyed());
+    return this.saveMedia(owner, { media: target.href, url: target.href }, () => !owner.isDestroyed(), undefined, filenameContext);
   }
 
-  async saveActive(guest: WebContents, current: () => boolean): Promise<boolean> {
+  async saveActive(guest: WebContents, current: () => boolean, filenameContext?: EpisodeDownloadContext): Promise<boolean> {
     if (!current()) return false;
     const selected = await this.inspect(guest);
     if (!selected || !current()) throw Error('Play a supported video before saving. Some sources restrict downloads.');
     return this.saveMedia(guest, selected, async () => {
       if (!current()) return false;
       const refreshed = await this.inspect(guest);
-      return !!refreshed && refreshed.media === selected.media && refreshed.url === selected.url && refreshed.expectedDuration === selected.expectedDuration && current();
-    }, current);
+      return !!refreshed && refreshed.identity === selected.identity && refreshed.media === selected.media &&
+        (selected.expectedDuration === undefined ? refreshed.expectedDuration === undefined :
+          typeof refreshed.expectedDuration === 'number' && Math.abs(refreshed.expectedDuration - selected.expectedDuration) <= 0.5) && current();
+    }, current, filenameContext);
   }
 
   private async inspect(guest: WebContents): Promise<MediaCandidate | null> {
     const observed = await readOwnedPlayer(guest, __ANIVERSE_DOWNLOAD_SCRIPT__);
     if (!observed || typeof observed !== 'object') return null;
     const raw = observed as Record<string, unknown>;
+    if (typeof raw.identity !== 'string' || !/^[a-zA-Z0-9:-]{1,96}$/.test(raw.identity)) return null;
+    const identity = raw.identity;
     if (typeof raw.media !== 'string' || raw.media.length > 4096) return null;
     const url = this.publicUrl(raw.url, downloadableVideoPath, true);
     if (!url) return null;
     if (!raw.media.startsWith('blob:')) {
       if (this.publicUrl(raw.media, downloadableVideoPath, true)?.href !== url.href) return null;
-      if (!/\.m3u8$/i.test(url.pathname)) return { media: raw.media, url: url.href };
+      if (!/\.m3u8$/i.test(url.pathname)) return { identity, media: raw.media, url: url.href };
     }
     const values = (value: unknown, limit: number, extension?: RegExp) => {
       if (!Array.isArray(value) || value.length > limit) return [];
@@ -128,7 +133,7 @@ export class SourceMp4Download {
       const label = typeof track.label === 'string' && track.label.length <= 128 ? track.label : undefined;
       subtitle = { ...(trackUrl ? { url: trackUrl } : {}), ...(language ? { language } : {}), ...(label ? { label } : {}) };
     }
-    return { media: raw.media, url: url.href, playlists, observations, ...(expectedDuration !== undefined ? { expectedDuration } : {}), ...(subtitle ? { subtitle } : {}) };
+    return { identity, media: raw.media, url: url.href, playlists, observations, ...(expectedDuration !== undefined ? { expectedDuration } : {}), ...(subtitle ? { subtitle } : {}) };
   }
 
   private publicUrl(value: unknown, extension?: RegExp, owned = false): URL | null {
@@ -149,6 +154,7 @@ export class SourceMp4Download {
     selected: MediaCandidate,
     validate: () => boolean | Promise<boolean>,
     current: () => boolean = () => !owner.isDestroyed(),
+    filenameContext?: EpisodeDownloadContext,
   ): Promise<boolean> {
     if (process.platform !== 'win32') throw Error('MP4 saving is available on Windows.');
     if (this.busy) throw Error('An MP4 download is already in progress.');
@@ -156,11 +162,13 @@ export class SourceMp4Download {
     if (!parent) return false;
     this.busy = true;
     try {
+      const episodeName = filenameContext === undefined ? undefined : episodeDownloadFilename(filenameContext);
+      if (episodeName === null) throw Error('The episode filename context is invalid.');
       const basename = path.posix.basename(new URL(selected.url).pathname).slice(0, 96)
         .replace(/[^a-zA-Z0-9 ._-]/g, '_').replace(/\.[a-z0-9]+$/i, '') || 'episode';
       const { canceled, filePath } = await dialog.showSaveDialog(parent, {
         title: 'Save MP4 as',
-        defaultPath: path.join(this.folder() ?? app.getPath('downloads'), 'AniVerse - ' + basename + '.mp4'),
+        defaultPath: path.join(this.folder() ?? app.getPath('downloads'), episodeName ?? 'AniVerse - ' + basename + '.mp4'),
         filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
       });
       if (canceled || !filePath || owner.isDestroyed()) return false;

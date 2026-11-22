@@ -1,3 +1,4 @@
+import type { EpisodeDownloadContext } from './download-filename';
 // Typed contract between the renderer and the main process.
 // Each entry is [input, output]. The main process validates every input
 // with the zod schema registered for the same method (electron/ipc.ts).
@@ -152,8 +153,8 @@ export interface RpcContract {
   'player.openFile': [void, { url: string; name: string } | null];
   'player.mp4Folder': [{ action: 'get' | 'choose' | 'reset' }, string | null];
 
-  'player.saveMp4': [{ url: string; sourceId?: string }, boolean];
-  'player.saveSiteMp4': [{ webContentsId: number }, boolean];
+  'player.saveMp4': [{ url: string; sourceId?: string; filenameContext?: EpisodeDownloadContext }, boolean];
+  'player.saveSiteMp4': [{ webContentsId: number; filenameContext?: EpisodeDownloadContext }, boolean];
   'player.quantum': [{ webContentsId: number; action: 'enable' | 'off' | 'level' | 'status'; intensity?: number }, { state: 'off' | 'waiting' | 'active' | 'unavailable' }];
   'sources.hoverAudio': [{ sourceId: string; mediaId: number }, { sub: number | null; dub: number | null; total: number | null } | null];
 
@@ -229,8 +230,8 @@ export interface AniverseBridge {
   readonly modernWindows?: boolean;
   readonly edition?: 'aniverse2';
   readonly releasePlayerFile?: (url: string) => Promise<void>;
-  readonly saveMp4?: (url: string, sourceId?: string) => Promise<boolean>;
-  readonly saveSiteMp4?: (webContentsId: number) => Promise<boolean>;
+  readonly saveMp4?: (url: string, sourceId?: string, filenameContext?: EpisodeDownloadContext) => Promise<boolean>;
+  readonly saveSiteMp4?: (webContentsId: number, filenameContext?: EpisodeDownloadContext) => Promise<boolean>;
   readonly onMp4Progress?: (listener: (progress: { received: number; total: number | null }) => void) => () => void;
   readonly hoverSourceAudio?: (sourceId: string, mediaId: number) => Promise<{ sub: number | null; dub: number | null; total: number | null } | null>;
   readonly windowControls?: {

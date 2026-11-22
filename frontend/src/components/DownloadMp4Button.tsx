@@ -1,13 +1,15 @@
+import type { EpisodeDownloadContext } from '../../../app/shared/download-filename';
 import { isDownloadableVideoUrl } from '../../../app/shared/downloadFormats';
 import { Download, LoaderCircle } from 'lucide-react';
 import { useId, useState } from 'react';
 import { errorText, modernWindows } from '../lib/bridge';
 import { useToast } from '../lib/useToast';
 
-export function DownloadMp4Button({ url, sourceId, webContentsId, unavailableReason }: {
+export function DownloadMp4Button({ url, sourceId, webContentsId, filenameContext, unavailableReason }: {
   url?: string | null;
   sourceId?: string;
   webContentsId?: number;
+  filenameContext?: EpisodeDownloadContext;
   unavailableReason?: string;
 }) {
   const toast = useToast();
@@ -28,8 +30,8 @@ export function DownloadMp4Button({ url, sourceId, webContentsId, unavailableRea
       setPercent(total ? Math.min(100, Math.floor(received * 100 / total)) : null);
     });
     try {
-      const saved = direct && url ? await bridge?.saveMp4?.(url, sourceId)
-        : webContentsId === undefined ? false : await bridge?.saveSiteMp4?.(webContentsId);
+      const saved = active && webContentsId !== undefined ? await bridge?.saveSiteMp4?.(webContentsId, filenameContext)
+        : direct && url ? await bridge?.saveMp4?.(url, sourceId, filenameContext) : false;
       if (saved) toast.push({ level: 'success', message: 'MP4 saved.' });
     } catch (error) {
       toast.push({ level: 'error', message: errorText(error) });

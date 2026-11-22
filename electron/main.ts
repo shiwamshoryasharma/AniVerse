@@ -606,20 +606,20 @@ async function bootstrap() {
       return mp4DownloadFolder();
     },
 
-    'player.saveMp4': ({ url, sourceId }) => {
+    'player.saveMp4': ({ url, sourceId, filenameContext }) => {
       if (process.platform !== 'win32' || store.isIncognito() || !mainWindow) return false;
       const source = sourceId ? registry.get(sourceId) : null;
       if (source && (!source.enabled || source.kind !== 'web')) return false;
-      return mp4.saveDirect(mainWindow.webContents, url, source?.url);
+      return mp4.saveDirect(mainWindow.webContents, url, source?.url, filenameContext);
     },
-    'player.saveSiteMp4': ({ webContentsId }) => {
+    'player.saveSiteMp4': ({ webContentsId, filenameContext }) => {
       if (process.platform !== 'win32' || store.isIncognito()) return false;
       const guest = guestFor(webContentsId);
       const source = sessions.sourceForSession(guest.session);
       if (!source?.enabled || source.kind !== 'web' || !source.partition.startsWith('persist:')) return false;
       const current = navigator.currentEpisodeScope(guest, source.id);
       if (!current) return false;
-      return mp4.saveActive(guest, () => current() && sessions.sourceForSession(guest.session)?.url === source.url);
+      return mp4.saveActive(guest, () => current() && sessions.sourceForSession(guest.session)?.url === source.url, filenameContext);
     },
     'player.quantum': (input) => process.platform === 'win32'
       ? quantum.request(guestFor(input.webContentsId), input) : { state: 'off' },

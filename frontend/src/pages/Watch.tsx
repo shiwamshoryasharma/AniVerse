@@ -24,7 +24,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { usePrivacy, useWatchSources } from '../lib/privacy';
 import { PrivateTitleButton } from '../components/Privacy';
 import { SourceFallback, shouldFallback } from '../../../app/shared/sourceFallback';
-import { episodeFromUrl } from '../../../app/core/sources/text';
+import { episodeFromUrl, seriesMarkers } from '../../../app/core/sources/text';
 import { playbackHealth, type PlaybackHealth, type PlaybackSample } from '../../../app/shared/playback';
 import type { MediaDetails, ProbeResult, SiteOptions, SourceInfo, Stream, SiteEpisodeCard } from '../../../app/shared/types';
 import { CommentsPanel } from '../components/CommentsPanel';
@@ -93,6 +93,13 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const qc = useQueryClient();
   const snapshot = useMemo(() => snapshotOf(media, lang), [media, lang]);
   const title = titleOf(media, lang);
+  const filenameContext = useMemo(() => ({
+    title,
+    season: [title, ...Object.values(media.title), ...media.synonyms]
+      .filter((value): value is string => typeof value === 'string')
+      .map(value => seriesMarkers(value).season).find(value => value !== null) ?? 1,
+    episode,
+  }), [title, media.title, media.synonyms, episode]);
   const layout = useInterfaceLayout(settings.appearance.style);
   const episodeShelf = layout === 'cinema' || layout === 'dock';
 
@@ -529,7 +536,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
             {!nativePlayer && (isSite
               ? <SiteQuantumAudioControl id={webContentsId} ready={!!navKey && navReady === navKey && !siteBusy && !choosing} />
               : <QuantumAudioUnavailable labelled />)}
-            <DownloadMp4Button url={offeredDownload} sourceId={sourceId ?? undefined}
+            <DownloadMp4Button url={offeredDownload} sourceId={sourceId ?? undefined} filenameContext={filenameContext}
               webContentsId={isSite && !privatePlayback && navReady === navKey && !siteBusy && !choosing ? webContentsId ?? undefined : undefined}
               unavailableReason={isSite && !privatePlayback ? 'Open an episode to check its download options.' : 'MP4 saving is unavailable for this player.'} />
           </div>}

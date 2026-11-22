@@ -8,6 +8,10 @@
   if (videos.length !== 1 || (mark && videos[0] !== mark)) return null;
   const video = videos[0], media = video.currentSrc;
   if (!media || media.length > 4096 || video.mediaKeys || video.srcObject) return null;
+  // This state lives only in the native-owned isolated world.
+  const state = globalThis.__avDownloadNodes ??= { document: crypto.randomUUID(), nodes: new WeakMap(), next: 0 };
+  if (!state.nodes.has(video)) state.nodes.set(video, ++state.next);
+  const identity = state.document + ':' + state.nodes.get(video);
   const plain = name => {
     try {
       const url = new URL(name);
@@ -18,7 +22,7 @@
   const direct = plain(media);
   const supported = direct && /\.(?:mp4|m3u8|ts|m2ts|mts|webm|mkv|mov|m4v|avi|mpg|mpeg|ogv|flv|wmv|3gp)$/i.test(new URL(direct).pathname);
   if (!media.startsWith('blob:') && !supported) return null;
-  if (supported && !/\.m3u8$/i.test(new URL(direct).pathname)) return { media, url:direct };
+  if (supported && !/\.m3u8$/i.test(new URL(direct).pathname)) return { identity, media, url:direct };
 
   // These are observations, not an ordered media list. Native code must find an
   // exact member of a finite playlist before transferring any media fragments.
@@ -42,5 +46,5 @@
     subtitle = { ...(url ? { url } : {}), ...(selected.language ? { language:selected.language.slice(0,64) } : {}),
       ...(selected.label ? { label:selected.label.slice(0,128) } : {}) };
   }
-  return { media, url:playlists[0], playlists, observations, expectedDuration:video.duration, ...(subtitle ? { subtitle } : {}) };
+  return { identity, media, url:playlists[0], playlists, observations, expectedDuration:video.duration, ...(subtitle ? { subtitle } : {}) };
 })()

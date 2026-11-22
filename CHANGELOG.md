@@ -2,6 +2,13 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.3.5 Windows (Electron) · 2026-11-22
+
+- Keep the selected video valid while the native Save As dialog is open, despite rolling audio/subtitle observations or small metadata corrections.
+- Continue rejecting real episode, document, frame, video-element, source or privacy changes.
+- Suggest series/season/episode filenames from Watch metadata, preserving valid Unicode and sanitizing Windows filename characters.
+
+[Windows release notes](docs/releases/2.3.5.md)
 ## 2.3.4 Windows (Electron) · 2026-11-22
 
 - Stop a download when the selected HLS playlist or a declared variant is protected or invalid, rather than falling back to older captured media.
