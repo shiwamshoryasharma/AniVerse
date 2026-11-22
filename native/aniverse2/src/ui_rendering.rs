@@ -2,7 +2,7 @@ use crate::{profile, RpcError};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     io::Write,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -11,6 +11,8 @@ use tauri::{Manager, Webview};
 
 const ARGUMENTS: &str = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
 const STABLE_SWITCH: &str = "--disable-gpu-compositing";
+// additional_browser_args replaces Wry 0.57.3 defaults, including its enabled autoplay policy.
+const WRY_ARGUMENTS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
 
 #[derive(Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -31,41 +33,23 @@ pub(crate) struct Service {
     preferred: Mutex<Mode>,
 }
 
-pub(crate) struct BootArguments(Option<Option<OsString>>);
-
-impl Drop for BootArguments {
-    fn drop(&mut self) {
-        match self.0.take() {
-            Some(Some(original)) => std::env::set_var(ARGUMENTS, original),
-            Some(None) => std::env::remove_var(ARGUMENTS),
-            None => {}
-        }
-    }
-}
-
 impl Service {
-    pub(crate) fn startup(root: &Path) -> (Self, BootArguments) {
+    pub(crate) fn startup(root: &Path) -> (Self, String) {
         let file = root.join("graphics.json");
         let preferred = profile::text_file(&file, 4096)
             .ok()
             .flatten()
             .and_then(|value| serde_json::from_str::<Preference>(&value).ok())
-            .map_or(Mode::Accelerated, |preference| preference.mode);
+            .map_or(Mode::Stable, |preference| preference.mode);
         let existing = std::env::var_os(ARGUMENTS);
-        let (active, append) = browser_arguments(preferred, existing.as_deref());
-        let original = append.as_ref().map(|_| existing);
-        if let Some(arguments) = append {
-            // Before constructing the first WebView2 controller. Keep Wry's own
-            // arguments and any host-provided options intact. RPC input is an enum.
-            std::env::set_var(ARGUMENTS, arguments);
-        }
+        let (active, arguments) = browser_arguments(preferred, existing.as_deref());
         (
             Self {
                 file,
                 active,
                 preferred: Mutex::new(preferred),
             },
-            BootArguments(original),
+            arguments,
         )
     }
 
@@ -113,24 +97,26 @@ fn snapshot(active: Mode, preferred: Mode) -> Value {
     json!({"active":active,"preferred":preferred,"restartRequired":active!=preferred})
 }
 
-fn browser_arguments(preferred: Mode, inherited: Option<&OsStr>) -> (Mode, Option<OsString>) {
-    let current = inherited.unwrap_or_default();
+fn browser_arguments(preferred: Mode, inherited: Option<&OsStr>) -> (Mode, String) {
+    let current = inherited.unwrap_or_default().to_string_lossy();
     let forced = current
-        .to_string_lossy()
         .split_ascii_whitespace()
         .map(|token| token.trim_matches('"'))
         .any(|token| token.split('=').next() == Some(STABLE_SWITCH));
-    if forced || preferred == Mode::Accelerated {
-        return (if forced { Mode::Stable } else { preferred }, None);
+    let active = if forced { Mode::Stable } else { preferred };
+    // Pass shell options explicitly to its environment instead of changing the
+    // process environment temporarily. Other source WebViews keep their own policy.
+    let mut arguments = WRY_ARGUMENTS.to_owned();
+    if !current.is_empty() {
+        arguments.push(' ');
+        arguments.push_str(&current);
     }
-    let mut arguments = current.to_owned();
-    if !arguments.is_empty() {
-        arguments.push(" ");
+    if active == Mode::Stable && !forced {
+        arguments.push(' ');
+        arguments.push_str(STABLE_SWITCH);
     }
-    arguments.push(STABLE_SWITCH);
-    (Mode::Stable, Some(arguments))
+    (active, arguments)
 }
-
 pub(crate) async fn request(window: &Webview, input: Value) -> Result<Value, RpcError> {
     let app = window.app_handle().clone();
     tauri::async_runtime::spawn_blocking(move || app.state::<Service>().set(input))

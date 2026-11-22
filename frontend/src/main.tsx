@@ -10,6 +10,8 @@ import './styles/casting.css';
 import './styles/midnight.css';
 import './styles/desktop-display.css';
 import './styles/aniverse2-theme-surfaces.css';
+import './styles/aniverse2-appearance.css';
+import './lib/aniverse2Appearance';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

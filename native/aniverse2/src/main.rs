@@ -459,6 +459,7 @@ fn start_window(
         .initialization_script(startup)
         .data_directory(dunce::simplified(&webview).to_owned())
         .browser_extensions_enabled(false)
+        .additional_browser_args(&rendering_arguments)
         .on_navigation(move |url| app_origin(url) || (checking && url.as_str() == "about:blank"))
         .on_page_load(|window, payload| {
             // On Windows ContentLoading runs for a new document, so
@@ -469,7 +470,6 @@ fn start_window(
         })
         .on_new_window(|_, _| NewWindowResponse::Deny)
         .build()?;
-    drop(rendering_arguments);
     if checking {
         migration_boot::start(&window, webview)?;
     } else {
