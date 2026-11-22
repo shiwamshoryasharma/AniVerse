@@ -2,6 +2,13 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.3.4 Windows (Electron) · 2026-11-22
+
+- Stop a download when the selected HLS playlist or a declared variant is protected or invalid, rather than falling back to older captured media.
+- Keep direct player playlists bound to their own video renditions when unrelated requests remain in the page history.
+
+[Windows release notes](docs/releases/2.3.4.md)
+
 ## 2.3.3 Windows (Electron) · 2026-11-22
 
 - Save supported clear on-demand HLS videos whose media segments use misleading image filenames or MIME types.

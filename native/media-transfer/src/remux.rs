@@ -27,6 +27,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct Selection {
+    pub direct_primary: bool,
     pub scope: Option<OwnedScope>,
     pub expected_duration: Option<f64>,
     pub playlists: Vec<Url>,
@@ -153,66 +154,27 @@ fn matches_duration(playlist: &Playlist, expected: Option<f64>) -> bool {
         (duration - expected).abs() <= (expected * 0.02).max(3.0)
     })
 }
-async fn select_tracks(
+fn select_video(
     url: &Url,
     selection: &Selection,
-) -> Result<
-    (
-        Loaded,
-        Option<Loaded>,
-        Option<SubtitleChoice>,
-        Option<OwnedScope>,
-    ),
-    RpcError,
-> {
-    let mut scope = selection.scope.clone();
-    let mut loaded = Vec::new();
-    let mut last_error = None;
-    let mut candidates = vec![url.clone()];
-    for candidate in &selection.playlists {
-        if !candidates.contains(candidate) {
-            candidates.push(candidate.clone());
+    loaded: &[Loaded],
+    masters: &[(Vec<hls::Variant>, Vec<hls::Rendition>)],
+    rendition_urls: &[&Url],
+) -> Option<usize> {
+    let primary = loaded.iter().find(|entry| entry.url == *url)?;
+    let belongs_to_primary = |candidate: &Url| match &primary.playlist {
+        Playlist::Media { .. } => candidate == url,
+        Playlist::Variant(child) => candidate == child,
+        Playlist::Master { variants, .. } => {
+            variants.iter().any(|variant| variant.url == *candidate)
         }
-    }
-    for candidate in candidates {
-        if let Err(error) = load(&candidate, &mut loaded, &mut scope).await {
-            last_error = Some(error);
-        }
-    }
-    let masters: Vec<_> = loaded
-        .iter()
-        .filter_map(|entry| match &entry.playlist {
-            Playlist::Master {
-                variants,
-                renditions,
-            } => Some((variants.clone(), renditions.clone())),
-            Playlist::Variant(uri) => Some((
-                vec![hls::Variant {
-                    url: uri.clone(),
-                    audio: None,
-                    subtitles: None,
-                }],
-                vec![],
-            )),
-            _ => None,
-        })
-        .collect();
-    for (variants, _) in &masters {
-        for variant in variants {
-            if let Err(error) = load(&variant.url, &mut loaded, &mut scope).await {
-                last_error = Some(error);
-            }
-        }
-    }
-    let rendition_urls: Vec<_> = masters
-        .iter()
-        .flat_map(|(_, renditions)| renditions.iter().map(|entry| &entry.url))
-        .collect();
-    let selected = loaded
+    };
+    loaded
         .iter()
         .enumerate()
         .filter(|(_, entry)| {
-            !rendition_urls.contains(&&entry.url)
+            (!selection.direct_primary || belongs_to_primary(&entry.url))
+                && !rendition_urls.contains(&&entry.url)
                 && matches_duration(&entry.playlist, selection.expected_duration)
         })
         .filter_map(|(index, entry)| {
@@ -240,7 +202,66 @@ async fn select_tracks(
                         None
                     }
                 })
-        });
+        })
+}
+async fn select_tracks(
+    url: &Url,
+    selection: &Selection,
+) -> Result<
+    (
+        Loaded,
+        Option<Loaded>,
+        Option<SubtitleChoice>,
+        Option<OwnedScope>,
+    ),
+    RpcError,
+> {
+    let mut scope = selection.scope.clone();
+    let mut loaded = Vec::new();
+    let mut last_error = None;
+    // A failed selected root cannot be replaced by a stale observed clear root.
+    load(url, &mut loaded, &mut scope).await?;
+    let mut candidates = Vec::new();
+    if !selection.direct_primary {
+        for candidate in &selection.playlists {
+            if candidate != url && !candidates.contains(candidate) {
+                candidates.push(candidate.clone());
+            }
+        }
+    }
+    for candidate in candidates {
+        if let Err(error) = load(&candidate, &mut loaded, &mut scope).await {
+            last_error = Some(error);
+        }
+    }
+    let masters: Vec<_> = loaded
+        .iter()
+        .filter_map(|entry| match &entry.playlist {
+            Playlist::Master {
+                variants,
+                renditions,
+            } => Some((variants.clone(), renditions.clone())),
+            Playlist::Variant(uri) => Some((
+                vec![hls::Variant {
+                    url: uri.clone(),
+                    audio: None,
+                    subtitles: None,
+                }],
+                vec![],
+            )),
+            _ => None,
+        })
+        .collect();
+    for (variants, _) in &masters {
+        for variant in variants {
+            load(&variant.url, &mut loaded, &mut scope).await?;
+        }
+    }
+    let rendition_urls: Vec<_> = masters
+        .iter()
+        .flat_map(|(_, renditions)| renditions.iter().map(|entry| &entry.url))
+        .collect();
+    let selected = select_video(url, selection, &loaded, &masters, &rendition_urls);
     let Some(selected) = selected else {
         return Err(last_error
             .unwrap_or_else(|| invalid("The HLS playlists do not match the media being played.")));

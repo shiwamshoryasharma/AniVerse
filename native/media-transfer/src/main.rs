@@ -35,6 +35,7 @@ impl RpcError {
 #[serde(deny_unknown_fields)]
 struct Request {
     url: String,
+    media: Option<String>,
     observed: Option<String>,
     destination: PathBuf,
     #[serde(default)]
@@ -55,7 +56,13 @@ struct SubtitleRequest {
 }
 fn selection(request: &Request) -> Result<remux::Selection, RpcError> {
     let bad = || invalid("The active media selection is invalid.");
-    if request.playlists.len() > 8 || request.observations.len() > 32 {
+    if request
+        .media
+        .as_ref()
+        .is_some_and(|media| media.len() > 4096)
+        || request.playlists.len() > 8
+        || request.observations.len() > 32
+    {
         return Err(bad());
     }
     if request
@@ -138,6 +145,10 @@ fn selection(request: &Request) -> Result<remux::Selection, RpcError> {
         None
     };
     Ok(remux::Selection {
+        direct_primary: request.media.as_deref().is_some_and(|media| {
+            Url::parse(media)
+                .is_ok_and(|media| Url::parse(&request.url).is_ok_and(|url| media == url))
+        }),
         scope,
         expected_duration: request.expected_duration,
         playlists,

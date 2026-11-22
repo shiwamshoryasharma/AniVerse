@@ -86,6 +86,7 @@ it('cancels its owned worker when the playing episode scope changes during a tra
     transfer(owner: unknown, request: unknown, current: () => boolean): Promise<boolean>;
   };
   const result = service.transfer(owner, { media: url, url, destination: output }, () => current);
+  expect(JSON.parse(String(stdin.read())).media).toBe(url);
   current = false;
   await vi.advanceTimersByTimeAsync(251);
   await expect(result).resolves.toBe(false);

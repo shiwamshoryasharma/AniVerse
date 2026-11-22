@@ -104,3 +104,43 @@ fn owned_scope_authorizes_only_captured_roots_and_validated_manifest_children() 
     assert!(!scope.contains(&unrelated));
     assert!(hls::parse_owned(&root, "#EXTM3U\n#EXTINF:1,\nhttps://other.example.test/part.png?opaque=two\n#EXT-X-ENDLIST\n").is_err());
 }
+
+#[test]
+fn protected_or_unmatched_direct_primary_cannot_select_a_stale_clear_playlist() {
+    let primary = Url::parse("https://media.example.test/current.m3u8").unwrap();
+    let stale = Url::parse("https://media.example.test/previous.m3u8").unwrap();
+    let segment = Url::parse("https://media.example.test/previous.png").unwrap();
+    let previous = Loaded {
+        url: stale,
+        client: Client::new(),
+        playlist: Playlist::Media {
+            init: None,
+            segments: vec![(6.0, segment.clone())],
+        },
+    };
+    let selection = Selection {
+        direct_primary: true,
+        expected_duration: Some(6.0),
+        observations: vec![segment],
+        ..Selection::default()
+    };
+    assert!(hls::parse(&primary, "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"key\"\n#EXTINF:6,\ncurrent.webp\n#EXT-X-ENDLIST\n").is_err());
+    assert_eq!(
+        select_video(&primary, &selection, &[previous.clone()], &[], &[]),
+        None,
+        "A failed protected primary must not be replaced by a same-duration stale clear root"
+    );
+    let current = Loaded {
+        url: primary.clone(),
+        client: Client::new(),
+        playlist: Playlist::Media {
+            init: None,
+            segments: vec![(6.0, primary.join("current.webp").unwrap())],
+        },
+    };
+    assert_eq!(
+        select_video(&primary, &selection, &[current, previous], &[], &[]),
+        None,
+        "Observations from a different direct root must not win over the selected primary"
+    );
+}

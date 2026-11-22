@@ -5,6 +5,12 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.3.4',date:'2026-11-22',title:'Keep downloads tied to the selected playlist',
+   summary:'A protected or invalid playing playlist stops the download instead of selecting older captured media.',
+   items:[
+    {kind:'fixed',icon:'shield',title:'Stop after a protected or invalid playlist',description:'The selected HLS root and its declared video variants must validate before media is downloaded. An older clear playlist cannot replace a failed selected playlist.'},
+    {kind:'fixed',icon:'fix',title:'Preserve the direct player source',description:'A direct playing playlist can use only its own video rendition tree, even when the page still contains observations from earlier playback.'},
+   ]},
   {version:'2.3.3',date:'2026-11-22',title:'Save the playing video, audio and captions',
    summary:'More supported clear on-demand HLS downloads, with the playing rendition and accessible WebVTT subtitles.',
    items:[

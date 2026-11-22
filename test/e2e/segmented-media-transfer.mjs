@@ -48,6 +48,7 @@ for(const ext of ['png','webp']){
 files.set('/image/html',Buffer.from('<html><body>Login required</body></html>'));
 files.set('/image/html.m3u8',Buffer.from('#EXTM3U\n#EXTINF:1,\nhtml\n#EXT-X-ENDLIST\n'));
 files.set('/encrypted.m3u8',Buffer.from('#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="never.key"\n#EXTINF:1,\nnever.ts\n#EXT-X-ENDLIST\n'));
+files.set('/protected-variant-master.m3u8',Buffer.from('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100\nencrypted.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=200\nmixed-ts/episode.m3u8?ticket=fixture\n'));
 files.set('/cross-host.m3u8',Buffer.from('#EXTM3U\n#EXTINF:1,\nhttp://192.168.1.1/never.ts\n#EXT-X-ENDLIST\n'));
 files.set('/missing.m3u8',Buffer.from('#EXTM3U\n#EXTINF:1,\nmissing.png\n#EXT-X-ENDLIST\n'));
 files.set('/empty.vtt',Buffer.from('WEBVTT\n\n'));
@@ -73,6 +74,33 @@ function start(route,destination,selection={}){
 function times(text){return [...text.matchAll(/(?:(\d{2}):)?(\d{2}):(\d{2})\.(\d{3})\s+-->/g)].map(m=>Number(m[1]||0)*3600+Number(m[2])*60+Number(m[3])+Number(m[4])/1000);}
 const report={passed:false,scratch,cases:[]};
 try{
+  const protectedOutput=path.join(scratch,'protected-primary-must-not-fallback.mp4'), protectedStart=requests.length;
+  const protectedPrimary=await start('/encrypted.m3u8',protectedOutput,{expectedDuration:3,
+    playlists:[origin+'/encrypted.m3u8',origin+'/mixed-ts/episode.m3u8?ticket=fixture'],
+    observations:[origin+'/mixed-ts/segment-0.webp?part=fixture']}).done;
+  assert.notEqual(protectedPrimary.code,0,'A protected primary selected a stale clear playlist');
+  assert.match(protectedPrimary.events.at(-1).error,/protected|encrypted/i);
+  await assert.rejects(stat(protectedOutput),{code:'ENOENT'});
+  assert.deepEqual(requests.slice(protectedStart),['/encrypted.m3u8'],'Protected primary failure must stop before stale-root or fragment requests');
+  report.cases.push('protected-primary-does-not-fallback-to-stale-clear');
+  const variantOutput=path.join(scratch,'protected-variant-must-not-fallback.mp4'), variantStart=requests.length;
+  const protectedVariant=await start('/protected-variant-master.m3u8',variantOutput,{expectedDuration:3,
+    playlists:[origin+'/protected-variant-master.m3u8',origin+'/mixed-ts/episode.m3u8?ticket=fixture'],
+    observations:[origin+'/mixed-ts/segment-0.webp?part=fixture']}).done;
+  assert.notEqual(protectedVariant.code,0,'A protected declared variant selected stale clear media');
+  assert.match(protectedVariant.events.at(-1).error,/protected|encrypted/i);
+  await assert.rejects(stat(variantOutput),{code:'ENOENT'});
+  assert.ok(requests.slice(variantStart).every(url=>new URL(url,origin).pathname.endsWith('.m3u8')),'A protected variant must stop before fragment or key transport');
+  report.cases.push('protected-variant-does-not-fallback-to-stale-clear');
+  const directOutput=path.join(scratch,'direct-primary-must-not-select-stale.mp4'), directStart=requests.length;
+  const directPrimary=await start('/mixed-fmp4/episode.m3u8',directOutput,{media:origin+'/mixed-fmp4/episode.m3u8',expectedDuration:3,
+    playlists:[origin+'/mixed-fmp4/episode.m3u8',origin+'/mixed-ts/episode.m3u8?ticket=fixture'],
+    observations:[origin+'/mixed-ts/segment-0.webp?part=fixture']}).done;
+  assert.notEqual(directPrimary.code,0,'A direct current source selected an unrelated captured root');
+  assert.match(directPrimary.events.at(-1).error,/does not match|do not match/i);
+  await assert.rejects(stat(directOutput),{code:'ENOENT'});
+  assert.deepEqual(requests.slice(directStart),['/mixed-fmp4/episode.m3u8']);
+  report.cases.push('direct-primary-cannot-select-unrelated-captured-root');
   for(const kind of ['mixed-ts','mixed-fmp4']){
     const output=path.join(scratch,kind+'.mp4');const route='/'+kind+'/episode.m3u8?ticket=fixture';
     const result=await start(route,output,{expectedDuration:3,playlists:[origin+route],observations:[origin+'/unrelated.json',origin+'/'+kind+'/segment-0.webp?part=fixture']}).done;

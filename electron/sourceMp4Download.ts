@@ -190,7 +190,7 @@ export class SourceMp4Download {
     let completed = false;
     let message = 'The bundled MP4 download helper could not complete the transfer.';
     try {
-      worker.stdin.write(JSON.stringify({ url: request.url, observed: request.observed, playlists: request.playlists, observations: request.observations, subtitle: request.subtitle, expectedDuration: request.expectedDuration, destination: request.destination }) + '\n');
+      worker.stdin.write(JSON.stringify({ media: request.media, url: request.url, observed: request.observed, playlists: request.playlists, observations: request.observations, subtitle: request.subtitle, expectedDuration: request.expectedDuration, destination: request.destination }) + '\n');
       for await (const line of lines) {
         if (line.length > 4096) continue;
         let event: { done?: boolean; error?: string; received?: number; total?: number | null };
