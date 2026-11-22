@@ -1,11 +1,11 @@
 {
-  "version": "3.0.10",
-  "pub_date": "2026-11-21T18:42:48.3300555+00:00",
-  "notes": "# AniVerse2 3.0.10 for Windows x64\n\n- Download MP4 supports compatible clear on-demand HLS streams alongside direct MP4 files. Save As uses your configured folder and combines the existing video and audio tracks without re-encoding. Availability depends on the selected player and source.\n- Home stops animating and releases outgoing spotlight artwork after the visible transition. Carousel rotation pauses when Home is out of view or the window loses focus.\n- Windows startup loads profile data away from the window thread. The app remains responsive when its SQLite profile is temporarily locked.\n- The installer bundles the FFmpeg remuxer. AniVerse2 starts it only for compatible stream downloads.\n\nVerified with Windows WebView2 playback and Save As fixtures, a reproducible SQLite lock, and a controlled Home rendering comparison.",
+  "version": "3.1.0",
+  "pub_date": "2026-11-22T11:08:06.7697977+00:00",
+  "notes": "# AniVerse2 3.1.0 for Windows x64\n\n- Restore the saved desktop palette, layout and custom surface colours on Home at startup. Appearance no longer waits for the Settings page to load.\n- Profiles without a valid saved rendering preference use Stable UI to reduce dependence on the accelerated compositor. Explicitly saved rendering choices are preserved.\n- Pass rendering options directly to the main WebView2 environment, preserving browser defaults, inherited options and browser isolation.\n\nThis release addresses appearance restoration and graphics compatibility. The reported recurring freezes on an Intel PC have not been reproduced on physical Intel hardware; this release does not claim Intel hardware certification.\n\nThe Windows x64 installer keeps the existing AniVerse2 installation identity, signed updater channel and profile data. Electron and Android remain separate release channels.",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSHBNTUNMaUNva0x6TkxkejVMdi9sMThxaExSSDJKd21oZVBkQi9hYnJqejJaZzVoYVIvL3BvcXVOMUIzZElDdDEwUUYzdHIxYnZsS3BHY1Vtek5wVWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1Mjg2NTY4CWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4wLjEwLXg2NC5leGUJdmVyc2lvbjozLjAuMTAKL3FlVFZPdVZwWTJRaFlpZzdNZG5NVFVUWlphakhla0RyTzZ6bnRET2s3OFF0cENDZG1YTjZCbktsZ1Q3a1FzaldyMDRDa2hhRjNMY2xVaXB4aW43QkE9PQo=",
-      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.0.10/AniVerse-Tauri-Setup-3.0.10-x64.exe"
+      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.1.0/AniVerse-Tauri-Setup-3.1.0-x64.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSHBKQVdqdDJPV3ZXNGg1R1l1K0xXNWxweXlrYWxlRVVraVRyd0RrLzRtSGV1aXdUZkw2a0tFVjZSOWhwdGdiUTJPZ0R5UlRIQk9YMjIwcVptalNseHdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MzQ1Njg2CWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4xLjAteDY0LmV4ZQl2ZXJzaW9uOjMuMS4wCmJjUWVUdHV4UGxsZTcxbDVrbFpKSmJuYU9CVUdWZ0JMbVNpb2w3eUNvTFBlbDRzcjJsaDg2Y21MUjZXbkZyVjFkTG5CZTJONzNYN3hoQmdQL3ZoTkNnPT0K"
     }
   }
 }
