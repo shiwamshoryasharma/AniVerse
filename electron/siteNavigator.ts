@@ -20,6 +20,10 @@ const visibleFocus = ':root:not([' + INSPECT_AUDIO + '])';
 const DESKTOP_FOCUS_CSS = FOCUS_CSS.replace(/([^{}]+)\{/g, (_rule, selectors: string) =>
   ':is(' + selectors.trim() + '):where(' + visibleFocus + ', ' + visibleFocus + ' *) {',
 );
+const PENDING_FOCUS_CSS =
+  'html[data-aniverse-player-only]:not([data-aniverse-inspect-audio]):not(:has(body[data-aniverse-chain] [data-aniverse-player]))::after,' +
+  'html[data-aniverse-player-only]:not([data-aniverse-inspect-audio]):has(body :not([data-aniverse-chain]) > [data-aniverse-player])::after' +
+  '{content:"" !important;position:fixed !important;inset:0 !important;display:block !important;background:#000 !important;z-index:2147483647 !important}';
 const EMPTY_OPTIONS: SiteOptions = { types: [], servers: [] };
 
 /** Removes episode markers so pages of the same title compare equal. */
@@ -149,7 +153,8 @@ export class SiteNavigator {
     if (!request.blocked) Object.assign(request, { blocked: true, destination });
     return true;
   }
-  private episodeContexts=new Map<number,{sourceId:string;mediaId:number;slug:string|null;pageKey:string}>();
+  private pageGeneration = new Map<number, number>();
+  private episodeContexts = new Map<number, {sourceId: string; mediaId: number; episode: number; slug: string | null; pageKey: string; url: string; generation: number; job: number}>();
   private focusCss = new Map<number, string>();
   private focusWanted = new Map<number, boolean>();
   private focusGen = new Map<number, number>();
@@ -207,13 +212,23 @@ export class SiteNavigator {
       void wc.insertCSS(SCROLLBAR_CSS).catch(() => undefined);
       if (this.focusWanted.get(wc.id)) setTimeout(() => void this.focus(wc, true, null), 1200);
     };
+    wc.on('did-start-navigation', details => {
+      if (!details.isMainFrame) return;
+      this.pageGeneration.set(wc.id, (this.pageGeneration.get(wc.id) ?? 0) + 1);
+      if (!details.isSameDocument) {
+        this.focusCss.delete(wc.id);
+        this.focusGen.set(wc.id, (this.focusGen.get(wc.id) ?? 0) + 1);
+      }
+    });
     wc.on('dom-ready', restyle);
     wc.on('did-frame-finish-load',(_event,isMainFrame)=>{if(!isMainFrame&&this.focusWanted.get(wc.id))void this.focusChildren(wc,true);});
     wc.on('did-navigate-in-page', (_e, _url, isMainFrame) => {
+      if (isMainFrame) this.pageGeneration.set(wc.id, (this.pageGeneration.get(wc.id) ?? 0) + 1);
       if (isMainFrame && this.focusWanted.get(wc.id)) setTimeout(() => void this.focus(wc, true, null), 1200);
     });
     wc.once('destroyed', () => {
       this.jobs.delete(wc.id);
+      this.pageGeneration.delete(wc.id);
       this.episodeContexts.delete(wc.id);
       this.focusCss.delete(wc.id);
       this.focusWanted.delete(wc.id);
@@ -231,7 +246,7 @@ export class SiteNavigator {
       if(frame===root||frame.detached||/recaptcha|hcaptcha|turnstile|challenges\.cloudflare\.com/i.test(frame.url))continue;
       if(wc.isDestroyed()||this.focusWanted.get(wc.id)!==on)return;
       const code=on
-        ?'(()=>{const result='+pageScript({op:'markPlayer',keep:true})+';if(!result?.found)return;let style=document.getElementById("aniverse-frame-focus");if(!style){style=document.createElement("style");style.id="aniverse-frame-focus";document.documentElement.append(style);}style.textContent='+JSON.stringify(FOCUS_CSS)+';})()'
+        ?'(()=>{const result='+pageScript({op:'markPlayer',keep:true,sticky:true})+';if(!result?.found)return;let style=document.getElementById("aniverse-frame-focus");if(!style){style=document.createElement("style");style.id="aniverse-frame-focus";document.documentElement.append(style);}style.textContent='+JSON.stringify(FOCUS_CSS + PENDING_FOCUS_CSS)+';})()'
         :pageScript({op:'releasePlayer'})+';document.getElementById("aniverse-frame-focus")?.remove();';
       await frame.executeJavaScript(code);
       }catch{/* Sites routinely replace or dispose nested player frames during navigation. */}
@@ -346,7 +361,11 @@ export class SiteNavigator {
         options = await this.applyPreferences(wc, source, alive);
         await readCards();
         if (!alive()) return fail(null, via);
-        this.episodeContexts.set(wc.id,{sourceId:source.id,mediaId:req.mediaId,slug:slugOf(titlePage),pageKey:titleKey(wc.getURL())});
+        const resolvedUrl = wc.getURL();
+        this.episodeContexts.set(wc.id, {
+          sourceId: source.id, mediaId: req.mediaId, episode: N, slug: slugOf(titlePage),
+          pageKey: titleKey(resolvedUrl), url: resolvedUrl, generation: this.pageGeneration.get(wc.id) ?? 0, job: token,
+        });
         if (req.focus ?? true) focused = await this.focus(wc, true, recipe);
         if (alive()) wc.setAudioMuted(false);
         if (focused && alive() && !req.adopt) await this.kickPlayback(wc, alive);
@@ -434,6 +453,17 @@ export class SiteNavigator {
     }
   }
 
+
+  /** Captures the verified owned episode so a queued Save As cannot follow a source change. */
+  currentEpisodeScope(wc: WebContents, sourceId: string): (() => boolean) | null {
+    const context = this.episodeContexts.get(wc.id);
+    if (!context || context.sourceId !== sourceId) return null;
+    const current = () => !wc.isDestroyed() && !wc.isLoadingMainFrame() && !this.store.isPrivate(context.mediaId) &&
+      /^https?:\/\//.test(context.url) && wc.getURL() === context.url &&
+      this.episodeContexts.get(wc.id) === context && this.jobs.get(wc.id) === context.job &&
+      (this.pageGeneration.get(wc.id) ?? 0) === context.generation;
+    return current() ? current : null;
+  }
 
   /** A bounded follow-up read for SPA episode lists that hydrate after cached navigation. */
   async episodeCards(wc:WebContents):Promise<SiteEpisodeCard[]> {
@@ -633,10 +663,22 @@ export class SiteNavigator {
     this.jobs.set(wc.id, job);
     const alive = () => !wc.isDestroyed() && this.jobs.get(wc.id) === job;
     const wasFocused = this.focusWanted.get(wc.id) ?? false;
+    const previousEpisode = this.episodeContexts.get(wc.id);
+    const restoreScope = async () => {
+      if (!previousEpisode || previousEpisode.sourceId !== source.id || !alive()) return;
+      const url = wc.getURL(), generation = this.pageGeneration.get(wc.id) ?? 0;
+      if ((url === previousEpisode.url && generation === previousEpisode.generation) ||
+          (titleKey(url) === previousEpisode.pageKey && (await this.page<{matches: boolean}>(wc, {op:'episodeCheck',episode:previousEpisode.episode}))?.matches)) {
+        if (alive() && wc.getURL() === url && (this.pageGeneration.get(wc.id) ?? 0) === generation) this.episodeContexts.set(wc.id, {...previousEpisode,url,generation,job});
+      }
+    };
     const playback = await this.probe(wc).catch(() => null);
     if (!alive()) return { options: EMPTY_OPTIONS, focused: false };
     const { raw, clicked } = await this.readOptions(wc, { kind, value });
-    if (!clicked) return { options: toSiteOptions(raw), focused: wasFocused && alive() };
+    if (!clicked) {
+      await restoreScope();
+      return { options: toSiteOptions(raw), focused: wasFocused && alive() };
+    }
     await this.settle(wc, alive, 0);
     // Wait for the site's selection marker, including controls that hydrate after a switch.
     const options = await this.poll(async () => {
@@ -660,6 +702,7 @@ export class SiteNavigator {
         break;
       }
     }
+    if (options) await restoreScope();
     return { options: alive() ? await this.options(wc) : EMPTY_OPTIONS, focused: alive() && focused };
   }
 
@@ -712,7 +755,7 @@ export class SiteNavigator {
     const current = () => this.focusGen.get(wc.id) === gen && !wc.isDestroyed();
     this.focusWanted.set(wc.id, on);
     const previous = this.focusCss.get(wc.id);
-    if (previous) {
+    if (!on && previous) {
       await wc.removeInsertedCSS(previous).catch(() => undefined);
       this.focusCss.delete(wc.id);
     }
@@ -727,14 +770,19 @@ export class SiteNavigator {
     } catch {
       // about:blank etc.
     }
+    if (!previous) {
+      const key = await wc.insertCSS(DESKTOP_FOCUS_CSS + PENDING_FOCUS_CSS).catch(() => null);
+      if (!key || !current()) {
+        if (key) await wc.removeInsertedCSS(key).catch(() => undefined);
+        return false;
+      }
+      this.focusCss.set(wc.id, key);
+    }
     const deadline = Date.now() + waitMs;
     while (current() && Date.now() < deadline) {
-      const r = await this.page<{ found: boolean }>(wc, { op: 'markPlayer', selector: recipeSelector(resolved, 'player'), keep: true });
+      const r = await this.page<{ found: boolean }>(wc, { op: 'markPlayer', selector: recipeSelector(resolved, 'player'), keep: true, sticky: true });
       if (!current()) return false;
       if (r?.found) {
-        const key = await wc.insertCSS(DESKTOP_FOCUS_CSS).catch(() => null);
-        if (key && current()) this.focusCss.set(wc.id, key);
-        else if (key) await wc.removeInsertedCSS(key).catch(() => undefined);
         if(current())await this.focusChildren(wc,true);
         return current();
       }

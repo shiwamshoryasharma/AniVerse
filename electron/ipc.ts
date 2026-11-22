@@ -12,6 +12,8 @@ const format = z.enum(['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA', 'MUSI
 const listStatus = z.enum(['CURRENT', 'PLANNING', 'COMPLETED', 'PAUSED', 'DROPPED', 'REPEATING']);
 const provider = z.enum(['anilist', 'mal']);
 const sourceId = z.string().regex(/^[a-z0-9-]{1,80}$/);
+const filenameContext = z.object({ title: z.string().trim().min(1).max(300),
+  season: z.number().int().min(1).max(99).optional(), episode: z.number().int().min(1).max(10_000) }).strict().optional();
 
 const snapshot = z.object({
   id,
@@ -205,6 +207,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   }),
   'library.markWatched': z.object({ media: snapshot, episode: z.number().int().min(1).max(10000), watched: z.boolean() }),
   'library.history': z.object({ limit: z.number().int().min(1).max(200), offset: z.number().int().min(0) }),
+  'library.searchContext': none,
   'library.clearHistory': z.object({ id: id.nullable() }),
   'library.dismissContinue': z.object({ mediaId: id }),
   'library.favourites': none,
@@ -233,6 +236,11 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
 
   'player.openFile': none,
   'player.mp4Folder': z.object({ action: z.enum(['get', 'choose', 'reset']) }),
+
+  'player.saveMp4': z.object({ url, sourceId: text(200).min(1).optional(), filenameContext }).strict(),
+  'player.saveSiteMp4': z.object({ webContentsId: id, filenameContext }).strict(),
+  'player.quantum': z.object({ webContentsId: id, action: z.enum(['enable', 'off', 'level', 'status']), intensity: z.number().finite().min(0).max(1).optional() }).strict(),
+  'sources.hoverAudio': z.object({ sourceId: text(200).min(1), mediaId: id }).strict(),
 
   'cast.mirrorPrepare': z.object({ webContentsId: id, deviceId: text(200).min(1), title: text(300), upscale: z.boolean() }),
   'cast.mirrorChunk': z.object({ ticket: z.uuid(), sequence: z.number().int().nonnegative(), bytes: z.instanceof(Uint8Array).refine((bytes) => bytes.length > 0 && bytes.length <= 2_000_000, 'Invalid capture chunk size') }),
@@ -271,6 +279,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'privacy.title': z.object({mediaId:id,on:z.boolean()}).strict(),
   'privacy.watchSources': z.object({mediaId:id}).strict(),
   'privacy.releaseSources': z.object({leaseId:z.uuid()}).strict(),
+  'app.setGpuPreference': z.object({ preference: z.enum(['system', 'high-performance', 'power-saving']) }).strict(),
   'app.info': none,
   'app.openGraphicsSettings': none,
   'app.setUiRendering': z.object({ mode: z.enum(['stable', 'accelerated']) }).strict(),

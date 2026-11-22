@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 
 /** Injects a Content-Security-Policy; the dev variant allows Vite's HMR client. */
-export function csp(dev: boolean): Plugin {
+export function csp(dev: boolean, allowWasm = false): Plugin {
   const policy = [
     "default-src 'self'",
-    `script-src 'self'${dev ? " 'unsafe-inline'" : ''}`,
+    `script-src 'self'${allowWasm ? " 'wasm-unsafe-eval'" : ''}${dev ? " 'unsafe-inline'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https: media:",
     "font-src 'self' data:",
@@ -30,7 +30,7 @@ export function csp(dev: boolean): Plugin {
 export default defineConfig(({ command }) => ({
   root,
   base: './',
-  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), csp(command === 'serve')],
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), csp(command === 'serve', process.platform === 'win32')],
   build: {
     outDir: fileURLToPath(new URL('../dist/renderer', import.meta.url)),
     emptyOutDir: true,

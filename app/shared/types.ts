@@ -262,6 +262,12 @@ export interface ContinueItem {
   updatedAt: number;
 }
 
+export interface SearchRecommendationContext {
+  recent: number[];
+  watched: number[];
+  completed: number[];
+}
+
 export interface HistoryEntry {
   id: number;
   media: MediaSnapshot;
@@ -457,6 +463,10 @@ export interface ProbeResult {
 export interface PrivacyState { incognito:boolean; privateMediaIds:number[] }
 
 export interface AppInfo {
+  tauri?: string;
+  webview2?: string;
+  uiRendering?: import('./graphics').UiRenderingState;
+  gpuAdapterPreference?: import('./graphics').DesktopGpuState;
   security:{engine:'rust-wasm';ready:boolean;abi:number;sha256:string};
   version: string;
   electron: string;

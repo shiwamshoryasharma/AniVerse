@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import type { AccentName, AccountInfo, DeepPartial, Provider, Settings, SourceInfo } from '../../../app/shared/types';
 import { SourceIcon, Spinner, Switch } from '../components/common';
+import { BlockingActivityReport } from '../components/BlockingActivityReport';
 import { Disclaimer } from '../components/Disclaimer';
 import { Anime4KPanel } from '../components/Anime4K';
 import { ChangelogPage } from '../components/Changelog';
@@ -13,7 +14,7 @@ import { ThemePresets } from '../components/ThemePresets';
 import { GraphicsPanel } from '../components/GraphicsPanel';
 import { updateSummary, useInstallUpdate } from '../lib/updates';
 import { RadioGroup, Select } from '../components/controls';
-import { call, errorText, platform } from '../lib/bridge';
+import { call, errorText, isAniVerse2, modernWindows, platform } from '../lib/bridge';
 import { cx, timeAgo } from '../lib/format';
 import { keys, useAccounts, useAdblockStats, useAppInfo, useSettings, useSources, useUpdateSettings, useUpdateSource, useUpdateState } from '../lib/queries';
 import { useToast } from '../lib/useToast';
@@ -477,13 +478,15 @@ function AccountRow({
   const waiting = state === 'connect' || account.signingIn;
   const title = account.connected ? `${account.userName} · ${name}` : name;
   const detail = waiting
-    ? `Finish signing in to ${name} in your browser, then allow AniVerse to open. This page updates by itself.`
+    ? isAniVerse2
+      ? `Finish signing in to ${name} in the window that opened. This page updates by itself.`
+      : `Finish signing in to ${name} in your browser, then allow AniVerse to open. This page updates by itself.`
     : account.needsReconnect
       ? `Your ${name} session expired or was revoked. Reconnect to resume syncing — ${account.pending ? `${account.pending} change(s) are waiting` : 'nothing is lost'}.`
       : account.connected
         ? [account.lastSyncAt ? `Last sync ${timeAgo(account.lastSyncAt)}` : 'Not synced yet', account.pending ? `${account.pending} pending` : null, account.lastError ? account.lastError : null].filter(Boolean).join(' · ')
         : account.clientIdConfigured
-          ? `Sign in on ${name}’s own page in your browser. AniVerse never sees your password.`
+          ? (isAniVerse2 ? `Sign in on ${name}’s own page.` : `Sign in on ${name}’s own page in your browser. AniVerse never sees your password.`)
           : `${name} sign-in isn’t available in this build (no client ID configured).`;
   return (
     <div className="setting">
@@ -552,14 +555,14 @@ function PrivacySection() {
           title="Block ads, trackers and promotions"
           desc={
             stats
-              ? `${stats.ready ? `${blocked.toLocaleString()} requests blocked this session` : 'Downloading filter lists…'}${stats.listsUpdatedAt ? ` · lists updated ${timeAgo(Math.floor(stats.listsUpdatedAt / 1000))}` : ''}. Uses EasyList, EasyPrivacy, annoyance lists and config/filters.txt.`
+              ? `${stats.ready ? `${blocked.toLocaleString()} requests blocked this session` : isAniVerse2 && !stats.updating ? 'Filters load when a source opens' : 'Downloading filter lists…'}${stats.listsUpdatedAt ? ` · lists updated ${timeAgo(Math.floor(stats.listsUpdatedAt / 1000))}` : ''}. Uses EasyList, EasyPrivacy, annoyance lists and config/filters.txt.`
               : undefined
           }
         >
           <Switch label="Block ads" on={s.adblock} onChange={(v) => save({ privacy: { adblock: v } })} />
         </Setting>
-        <Setting title="Filter updates" desc={stats?.error ?? 'Checks hourly and refreshes lists after 24 hours. Reload an open source page after updating to apply new cosmetic rules.'}>
-          <button className="btn sm" disabled={updating||stats?.updating} onClick={()=>{setUpdating(true);void call('adblock.update').then(next=>{qc.setQueryData(keys.adblock,next);toast.push({level:'success',message:'Ad-blocking filters updated. Reload the source page to apply cosmetic rules.'});}).catch(err=>toast.push({level:'error',message:errorText(err)})).finally(()=>setUpdating(false));}}>
+        <Setting title="Filter updates" desc={stats?.error ?? (isAniVerse2 ? 'Checks hourly and refreshes lists after 24 hours. New network rules apply to subsequent source requests.' : 'Checks hourly and refreshes lists after 24 hours. Reload an open source page after updating to apply new cosmetic rules.')}>
+          <button className="btn sm" disabled={updating||stats?.updating} onClick={()=>{setUpdating(true);void call('adblock.update').then(next=>{qc.setQueryData(keys.adblock,next);toast.push({level:'success',message:isAniVerse2?'Network filters updated.':'Ad-blocking filters updated. Reload the source page to apply cosmetic rules.'});}).catch(err=>toast.push({level:'error',message:errorText(err)})).finally(()=>setUpdating(false));}}>
             <RefreshCw size={14}/>{updating||stats?.updating?'Updating…':'Update filters'}
           </button>
         </Setting>
@@ -567,6 +570,7 @@ function PrivacySection() {
           <Switch label="Block popups" on={s.blockPopups} onChange={(v) => save({ privacy: { blockPopups: v } })} />
         </Setting>
       </Group>
+      {modernWindows && stats && <BlockingActivityReport stats={stats} />}
       <Group title="Cloudflare">
         <Setting
           title="Automatic Cloudflare verification"
@@ -590,6 +594,7 @@ function PrivacySection() {
 }
 
 function UpdatesGroup() {
+  const qc = useQueryClient();
   const s = useSettings();
   const save = useSave();
   const toast = useToast();
@@ -600,6 +605,7 @@ function UpdatesGroup() {
   const run = (method: 'update.check' | 'update.download') => {
     setBusy(true);
     call(method)
+      .then((state) => qc.setQueryData(keys.update, state))
       .catch((err) => toast.push({ level: 'error', message: errorText(err) }))
       .finally(() => setBusy(false));
   };
@@ -616,7 +622,7 @@ function UpdatesGroup() {
   const working = busy || u.status === 'checking' || u.status === 'downloading';
   return (
     <Group title="Updates">
-      <Setting title={`AniVerse ${u.current}`} desc={updateSummary(u)}>
+      <Setting title={`${isAniVerse2 ? 'AniVerse2' : 'AniVerse'} ${u.current}`} desc={updateSummary(u)}>
         {u.status === 'downloaded' ? (
           <button className="btn primary sm" onClick={() => void install()}>
             <RotateCw size={14} /> Restart to update
@@ -631,13 +637,13 @@ function UpdatesGroup() {
           </button>
         )}
         {u.version && u.releaseUrl && (
-          <button className="btn ghost sm" onClick={() => void call('app.openExternal', { url: u.releaseUrl! })}>
+          <button className="btn ghost sm" onClick={() => void call('app.openExternal', { url: u.releaseUrl! }).catch((err) => toast.push({ level: 'error', message: errorText(err) }))}>
             What’s new
           </button>
         )}
       </Setting>
-      {platform === 'win32' && !off && (
-        <Setting title="AniVerse2" desc="Checks the separate Windows release and prepares to carry over your saved sources and history.">
+      {platform === 'win32' && !isAniVerse2 && !off && (
+        <Setting title="AniVerse2" desc="Copies your saved sources, settings, and history to AniVerse2. AniVerse 1 stays installed.">
           <button className="btn sm" disabled={working || u.status === 'downloaded'} onClick={migrate}>
             <ArrowUp size={14} /> Update AniVerse to AniVerse2
           </button>
@@ -655,7 +661,9 @@ function UpdatesGroup() {
       </Setting>
       <Setting
         title="Download updates automatically"
-        desc="Downloads in the background (only the parts that changed, when possible) and installs when you restart or quit. Updates must carry AniVerse’s code signature, or they are not installed."
+        desc={isAniVerse2
+          ? 'Downloads the signed Windows installer in the background. Choose Restart to update to install it.'
+          : 'Downloads in the background (only the parts that changed, when possible) and installs when you restart or quit. Updates must carry AniVerse’s code signature, or they are not installed.'}
       >
         <Switch on={s.updates.autoDownload} disabled={off} label="Download updates automatically" onChange={(autoDownload) => save({ updates: { autoDownload } })} />
       </Setting>
@@ -669,10 +677,14 @@ function AboutSection() {
     <>
       <Disclaimer />
       <UpdatesGroup />
-      <Group title="AniVerse">
+      <Group title={isAniVerse2 ? 'AniVerse2' : 'AniVerse'}>
         <div className="card-pad help">
           <p style={{ marginTop: 0 }}>
-            Version {info?.version} · Electron {info?.electron} · Chromium {info?.chrome} · {info?.platform}
+            {isAniVerse2 ? (
+              <>Version {info?.version ?? '…'} · Tauri {info?.tauri ?? '…'}{info?.webview2 ? ` · WebView2 ${info.webview2}` : ''}</>
+            ) : (
+              <>Version {info?.version} · Electron {info?.electron} · Chromium {info?.chrome} · {info?.platform}</>
+            )}
           </p>
           <p>
             Data folder: <span className="code">{info?.dataPath}</span>

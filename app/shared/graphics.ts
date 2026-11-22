@@ -1,6 +1,14 @@
 export type UiRenderingMode = 'stable' | 'accelerated';
 export interface UiRenderingState { active: UiRenderingMode; preferred: UiRenderingMode; restartRequired: boolean }
 
+export type DesktopGpuPreference = 'system' | 'high-performance' | 'power-saving';
+export interface DesktopGpuState {
+  applied: DesktopGpuPreference;
+  preferred: DesktopGpuPreference;
+  supported: boolean;
+  restartRequired: boolean;
+}
+
 export type GpuPreference = 'high-performance' | 'system';
 export interface GraphicsAdapter {
   name: string;

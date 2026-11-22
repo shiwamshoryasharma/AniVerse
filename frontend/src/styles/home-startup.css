@@ -1,0 +1,30 @@
+/* Animate one visible placeholder per Home section so loading keeps its shimmer without repainting the whole grid. */
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .home-page .skeleton:not([data-home-shimmer]) {
+  background: var(--surface-2);
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .home-page .skeleton {
+    animation: none;
+  }
+}
+
+/* Keep the spotlight zoom and crossfade while leaving the banner static between slides. */
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .home-page .hero-slide > img {
+  transition: none;
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .home-page :is(.hero-slide.active, .hero-slide.outgoing) > img {
+  animation: spotlight-zoom 2.3s ease-out both;
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .home-page :is(.hero-slide.outgoing, [data-spotlight-visible='false'] .hero-slide.active) > img {
+  animation-play-state: paused;
+}
+@keyframes spotlight-zoom {
+  from { transform: scale(1.04); }
+  to { transform: scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .home-page .hero-slide > img {
+    animation: none;
+  }
+}

@@ -1,16 +1,22 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, Info, Play, Star } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import type { MediaCard } from '../../../app/shared/types';
-import { call } from '../lib/bridge';
+import { call, modernWindows } from '../lib/bridge';
 import { availableEpisodes, countdown, pendingRelease, formatLabel, seasonLabel, statusLabel, titleOf } from '../lib/format';
 import { useSettings } from '../lib/queries';
 import {AudioTags,type HoverAudioProps} from './AudioTags';
 
 const OPEN_DELAY = 420;
 const CLOSE_DELAY = 140;
+const hoverQuery = (id: number) => ({
+  queryKey: ['hover', id],
+  queryFn: () => call('meta.hover', { id }),
+  staleTime: Infinity,
+  retry: false,
+});
 
 /**
  * Shows a rich preview next to any media card after a short hover: rating,
@@ -22,33 +28,62 @@ export function HoverPreview({ media, children, watchTo, ...audio }: HoverAudioP
   const openTimer = useRef(0);
   const closeTimer = useRef(0);
   const host = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const launcher = useRef<HTMLElement>(null);
+  const returningFocus = useRef(false);
+  const prefetchTimer = useRef(0);
+  const queryClient = useQueryClient();
 
   const scheduleOpen = () => {
     window.clearTimeout(closeTimer.current);
     window.clearTimeout(openTimer.current);
+    window.clearTimeout(prefetchTimer.current);
+    if (modernWindows) {
+      prefetchTimer.current = window.setTimeout(() => void queryClient.prefetchQuery(hoverQuery(media.id)), 160);
+    }
     openTimer.current = window.setTimeout(() => {
       const el = host.current?.firstElementChild;
       if (el) setAnchor(el.getBoundingClientRect());
     }, OPEN_DELAY);
   };
   const scheduleClose = () => {
+    window.clearTimeout(prefetchTimer.current);
     window.clearTimeout(openTimer.current);
+    window.clearTimeout(closeTimer.current);
     closeTimer.current = window.setTimeout(() => setAnchor(null), CLOSE_DELAY);
   };
 
   useEffect(() => {
     if (!anchor) return;
-    const hide = () => setAnchor(null);
+    const hide = (event: Event) => {
+      if (modernWindows && event.target instanceof Node && panel.current?.contains(event.target)) return;
+      setAnchor(null);
+    };
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const target = launcher.current;
+      if (target?.isConnected && panel.current?.contains(document.activeElement)) {
+        event.preventDefault();
+        returningFocus.current = true;
+        target.focus();
+        returningFocus.current = false;
+      }
+      window.clearTimeout(closeTimer.current);
+      setAnchor(null);
+    };
+    if (modernWindows) window.addEventListener('keydown', dismiss);
     window.addEventListener('scroll', hide, true);
     window.addEventListener('resize', hide);
     return () => {
       window.removeEventListener('scroll', hide, true);
       window.removeEventListener('resize', hide);
+      window.removeEventListener('keydown', dismiss);
     };
   }, [anchor]);
 
   useEffect(
     () => () => {
+      window.clearTimeout(prefetchTimer.current);
       window.clearTimeout(openTimer.current);
       window.clearTimeout(closeTimer.current);
     },
@@ -61,13 +96,32 @@ export function HoverPreview({ media, children, watchTo, ...audio }: HoverAudioP
       style={{ display: 'contents' }}
       onMouseEnter={scheduleOpen}
       onMouseLeave={scheduleClose}
+      onFocus={(event) => {
+        if (!modernWindows) return;
+        if (panel.current?.contains(event.target)) { window.clearTimeout(closeTimer.current); return; }
+        if (!returningFocus.current && event.target instanceof HTMLElement && event.target.matches(':focus-visible')) {
+          launcher.current = event.target;
+          scheduleOpen();
+        }
+      }}
+      onBlur={(event) => {
+        if (modernWindows && !host.current?.contains(event.relatedTarget) && !panel.current?.contains(event.relatedTarget)) scheduleClose();
+      }}
+      onKeyDown={(event) => {
+        if (!modernWindows || event.key !== 'ArrowDown' || !host.current?.contains(event.target as Node)) return;
+        const action = panel.current?.querySelector<HTMLButtonElement>('button:not(:disabled)');
+        if (action) {
+          event.preventDefault();
+          action.focus();
+        }
+      }}
       // Portal clicks bubble through React; only a press on the card itself closes the preview.
       onMouseDown={(e) => host.current?.contains(e.target as Node) && setAnchor(null)}
     >
       {children}
       {anchor &&
         createPortal(
-          <PreviewCard {...audio} media={media} anchor={anchor} watchTo={watchTo} onEnter={() => window.clearTimeout(closeTimer.current)} onLeave={scheduleClose} onNavigate={() => setAnchor(null)} />,
+          <PreviewCard {...audio} panel={panel} media={media} anchor={anchor} watchTo={watchTo} onEnter={() => window.clearTimeout(closeTimer.current)} onLeave={scheduleClose} onNavigate={() => setAnchor(null)} />,
           document.body,
         )}
     </div>
@@ -75,6 +129,7 @@ export function HoverPreview({ media, children, watchTo, ...audio }: HoverAudioP
 }
 
 function PreviewCard({
+  panel,
   media,
   anchor,
   watchTo,
@@ -86,6 +141,7 @@ function PreviewCard({
   media: MediaCard;
   anchor: DOMRect;
   watchTo?: string;
+  panel: RefObject<HTMLDivElement | null>;
   onEnter: () => void;
   onLeave: () => void;
   onNavigate: () => void;
@@ -93,10 +149,10 @@ function PreviewCard({
   const navigate = useNavigate();
   const settings = useSettings();
   const lang = settings.appearance.titleLanguage;
-  const { data: extra, isLoading } = useQuery({ queryKey: ['hover', media.id], queryFn: () => call('meta.hover', { id: media.id }), staleTime: Infinity, retry: false });
-  const panel=useRef<HTMLDivElement>(null),[height,setHeight]=useState(440);
-  useLayoutEffect(()=>{if(!panel.current)return;const observer=new ResizeObserver(()=>setHeight(panel.current?.getBoundingClientRect().height??440));observer.observe(panel.current);return ()=>observer.disconnect();},[]);
-  const width = 320;
+  const { data: extra, isLoading } = useQuery(hoverQuery(media.id));
+  const [height, setHeight] = useState(440);
+  useLayoutEffect(()=>{if(!panel.current)return;const observer=new ResizeObserver(()=>setHeight(panel.current?.getBoundingClientRect().height??440));observer.observe(panel.current);return ()=>observer.disconnect();},[panel]);
+  const width = modernWindows ? Math.min(320, Math.max(1, window.innerWidth - 16)) : 320;
   const gap = 12;
   const fitsRight = anchor.right + gap + width < window.innerWidth - 8;
   const left = fitsRight ? anchor.right + gap : Math.max(8, anchor.left - gap - width);
@@ -110,7 +166,7 @@ function PreviewCard({
   };
 
   return (
-    <div ref={panel} className="hovercard" style={{ left, top, maxHeight:'calc(100dvh - 80px)', overflowY:'auto' }} onMouseEnter={onEnter} onMouseLeave={onLeave} role="dialog" aria-label={`${titleOf(media, lang)} preview`}>
+    <div ref={panel} className="hovercard" style={{ left, top, width, maxHeight:'calc(100dvh - 80px)', overflowY:'auto' }} onMouseEnter={onEnter} onMouseLeave={onLeave} role="dialog" aria-label={`${titleOf(media, lang)} preview`}>
       <div className="hovercard-head" style={{ backgroundImage: `url("${media.banner ?? media.cover}")` }} />
       <div className="hovercard-body">
         <div className="hovercard-title clamp-2">{titleOf(media, lang)}</div>

@@ -1,10 +1,12 @@
 import { ArrowLeft, ArrowRight, ExternalLink, House, Lock, RotateCw, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { isDownloadableVideoUrl } from '../../../app/shared/downloadFormats';
 import type { SourceInfo } from '../../../app/shared/types';
-import { call } from '../lib/bridge';
+import { call, modernWindows } from '../lib/bridge';
 import { cx, hostOf } from '../lib/format';
 import { useAdblockStats, useSettings } from '../lib/queries';
 import { Empty } from './common';
+import { DownloadMp4Button } from './DownloadMp4Button';
 
 /** The subset of Electron's <webview> API the renderer uses. */
 interface WebviewElement extends HTMLElement {
@@ -19,8 +21,12 @@ interface WebviewElement extends HTMLElement {
   getWebContentsId(): number;
 }
 
-interface Props {
+export interface WebSessionProps {
   source: SourceInfo;
+  mediaId?: number;
+  suspended?: boolean;
+  onDirectMp4?: (url: string | null) => void;
+  onSurfaceError?: (error: string | null) => void;
   src: string;
   /** Sent as the HTTP referrer of the first request (YouTube embeds require an app identity). */
   referrer?: string;
@@ -42,7 +48,16 @@ export interface WebSessionControls {
  * (`persist:src-<id>`). The main process enforces the partition, strips node
  * access, blocks ads/popups and cross-site redirects, and runs Cloudflare checks.
  */
-export function WebSession({ source, src, referrer, toolbar = true, extra, onNavigate, onWebContents, controls }: Props) {
+function publicSiteMp4(current: string, source: SourceInfo): string | null {
+  if (source.kind !== 'web' || !source.partition.startsWith('persist:')) return null;
+  try {
+    const url = new URL(current);
+    if (url.origin === new URL(source.url).origin && isDownloadableVideoUrl(url.href)) return url.href;
+  } catch { /* No committed web address yet. */ }
+  return null;
+}
+
+export function WebSession({ source, src, referrer, toolbar = true, extra, onNavigate, onWebContents, controls }: WebSessionProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<WebviewElement | null>(null);
   const ready = useRef(false);
@@ -62,6 +77,7 @@ export function WebSession({ source, src, referrer, toolbar = true, extra, onNav
   const settings = useSettings();
   const blocked = (stats?.blocked[source.id] ?? 0) + (stats?.popupsBlocked[source.id] ?? 0);
   const shieldOn = settings.privacy.adblock && source.adblock;
+  const mp4 = modernWindows && toolbar && !loading && !failure ? publicSiteMp4(url, source) : null;
 
   // One webview per source partition; it survives src changes.
   useEffect(() => {
@@ -180,6 +196,7 @@ export function WebSession({ source, src, referrer, toolbar = true, extra, onNav
           <span className={cx('shield', !shieldOn && 'off')} title={shieldOn ? 'Ads, trackers, popups and redirects blocked on this site' : 'Ad blocking is off for this site'}>
             <ShieldCheck size={12} /> {shieldOn ? blocked : 'off'}
           </span>
+          {mp4 && <DownloadMp4Button url={mp4} sourceId={source.id} />}
           {extra}
           <button className="icon-btn xs" aria-label="Open in system browser" title="Open in system browser" onClick={() => void call('app.openExternal', { url })}>
             <ExternalLink size={14} />

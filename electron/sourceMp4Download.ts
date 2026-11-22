@@ -1,10 +1,20 @@
 import { app, BrowserWindow, dialog, session, type WebContents } from 'electron';
+import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { link, mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { episodeDownloadFilename, type EpisodeDownloadContext } from '../app/shared/download-filename';
+import { downloadableVideoPath } from '../app/shared/downloadFormats';
 import type { RustPolicy } from '../app/core/security/rustPolicy';
 import { SourceNetworkGuard } from './sourceNetwork';
+import { readOwnedPlayer } from './ownedPlayerFrame';
+
+declare const __ANIVERSE_DOWNLOAD_SCRIPT__: string;
+type SubtitleChoice = { url?: string; language?: string; label?: string };
+type MediaCandidate = { identity?: string; media: string; url: string; observed?: string; playlists?: string[]; observations?: string[]; subtitle?: SubtitleChoice; expectedDuration?: number };
+type Mp4Progress = { received: number; total: number | null };
 
 const maxBytes = 8 * 1024 ** 3;
 const headerBytes = 16 * 1024;
@@ -12,7 +22,8 @@ const headerBytes = 16 * 1024;
 // The app transfers direct files. Guest sessions retain their unconditional download block.
 export class SourceMp4Download {
   private busy = false;
-  constructor(private policy: RustPolicy, private folder: () => string | null) {}
+  constructor(private policy: RustPolicy, private folder: () => string | null,
+    private progress: (event: Mp4Progress) => void = () => {}) {}
 
   async save(guest: WebContents, url: string): Promise<boolean> {
     if (this.busy) throw Error('An MP4 download is already in progress.');
@@ -68,6 +79,150 @@ export class SourceMp4Download {
     }
   }
 
+
+  saveDirect(owner: WebContents, url: string, source?: string, filenameContext?: EpisodeDownloadContext): Promise<boolean> {
+    const target = this.publicUrl(url, downloadableVideoPath);
+    const scoped = !source || (target && (new URL(source).origin === target.origin ||
+      this.policy.decide({ context: 'mp4', url: target.href, source }).allowed));
+    if (!target || !scoped) {
+      throw Error('Choose a supported public HTTPS video to save as MP4.');
+    }
+    return this.saveMedia(owner, { media: target.href, url: target.href }, () => !owner.isDestroyed(), undefined, filenameContext);
+  }
+
+  async saveActive(guest: WebContents, current: () => boolean, filenameContext?: EpisodeDownloadContext): Promise<boolean> {
+    if (!current()) return false;
+    const selected = await this.inspect(guest);
+    if (!selected || !current()) throw Error('Play a supported video before saving. Some sources restrict downloads.');
+    return this.saveMedia(guest, selected, async () => {
+      if (!current()) return false;
+      const refreshed = await this.inspect(guest);
+      return !!refreshed && refreshed.identity === selected.identity && refreshed.media === selected.media &&
+        (selected.expectedDuration === undefined ? refreshed.expectedDuration === undefined :
+          typeof refreshed.expectedDuration === 'number' && Math.abs(refreshed.expectedDuration - selected.expectedDuration) <= 0.5) && current();
+    }, current, filenameContext);
+  }
+
+  private async inspect(guest: WebContents): Promise<MediaCandidate | null> {
+    const observed = await readOwnedPlayer(guest, __ANIVERSE_DOWNLOAD_SCRIPT__);
+    if (!observed || typeof observed !== 'object') return null;
+    const raw = observed as Record<string, unknown>;
+    if (typeof raw.identity !== 'string' || !/^[a-zA-Z0-9:-]{1,96}$/.test(raw.identity)) return null;
+    const identity = raw.identity;
+    if (typeof raw.media !== 'string' || raw.media.length > 4096) return null;
+    const url = this.publicUrl(raw.url, downloadableVideoPath, true);
+    if (!url) return null;
+    if (!raw.media.startsWith('blob:')) {
+      if (this.publicUrl(raw.media, downloadableVideoPath, true)?.href !== url.href) return null;
+      if (!/\.m3u8$/i.test(url.pathname)) return { identity, media: raw.media, url: url.href };
+    }
+    const values = (value: unknown, limit: number, extension?: RegExp) => {
+      if (!Array.isArray(value) || value.length > limit) return [];
+      return [...new Set(value.map(item => this.publicUrl(item, extension, true)?.href).filter((item): item is string => !!item))];
+    };
+    const playlists = values(raw.playlists ?? [url.href], 8, /\.m3u8$/i);
+    const observations = values(raw.observations ?? (raw.observed ? [raw.observed] : []), 32);
+    if (!playlists.includes(url.href) || (raw.media.startsWith('blob:') && !observations.length)) return null;
+    const expectedDuration = raw.expectedDuration;
+    if (typeof expectedDuration !== 'number' || !Number.isFinite(expectedDuration) || expectedDuration <= 0 || expectedDuration > 21600) return null;
+    let subtitle: SubtitleChoice | undefined;
+    if (raw.subtitle && typeof raw.subtitle === 'object') {
+      const track = raw.subtitle as Record<string, unknown>;
+      const trackUrl = this.publicUrl(track.url, undefined, true)?.href;
+      const language = typeof track.language === 'string' && track.language.length <= 64 ? track.language : undefined;
+      const label = typeof track.label === 'string' && track.label.length <= 128 ? track.label : undefined;
+      subtitle = { ...(trackUrl ? { url: trackUrl } : {}), ...(language ? { language } : {}), ...(label ? { label } : {}) };
+    }
+    return { identity, media: raw.media, url: url.href, playlists, observations, ...(expectedDuration !== undefined ? { expectedDuration } : {}), ...(subtitle ? { subtitle } : {}) };
+  }
+
+  private publicUrl(value: unknown, extension?: RegExp, owned = false): URL | null {
+    if (typeof value !== 'string' || value.length > 4096) return null;
+    try {
+      const url = new URL(value);
+      const fixture = process.env.ANIVERSE_TEST_PROFILE === '1'
+        && url.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(url.hostname)
+        && url.origin === process.env.ANIVERSE_TEST_MEDIA_ORIGIN;
+      if ((extension && !extension.test(url.pathname)) || (!owned && url.search) || url.hash || url.username || url.password) return null;
+      if (fixture || (url.protocol === 'https:' && !url.port
+        && this.policy.decide({ context: 'handoff', url: url.href, source: url.href }).allowed)) return url;
+    } catch { /* Invalid source URL. */ }
+    return null;
+  }
+  private async saveMedia(
+    owner: WebContents,
+    selected: MediaCandidate,
+    validate: () => boolean | Promise<boolean>,
+    current: () => boolean = () => !owner.isDestroyed(),
+    filenameContext?: EpisodeDownloadContext,
+  ): Promise<boolean> {
+    if (process.platform !== 'win32') throw Error('MP4 saving is available on Windows.');
+    if (this.busy) throw Error('An MP4 download is already in progress.');
+    const parent = BrowserWindow.fromWebContents(owner.hostWebContents ?? owner);
+    if (!parent) return false;
+    this.busy = true;
+    try {
+      const episodeName = filenameContext === undefined ? undefined : episodeDownloadFilename(filenameContext);
+      if (episodeName === null) throw Error('The episode filename context is invalid.');
+      const basename = path.posix.basename(new URL(selected.url).pathname).slice(0, 96)
+        .replace(/[^a-zA-Z0-9 ._-]/g, '_').replace(/\.[a-z0-9]+$/i, '') || 'episode';
+      const { canceled, filePath } = await dialog.showSaveDialog(parent, {
+        title: 'Save MP4 as',
+        defaultPath: path.join(this.folder() ?? app.getPath('downloads'), episodeName ?? 'AniVerse - ' + basename + '.mp4'),
+        filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
+      });
+      if (canceled || !filePath || owner.isDestroyed()) return false;
+      if (path.extname(filePath).toLowerCase() !== '.mp4') throw Error('Choose a filename ending in .mp4.');
+      if (!await validate()) throw Error('The active video changed before the download started.');
+      return await this.transfer(owner, { ...selected, destination: filePath }, current);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async transfer(owner: WebContents, request: MediaCandidate & { destination: string }, current: () => boolean) {
+    const resources = app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build/vendor');
+    const worker = spawn(path.join(resources, 'ffmpeg/aniverse-media-transfer.exe'), [], {
+      stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true,
+    });
+    const result = new Promise<number | null>(resolve => {
+      worker.once('error', () => resolve(null));
+      worker.once('close', code => resolve(code));
+    });
+    let cancelled = false;
+    const stop = () => { cancelled = true; worker.stdin.end(); };
+    const monitor = setInterval(() => { if (!current()) stop(); }, 250);
+    owner.once('destroyed', stop);
+    worker.stdin.on('error', () => { /* Worker startup and transfer failure are reported below. */ });
+    const lines = createInterface({ input: worker.stdout });
+    let completed = false;
+    let message = 'The bundled MP4 download helper could not complete the transfer.';
+    try {
+      worker.stdin.write(JSON.stringify({ media: request.media, url: request.url, observed: request.observed, playlists: request.playlists, observations: request.observations, subtitle: request.subtitle, expectedDuration: request.expectedDuration, destination: request.destination }) + '\n');
+      for await (const line of lines) {
+        if (line.length > 4096) continue;
+        let event: { done?: boolean; error?: string; received?: number; total?: number | null };
+        try { event = JSON.parse(line); } catch { continue; }
+        if (!event || typeof event !== 'object') continue;
+        if (event.done === true) completed = true;
+        if (typeof event.error === 'string') message = event.error;
+        if (Number.isSafeInteger(event.received) && event.received! >= 0
+          && (event.total === null || (Number.isSafeInteger(event.total) && event.total! >= event.received!))) {
+          this.progress({ received: event.received!, total: event.total! });
+        }
+      }
+      const code = await result;
+      if (cancelled || owner.isDestroyed() || !current()) return false;
+      if (code === -1073741515 || code === 3221225781) throw Error('Windows could not load the bundled video download helper. Update or reinstall AniVerse.');
+      if (code !== 0 || !completed) throw Error(message);
+      return true;
+    } finally {
+      clearInterval(monitor);
+      owner.removeListener('destroyed', stop);
+      lines.close();
+      stop();
+    }
+  }
   private async *verifiedBytes(body: ReadableStream<Uint8Array>, expected: number) {
     const reader = body.getReader();
     const prefix = Buffer.alloc(headerBytes);

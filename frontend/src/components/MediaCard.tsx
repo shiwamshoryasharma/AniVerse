@@ -1,9 +1,9 @@
 import { BookmarkPlus, CalendarClock, ChevronLeft, ChevronRight, Copy, ExternalLink, Heart, Info, ListVideo, Mic, Play, Star, Subtitles, X } from 'lucide-react';
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import type { MediaCard as Media } from '../../../app/shared/types';
-import { call } from '../lib/bridge';
-import { availableEpisodes, formatLabel, pendingRelease, snapshotOf, titleOf } from '../lib/format';
+import { call, modernWindows } from '../lib/bridge';
+import { availableEpisodes, cx, formatLabel, pendingRelease, snapshotOf, titleOf } from '../lib/format';
 import { useSetStatus, useSettings, useToggleFavourite } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { useContextMenu, type MenuItem } from './contextMenuContext';
@@ -113,12 +113,26 @@ export function MediaCard({ media, to, badge, progress, subtitle, onRemove, audi
   );
 }
 
-export function SkeletonCards({ count = 8 }: { count?: number }) {
+export function HomeSkeleton({ className, style }: { className?: string; style?: CSSProperties }) {
+  const placeholder = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = placeholder.current;
+    if (!modernWindows || !element || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => element.toggleAttribute('data-home-shimmer', entry.isIntersecting));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={placeholder} className={cx('skeleton', className)} style={style} />;
+}
+
+export function SkeletonCards({ count = 8, shimmerFirst = false }: { count?: number; shimmerFirst?: boolean }) {
   return (
     <>
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className="mcard">
-          <div className="skeleton" style={{ aspectRatio: '2 / 3' }} />
+          {shimmerFirst && i === 0
+            ? <HomeSkeleton style={{ aspectRatio: '2 / 3' }} />
+            : <div className="skeleton" style={{ aspectRatio: '2 / 3' }} />}
           <div className="skeleton" style={{ height: 12, width: '80%' }} />
         </div>
       ))}

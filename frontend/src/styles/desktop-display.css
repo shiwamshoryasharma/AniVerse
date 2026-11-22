@@ -1,0 +1,62 @@
+/* Keep the host coordinate system stable for native source WebViews. */
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) { --desktop-scale: 1; }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-display-scale='85'] { --desktop-scale: .85; }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-display-scale='115'] { --desktop-scale: 1.15; }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-display-scale='125'] { --desktop-scale: 1.25; }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .app {
+  zoom: var(--desktop-scale);
+  min-width: 0;
+  height: calc(100dvh / var(--desktop-scale));
+  container-type: inline-size;
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .desktop-display .row { align-items: center; }
+
+@media (max-width: 960px), (max-height: 660px) {
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop])[data-display-scale='auto'] { --desktop-scale: .9; }
+}
+@container (max-width: 1190px) {
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .layout-studio .watch,
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .watch { grid-template-columns: minmax(0, 1fr); }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .ep-panel { position: static; }
+}
+@container (max-width: 960px) {
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.tauri-topbar, .topbar.win) { gap: 6px; padding-left: 8px; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.tauri-topbar, .topbar.win) .brand { min-width: 0; padding-left: 0; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.tauri-topbar, .topbar.win) .search { flex: 1 1 100px; min-width: 88px; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.tauri-topbar, .topbar.win) .search input { min-width: 0; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .tauri-window-controls button { width: 36px; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .app .source-bar { grid-template-columns: minmax(0, 1fr); }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .source-bar .now { border-right: 0; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .watch-heading,
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .toolbar { flex-wrap: wrap; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .watch-heading > div:first-child { flex: 1 1 100%; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .toolbar .grow { display: none; }
+}
+@media (max-width: 960px) {
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.layout-studio, .layout-classic) { --pad: 12px; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) .studio-nav-heading { display: none; }
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.tauri-topbar, .topbar.win) .search kbd,
+  :root:is([data-aniverse-edition='2'], [data-modern-desktop]) :is(.tauri-topbar, .topbar.win) .word { display: none; }
+}
+.quantum-audio-control { position: relative; }
+.quantum-audio-control:focus-within { z-index: 2; }
+.quantum-audio-menu {
+  inset: auto 0 calc(100% + 8px) auto;
+  display: grid;
+  gap: 9px;
+  width: 204px;
+}
+.quantum-audio-menu label { display: grid; gap: 5px; min-width: 0; }
+.player:has(.quantum-audio-control [aria-expanded='true']) .player-controls { opacity: 1; pointer-events: auto; }
+
+.site-quantum-audio, .site-quantum-settings { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.site-quantum-settings [role='slider'] { min-width: 78px; }
+
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .watch-media-actions {
+  gap: 6px 8px;
+  margin-block: 8px 4px;
+}
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .watch-media-actions [aria-disabled='true'] { color: var(--text-2); cursor: not-allowed; }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .player-row [aria-disabled='true'] { color: #e6e6e6; cursor: not-allowed; }
+.watch-media-hint { font-size: var(--fs-xs); color: var(--text-2); overflow-wrap: anywhere; }
+:root:is([data-aniverse-edition='2'], [data-modern-desktop]) .watch .player-row:has(.quantum-audio-label) { flex-wrap: wrap; }

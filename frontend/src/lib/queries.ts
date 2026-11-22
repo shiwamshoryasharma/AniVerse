@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { BrowseQuery, CommentsQuery, DeepPartial, ListStatus, MediaRef, MediaSnapshot, ProgressSave, Settings, SourceOverridePatch } from '../../../app/shared/types';
-import { call, onEvent } from './bridge';
+import type { BrowseQuery, CommentsQuery, DeepPartial, ListStatus, MediaRef, MediaSnapshot, PrivacyState, ProgressSave, SearchRecommendationContext, Settings, SourceOverridePatch } from '../../../app/shared/types';
+import { call, modernWindows, onEvent } from './bridge';
 import { DEFAULT_SETTINGS_FALLBACK } from './settingsFallback';
 
 export const keys = {
@@ -18,6 +18,7 @@ export const keys = {
   libraryState: (id: number) => ['library', 'state', id] as const,
   continue: ['library', 'continue'] as const,
   history: ['library', 'history'] as const,
+  searchContext: ['library', 'search-context'] as const,
   favourites: ['library', 'favourites'] as const,
   entries: (status: ListStatus | null) => ['library', 'entries', status] as const,
   accounts: ['accounts'] as const,
@@ -174,7 +175,17 @@ export function useSaveProgress() {
   return useMutation({
     mutationFn: (v: ProgressSave) => call('library.saveProgress', v),
     onSuccess: (r, v) => {
-      if (r.completedNow) invalidateLibrary(qc, v.media.id);
+      if (r.completedNow) {
+        invalidateLibrary(qc, v.media.id);
+        return;
+      }
+      if (!modernWindows) return;
+      const privacy = qc.getQueryData<PrivacyState>(['privacy']);
+      const context = qc.getQueryData<SearchRecommendationContext>(keys.searchContext);
+      const id = v.media.id;
+      if (context && context.recent[0] !== id && privacy && !privacy.incognito && !privacy.privateMediaIds.includes(id)) {
+        void qc.invalidateQueries({ queryKey: keys.searchContext });
+      }
     },
   });
 }
@@ -201,6 +212,11 @@ export function useBridgeEvents(qc: QueryClient) {
         }
       }),
     ];
-    return () => offs.forEach((off) => off());
+    const refreshSources = () => void qc.invalidateQueries({ queryKey: keys.sources });
+    if (modernWindows) window.addEventListener('focus', refreshSources);
+    return () => {
+      offs.forEach((off) => off());
+      if (modernWindows) window.removeEventListener('focus', refreshSources);
+    };
   }, [qc]);
 }

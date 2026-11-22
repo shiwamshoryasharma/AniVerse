@@ -24,6 +24,12 @@ export function onEvent<E extends EventName>(event: E, listener: (payload: Event
 }
 
 export const platform = window.aniverse?.platform ?? 'web';
+export const isAniVerse2 = window.aniverse?.edition === 'aniverse2';
+export const modernWindows = isAniVerse2 || window.aniverse?.modernWindows === true;
+
+if (modernWindows && !isAniVerse2) {
+  document.documentElement.setAttribute('data-modern-desktop', '');
+}
 
 export function errorText(err: unknown): string {
   if (err instanceof Error) return err.message;

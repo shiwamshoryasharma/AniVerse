@@ -5,6 +5,52 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.3.5',date:'2026-11-22',title:'Save the same episode reliably',
+   summary:'Save As stays bound to the playing video while its audio and subtitle requests continue.',
+   items:[
+    {kind:'fixed',icon:'fix',title:'Keep normal playback valid during Save As',description:'New audio playlists, captions and small duration corrections no longer look like a different video. A real episode, frame or playback-source change still cancels the download.'},
+    {kind:'improved',icon:'layout',title:'Organize saved episodes',description:'Watch downloads suggest a Windows-safe series name followed by the season and episode, such as Series Name - S02E07.mp4. Valid Unicode names are preserved.'},
+   ]},
+  {version:'2.3.4',date:'2026-11-22',title:'Keep downloads tied to the selected playlist',
+   summary:'A protected or invalid playing playlist stops the download instead of selecting older captured media.',
+   items:[
+    {kind:'fixed',icon:'shield',title:'Stop after a protected or invalid playlist',description:'The selected HLS root and its declared video variants must validate before media is downloaded. An older clear playlist cannot replace a failed selected playlist.'},
+    {kind:'fixed',icon:'fix',title:'Preserve the direct player source',description:'A direct playing playlist can use only its own video rendition tree, even when the page still contains observations from earlier playback.'},
+   ]},
+  {version:'2.3.3',date:'2026-11-22',title:'Save the playing video, audio and captions',
+   summary:'More supported clear on-demand HLS downloads, with the playing rendition and accessible WebVTT subtitles.',
+   items:[
+    {kind:'fixed',icon:'cast',title:'Recognize media behind misleading filenames',description:'Manifest-listed TS and fragmented MP4 segments can be saved even when their names or MIME types suggest PNG or WebP. Actual images and unsupported protected streams are rejected.'},
+    {kind:'improved',icon:'fix',title:'Match the playing quality and audio',description:'Download selection checks recent playback observations, playlist membership and video duration. Separate audio is combined into the MP4 while existing files remain protected.',action:{label:'Open Player settings',path:'/settings/player'}},
+    {kind:'added',icon:'layout',title:'Keep accessible WebVTT captions',description:'The current subtitle track, or a declared default when available, becomes selectable MP4 captions. Clear complete on-demand streams are required; live, encrypted and byte-range HLS remain unsupported.'},
+   ]},
+  {version:'2.3.2',date:'2026-11-22',title:'Your selected colours, from startup',
+   summary:'The Electron app restores your saved theme and custom interface colours when it opens.',
+   items:[
+    {kind:'fixed',icon:'layout',title:'Restore your selected desktop theme',description:'Home uses your saved palette on startup without requiring a visit to Settings.',action:{label:'Open Interface themes',path:'/settings/themes'}},
+    {kind:'fixed',icon:'sparkles',title:'Keep custom interface colours after restarting',description:'Saved colours for the header, pages, buttons and other interface layers are applied when AniVerse opens.'},
+   ]},
+  {version:'2.3.1',date:'2026-11-22',title:'Better suggestions, sound and video downloads',
+   summary:'Search learns from your existing profile. Quantum Audio keeps playing as you interact with the player, and Save MP4 handles more sources.',
+   items:[
+    {kind:'fixed',icon:'fix',title:'Find more shows you might like',description:'Search uses recent watch history and continue-watching progress. Watched titles stay in regular search and are excluded from suggestions.',action:{label:'Browse anime',path:'/browse'}},
+    {kind:'improved',icon:'sparkles',title:'Quantum Audio headphone surround',description:'The Rust audio effect keeps dialogue centred and gives compatible surround tracks more distinct front, side and rear placement.'},
+    {kind:'fixed',icon:'cast',title:'Save more videos as MP4',description:'The bundled downloader runs on a clean Windows install and converts supported formats including direct TS and WebM.',action:{label:'Open Player settings',path:'/settings/player'}},
+   ]},
+  {version:'2.3.0',date:'2026-11-22',title:'AniVerse 2 features on Electron',
+   summary:'The Windows Electron edition gains the latest themes, search, playback tools and graphics controls.',
+   items:[
+    {kind:'added',icon:'layout',title:'Personalize your workspace',description:'Choose five layouts, a floating navigation rail and independent interface colours.',action:{label:'Open Interface themes',path:'/settings/themes'}},
+    {kind:'added',icon:'sparkles',title:'Discover shows that fit your taste',description:'Click Search to see recommendations based on local watch history. Completed shows remain searchable.',action:{label:'Browse anime',path:'/browse'}},
+    {kind:'added',icon:'cast',title:'Quantum Audio and Download MP4',description:'Access spatial audio and Save As below supported players. Clear HLS downloads are remuxed to MP4.',action:{label:'Open Player settings',path:'/settings/player'}},
+    {kind:'improved',icon:'shield',title:'See what the blocker stopped',description:'Filter activity by source and rule type, then review blocked requests, redirects and popups.',action:{label:'Open Privacy & blocking',path:'/settings/privacy'}},
+   ]},
+  {version:'2.2.5',date:'2026-11-21',title:'Move to AniVerse2 when you choose',
+   summary:'Windows checks the signed AniVerse2 release even when GitHub limits release-list requests.',
+   items:[
+    {kind:'fixed',icon:'shield',title:'Find the signed AniVerse2 setup',description:'The AniVerse2 button falls back to the signed Windows release manifest when GitHub rate-limits the release list.',action:{label:'Open Updates',path:'/settings/about'}},
+    {kind:'improved',icon:'layout',title:'Keep AniVerse available',description:'AniVerse2 copies your saved profile into its own installation. AniVerse stays installed until you choose to remove it.'},
+   ]},
   {version:'2.2.4',date:'2026-11-20',title:'Prepare to move to AniVerse2',
    summary:'The final Windows Electron release adds the signed AniVerse2 migration option.',
    items:[

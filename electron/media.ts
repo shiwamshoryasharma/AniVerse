@@ -55,7 +55,7 @@ export class MediaProtocols {
       const target = await stat(file).then((s) => (s.isFile() ? file : null)).catch(() => null);
       const response=await net.fetch(pathToFileURL(target ?? path.join(this.rendererDir, 'index.html')).toString());
       const headers=new Headers(response.headers);
-      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data: blob: media:; font-src 'self' data:; media-src 'self' https: http: data: blob: media:; connect-src 'self' https: http: ws: wss: media:; frame-src https: http:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+      headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data: blob: media:; font-src 'self' data:; media-src 'self' https: http: data: blob: media:; connect-src 'self' https: http: ws: wss: media:; frame-src https: http:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
       headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','no-referrer');
       return new Response(response.body,{status:response.status,headers});
     });
@@ -173,7 +173,7 @@ export class MediaProbe {
     const selected = await this.selected(wc);
     if (!selected) return { state: 'waiting', message: 'Waiting for a compatible website video…' };
     for (const frame of wc.mainFrame.framesInSubtree) if (frame !== selected.frame) await frame.executeJavaScript('globalThis.__aniverseUpscale?.stop()').catch(() => undefined);
-    const script = 'if (!globalThis.__aniverseUpscale) { ' + __ANIVERSE_UPSCALE_SCRIPT__ + '; globalThis.__aniverseUpscale = AniVerseUpscale; } globalThis.__aniverseUpscale.apply(' + JSON.stringify(options) + ')';
+    const script = 'if (!globalThis.__aniverseUpscale) { ' + __ANIVERSE_UPSCALE_SCRIPT__ + '; globalThis.__aniverseUpscale = AniVerseUpscale; } globalThis.__aniverseUpscale.apply(' + JSON.stringify(options) + ',' + (process.platform === 'win32') + ')';
     try { return await selected.frame.executeJavaScript(script) as import('../app/shared/upscale').UpscaleStatus; }
     catch { return { state: 'unavailable', message: 'This source does not permit Anime4K filtering.' }; }
   }

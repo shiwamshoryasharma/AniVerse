@@ -94,21 +94,32 @@ fn decide(req: Request<'_>) -> u32 {
     }
     0
 }
+pub fn allows_public_address(ip: IpAddr) -> bool {
+    public_ip(ip)
+}
+
+pub fn allows_public_mp4(url: &str, source: &str) -> bool {
+    decide(Request { context: "mp4", url, source, allowed_origins: Vec::new() }) == 0
+}
+
 #[no_mangle] pub extern "C" fn abi_version() -> u32 {1}
 #[no_mangle] pub extern "C" fn input_ptr() -> *mut u8 {INPUT.with(|input|input.borrow_mut().as_mut_ptr())}
 // Inspect the first ISO BMFF box without buffering a video or accepting a QuickTime file.
+pub fn is_mp4_header(input: &[u8]) -> bool {
+    if !(16..=LIMIT).contains(&input.len()) { return false; }
+    let size = u32::from_be_bytes(input[..4].try_into().unwrap()) as usize;
+    if size < 16 || size > input.len() || size % 4 != 0 || &input[4..8] != b"ftyp" { return false; }
+    let is_mp4 = |brand: &[u8]| matches!(brand, b"isom" | b"mp41" | b"mp42" | b"avc1" | b"dash")
+        || (brand.starts_with(b"iso") && (b'2'..=b'9').contains(&brand[3]));
+    is_mp4(&input[8..12]) || input[16..size].chunks_exact(4).any(is_mp4)
+}
+
 #[no_mangle]
 pub extern "C" fn mp4_header(len: usize) -> u32 {
     if !(16..=LIMIT).contains(&len) { return 0; }
-    INPUT.with(|input| {
-        let input = input.borrow();
-        let size = u32::from_be_bytes(input[..4].try_into().unwrap()) as usize;
-        if size < 16 || size > len || size % 4 != 0 || &input[4..8] != b"ftyp" { return 0; }
-        let is_mp4 = |brand: &[u8]| matches!(brand, b"isom" | b"mp41" | b"mp42" | b"avc1" | b"dash")
-            || (brand.starts_with(b"iso") && (b'2'..=b'9').contains(&brand[3]));
-        u32::from(is_mp4(&input[8..12]) || input[16..size].chunks_exact(4).any(is_mp4))
-    })
+    INPUT.with(|input| u32::from(is_mp4_header(&input.borrow()[..len])))
 }
+
 #[no_mangle] pub extern "C" fn evaluate(len: usize) -> u32 {
     if len==0||len>LIMIT{return 1;}
     INPUT.with(|input|{

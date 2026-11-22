@@ -24,7 +24,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { usePrivacy, useWatchSources } from '../lib/privacy';
 import { PrivateTitleButton } from '../components/Privacy';
 import { SourceFallback, shouldFallback } from '../../../app/shared/sourceFallback';
-import { episodeFromUrl } from '../../../app/core/sources/text';
+import { episodeFromUrl, seriesMarkers } from '../../../app/core/sources/text';
 import { playbackHealth, type PlaybackHealth, type PlaybackSample } from '../../../app/shared/playback';
 import type { MediaDetails, ProbeResult, SiteOptions, SourceInfo, Stream, SiteEpisodeCard } from '../../../app/shared/types';
 import { CommentsPanel } from '../components/CommentsPanel';
@@ -36,12 +36,16 @@ import { EpisodePanel } from '../components/EpisodePanel';
 import { ReleasePanel } from '../components/ReleasePanel';
 import { PlaybackRescue } from '../components/PlaybackRescue';
 import { WebSession, type WebSessionControls } from '../components/WebSession';
-import { call, errorText, onEvent } from '../lib/bridge';
+import { call, errorText, modernWindows, onEvent } from '../lib/bridge';
 import { availableEpisodes, countdown, cx, formatLabel, mediaRefOf, pendingRelease, snapshotOf, statusLabel, titleOf } from '../lib/format';
 import { keys, useDetails, useLibraryState, useMarkWatched, useMatch, useSaveProgress, useSettings, useStreams, useToggleFavourite, useUpdateSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
-import { interfaceStyle } from '../../../app/shared/interface';
+import { useCollectionPlayback } from '../lib/collectionPlayback';
+import { useInterfaceLayout } from '../lib/interfaceLayout';
 import { EpisodeCast } from '../components/EpisodeCast';
+import { SiteQuantumAudioControl } from '../player/SiteQuantumAudioControl';
+import { QuantumAudioUnavailable } from '../player/QuantumAudioControl';
+import { DownloadMp4Button } from '../components/DownloadMp4Button';
 import { SiteAnime4K } from '../components/Anime4K';
 import { VideoPlayer, type PlayerControls } from '../player/VideoPlayer';
 
@@ -52,15 +56,15 @@ export function WatchPage() {
   const params = useParams();
   const mediaId = Number(params.id);
   const { data, error, refetch } = useDetails(mediaId);
-  const { data: sourceLease } = useWatchSources(mediaId);
-  const sources=sourceLease?.sources;
-  const { data: state } = useLibraryState(mediaId);
+  const sourceLease = useWatchSources(mediaId);
+  const sources=sourceLease.data?.sources;
+  const { data: state, error: stateError, refetch: refetchState } = useLibraryState(mediaId);
   const [search] = useSearchParams();
   const [, setReleased] = useState(0);
-  if (error) {
+  if (error || sourceLease.error || stateError) {
     return (
       <div className="page">
-        <ErrorState error={error} onRetry={() => void refetch()} />
+        <ErrorState error={error ?? sourceLease.error ?? stateError} onRetry={() => void Promise.all([refetch(), sourceLease.refetch(), refetchState()])} />
       </div>
     );
   }
@@ -89,10 +93,18 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const qc = useQueryClient();
   const snapshot = useMemo(() => snapshotOf(media, lang), [media, lang]);
   const title = titleOf(media, lang);
-  const layout = interfaceStyle(settings.appearance.style).layout;
+  const filenameContext = useMemo(() => ({
+    title,
+    season: [title, ...Object.values(media.title), ...media.synonyms]
+      .filter((value): value is string => typeof value === 'string')
+      .map(value => seriesMarkers(value).season).find(value => value !== null) ?? 1,
+    episode,
+  }), [title, media.title, media.synonyms, episode]);
+  const layout = useInterfaceLayout(settings.appearance.style);
+  const episodeShelf = layout === 'cinema' || layout === 'dock';
 
   const localId = Number(search.get('local')) || null;
-  const local = useQuery({queryKey:['local-open',localId],queryFn:()=>call('collection.open',{id:localId!}),enabled:!!localId,retry:false,staleTime:Infinity});
+  const local = useCollectionPlayback(localId);
   const localFiles = useQuery({queryKey:['collection'],queryFn:()=>call('collection.list'),enabled:!!localId});
   const adjacentLocal = (n:number) => localFiles.data?.find(f=>!f.missing && f.media?.id===media.id && f.episode===n);
   const enabled = sources.filter((s) => s.enabled);
@@ -157,6 +169,9 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const webContentsId = webContents?.partition===(source?.partition??null) ? webContents.id : null;
   const setWebContentsId = (id:number|null) => setWebContents({partition:source?.partition??null,id});
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
+  const downloadScope = [sourceId, source?.partition, media.id, episode].join(':');
+  const [download, setDownload] = useState<{ scope: string; url: string } | null>(null);
+  const offeredDownload = download?.scope === downloadScope ? download.url : null;
   const player = useRef<PlayerControls | null>(null);
   const screenHost = useRef<HTMLDivElement | null>(null);
   const progressAt = useRef<{ position: number; duration: number } | null>(null);
@@ -174,7 +189,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const [choosing, setChoosing] = useState<string | null>(null);
   const [slowKey, setSlowKey] = useState<string | null>(null);
   const siteControls = useRef<WebSessionControls | null>(null);
-  const siteBusy = !!siteKey && (!navKey || navDone !== navKey);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const siteBusy = !!siteKey && attachError !== siteKey && (!navKey || navDone !== navKey);
   // The site's security check needs the user: reveal the page instead of the loader.
   const needsUser = siteBusy && !!siteStatus?.startsWith('Waiting for the site');
   const adoptRef = useRef<number | null>(null);
@@ -401,10 +417,12 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   const siteGroup = enabled.filter((s) => s.kind === 'web');
 
   let screen;
+  let nativePlayer = false;
   if (localId) {
+    nativePlayer = !!local.data && !local.error;
     const resume=state?.progress.find(p=>p.episode===episode && !p.completed);
     screen = local.error ? <ErrorState error={local.error} onRetry={()=>void local.refetch()} /> : !local.data ? <Loading label="Opening local video…" /> :
-      <VideoPlayer key={local.data.url} source={{type:'mp4',url:local.data.url,subtitles:[]}} title={local.data.name} prefs={settings.player} controlsRef={player}
+      <VideoPlayer key={local.data.url} source={{type:'mp4',url:local.data.url,subtitles:[]}} title={local.data.name} prefs={settings.player} labelQuantumAudio controlsRef={player}
         startAt={settings.player.resume ? resume?.position : undefined} theater={theater} onTheater={()=>setTheater(t=>!t)}
         onProgress={record} onEnded={()=>settings.player.autoNext && next()} hasNext={hasNext} hasPrev={hasPrev} onNext={next} onPrev={prev} />;
   } else if (!source) {
@@ -422,7 +440,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   } else if (mode === 'web') {
     screen = (
       <>
-        <WebSession key={source.partition} source={source} src="about:blank" toolbar={false} controls={siteControls} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />
+        <WebSession key={source.partition} source={source} mediaId={media.id} src="about:blank" toolbar={false} suspended={(siteBusy && !needsUser) || !!choosing} onDirectMp4={(url) => setDownload(url ? { scope: downloadScope, url } : null)} onSurfaceError={(error) => setAttachError(error ? siteKey : null)} controls={siteControls} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />
         {((siteBusy && !needsUser) || choosing) && (
           <CatLoader label={choosing ?? siteStatus ?? `Loading episode ${episode}…`} hint={slowKey === navKey && !choosing ? `${source.name} is taking a while.` : undefined}>
             {slowKey === navKey && !choosing && (
@@ -447,10 +465,11 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
   } else if (streams.error || !stream) {
     screen = <ErrorState error={streams.error ?? new Error('No playable stream.')} onRetry={() => void streams.refetch()} />;
   } else if (stream.type === 'youtube') {
-    screen = <WebSession key={source.partition} source={source} src={`https://www.youtube.com/embed/${stream.videoId}?autoplay=${settings.player.autoplay ? 1 : 0}&rel=0&playsinline=1`} referrer={APP_REFERRER} toolbar={false} onWebContents={setWebContentsId} />;
+    screen = <WebSession key={source.partition} source={source} mediaId={media.id} src={`https://www.youtube.com/embed/${stream.videoId}?autoplay=${settings.player.autoplay ? 1 : 0}&rel=0&playsinline=1`} referrer={APP_REFERRER} toolbar={false} onWebContents={setWebContentsId} />;
   } else if (stream.type === 'web') {
-    screen = <WebSession key={source.partition} source={source} src={stream.url} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />;
+    screen = <WebSession key={source.partition} source={source} mediaId={media.id} src={stream.url} onNavigate={onSiteNavigate} onWebContents={setWebContentsId} />;
   } else {
+    nativePlayer = true;
     const resume = settings.player.resume ? state?.progress.find((p) => p.episode === episode && !p.completed) : undefined;
     screen = (
       <VideoPlayer
@@ -460,6 +479,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         poster={media.banner ?? media.cover}
         startAt={resume && resume.duration - resume.position > 30 ? resume.position : undefined}
         prefs={settings.player}
+        labelQuantumAudio
         theater={theater}
         controlsRef={player}
         hasNext={hasNext}
@@ -512,6 +532,15 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         <div className="stage" style={{ minWidth: 0 }}>
           <div ref={screenHost} className={cx('screen', isSite && !focused && (!siteBusy || needsUser) && !choosing && 'site')}>{screen}</div>
 
+          {modernWindows && <div className="toolbar watch-media-actions" role="group" aria-label="Playback tools">
+            {!nativePlayer && (isSite
+              ? <SiteQuantumAudioControl id={webContentsId} ready={!!navKey && navReady === navKey && !siteBusy && !choosing} />
+              : <QuantumAudioUnavailable labelled />)}
+            <DownloadMp4Button url={offeredDownload} sourceId={sourceId ?? undefined} filenameContext={filenameContext}
+              webContentsId={isSite && !privatePlayback && navReady === navKey && !siteBusy && !choosing ? webContentsId ?? undefined : undefined}
+              unavailableReason={isSite && !privatePlayback ? 'Open an episode to check its download options.' : 'MP4 saving is unavailable for this player.'} />
+          </div>}
+
           <div className="toolbar">
             <button className="btn ghost" disabled={!hasPrev} onClick={prev}>
               <ChevronLeft size={15} /> Prev
@@ -562,7 +591,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
             )}
           </div>
 
-          {layout === 'cinema' && episodePanel}
+          {episodeShelf && episodePanel}
           {isSite && webContentsId && <SiteAnime4K key={siteKey + ':anime4k'} webContentsId={webContentsId} surface={screenHost} />}
           {isSite && webContentsId && <PlaybackRescue key={siteKey + ':' + episode} probe={playbackProbe} health={playbackStatus} webContentsId={webContentsId} busy={siteBusy || !!choosing} />}
 
@@ -673,7 +702,7 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
           <SpoilerGuard key={media.id+':'+episode} label="Comments"><CommentsPanel query={commentsQuery} /></SpoilerGuard>
         </div>
 
-        {layout !== 'cinema' && episodePanel}
+        {!episodeShelf && episodePanel}
       </div>
     </div>
   );

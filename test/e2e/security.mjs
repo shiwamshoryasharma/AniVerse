@@ -178,8 +178,10 @@ try{
  const upscaleEnd=Date.now()+30000;let upscale;
  do{await page.waitForTimeout(200);upscale=await rpc('player.upscale',{webContentsId:id,options:{enabled:true,mode:'A',darken:false,thin:false}});}while(upscale.state==='waiting'&&Date.now()<upscaleEnd);
  assert.equal(upscale.state,'active',JSON.stringify(upscale));
- assert.equal(await script('v===window.originalVideo&&document.querySelector("[data-aniverse-upscale]").width===3840'),true);
- await page.screenshot({path:path.join(artifacts,'security-protected-upscale.png')});check('Real 4K filtering still uses the original source video and controls');
+ const surface = await script('(()=>{const c=document.querySelector("[data-aniverse-upscale]"),rect=c.getBoundingClientRect();return {original:v===window.originalVideo,width:c.width,height:c.height,maxWidth:Math.min(3840,Math.floor(rect.width*devicePixelRatio)),maxHeight:Math.min(2160,Math.floor(rect.height*devicePixelRatio))};})()');
+ assert.equal(surface.original,true);
+ assert.ok(surface.width>1&&surface.height>1&&surface.width<=surface.maxWidth&&surface.height<=surface.maxHeight,JSON.stringify(surface));
+ await page.screenshot({path:path.join(artifacts,'security-protected-upscale.png')});check('Viewport-bounded Anime4K uses the original source video and controls');
  await rpc('player.upscale',{webContentsId:id,options:{enabled:false,mode:'A',darken:false,thin:false}});
  await rpc('site.focus',{webContentsId:id,on:false});
  await script('document.querySelector("#next").click()');await page.waitForTimeout(1000);assert.equal(await script('location.pathname'),'/next');

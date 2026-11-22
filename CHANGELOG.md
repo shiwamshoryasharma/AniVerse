@@ -2,6 +2,52 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.3.5 Windows (Electron) · 2026-11-22
+
+- Keep the selected video valid while the native Save As dialog is open, despite rolling audio/subtitle observations or small metadata corrections.
+- Continue rejecting real episode, document, frame, video-element, source or privacy changes.
+- Suggest series/season/episode filenames from Watch metadata, preserving valid Unicode and sanitizing Windows filename characters.
+
+[Windows release notes](docs/releases/2.3.5.md)
+## 2.3.4 Windows (Electron) · 2026-11-22
+
+- Stop a download when the selected HLS playlist or a declared variant is protected or invalid, rather than falling back to older captured media.
+- Keep direct player playlists bound to their own video renditions when unrelated requests remain in the page history.
+
+[Windows release notes](docs/releases/2.3.4.md)
+
+## 2.3.3 Windows (Electron) · 2026-11-22
+
+- Save supported clear on-demand HLS videos whose media segments use misleading image filenames or MIME types.
+- Match the playing video quality and audio through verified playlist membership and video duration.
+- Include the current or declared default accessible WebVTT subtitles as selectable MP4 captions.
+- Keep observed playback parameters in memory, cancel when the playing scope changes, preserve existing files and clean temporary data.
+
+[Windows release notes](docs/releases/2.3.3.md)
+
+## 2.3.2 Windows (Electron) · 2026-11-22
+
+- Restore your saved desktop theme when AniVerse starts, before visiting Settings.
+- Apply custom header, page, button and other interface colours on Home after restarting.
+
+[Windows release notes](docs/releases/2.3.2.md)
+
+## 2.3.1 Windows (Electron) · 2026-11-22
+
+- Restore history-based search recommendations and reuse local catalogue data.
+- Keep Quantum Audio active during normal player interaction and improve headphone surround cues.
+- Bundle the video helper’s Windows runtime and convert supported direct video formats to MP4.
+
+[Windows release notes](docs/releases/2.3.1.md)
+
+## 2.3.0 Windows (Electron) · 2026-11-22
+
+- Add the AniVerse2 appearance, search, blocking report, graphics and player tools to the Electron edition.
+- Add Quantum Audio and MP4 Save As with clear HLS remuxing.
+- Keep the existing AniVerse profile and signed Electron updater.
+
+[Windows release notes](docs/releases/2.3.0.md) · [Feature comparison](docs/ANIVERSE-FEATURE-PARITY.md)
+
 ## 2.2.4 Windows — 2026-11-20
 
 - Add **Update AniVerse to AniVerse2** in Settings → About → Updates.

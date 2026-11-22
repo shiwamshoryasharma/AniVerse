@@ -100,7 +100,7 @@ export function EpisodePanel({ total, current, watched, available, titles, thumb
           ) : (
             <button key={n} ref={n === current ? activeRef : undefined} className={cx('ep-row', cls)} aria-current={n===current?'true':undefined} aria-label={tip} title={tip} onClick={() => onSelect(n)}>
               <span className="ep-thumb">
-                {!hidden&&thumbs.get(n)?<img key={thumbs.get(n)} src={thumbs.get(n)} alt="" loading="lazy" onLoad={event=>event.currentTarget.style.removeProperty('display')} onError={event=>{event.currentTarget.style.display='none';}}/>:null}
+                {!hidden&&thumbs.get(n)?<img key={thumbs.get(n)} src={thumbs.get(n)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={event=>event.currentTarget.style.removeProperty('display')} onError={event=>{event.currentTarget.style.display='none';}}/>:null}
                 <span className="ep-thumb-symbol">{hidden?<EyeOff size={20}/>:<Play size={20} fill="currentColor"/>}</span>
               </span>
               <span className="ep-description">

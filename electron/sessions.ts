@@ -80,8 +80,8 @@ export class SessionManager implements SiteFetcher {
     private privateSessionActive:()=>boolean=()=>false,
     private navigationBlocked?: (guest: WebContents, destination?: string) => boolean,
     private downloadFolder: () => string | null = () => null,
+    private mp4?: SourceMp4Download,
   ) {}
-  private mp4?: SourceMp4Download;
 
   /** Creates/configures the isolated session for a source (idempotent). */
   ensure(source: SourceInfo): Session {

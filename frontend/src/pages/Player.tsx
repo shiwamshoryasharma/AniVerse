@@ -1,12 +1,13 @@
 import { Clapperboard, FolderOpen, Link2 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import { ErrorState } from '../components/common';
-import { useState } from 'react';
+import { DownloadMp4Button } from '../components/DownloadMp4Button';
+import { useEffect, useState } from 'react';
 import { call, errorText } from '../lib/bridge';
 import { detectStreamType } from '../lib/format';
 import { useSettings, useUpdateSettings } from '../lib/queries';
 import { useToast } from '../lib/useToast';
+import { useCollectionPlayback } from '../lib/collectionPlayback';
 import { VideoPlayer, type PlayerSource } from '../player/VideoPlayer';
 
 export function PlayerPage() {
@@ -15,10 +16,16 @@ export function PlayerPage() {
   const toast = useToast();
   const [search] = useSearchParams();
   const localId = Number(search.get('local')) || null;
-  const local = useQuery({queryKey:['local-open',localId],queryFn:()=>call('collection.open',{id:localId!}),enabled:!!localId,retry:false,staleTime:Infinity});
+  const local = useCollectionPlayback(localId);
   const [input, setInput] = useState('');
   const [subs, setSubs] = useState('');
   const [current, setCurrent] = useState<{ source: PlayerSource; title: string } | null>(null);
+
+  const localUrl = current?.source.url.startsWith('https://localmedia.localhost/') ? current.source.url : null;
+  useEffect(() => {
+    if (!localUrl) return;
+    return () => void window.aniverse?.releasePlayerFile?.(localUrl).catch(() => undefined);
+  }, [localUrl]);
 
   const playUrl = () => {
     const url = input.trim();
@@ -55,6 +62,7 @@ export function PlayerPage() {
           <button className="btn" onClick={() => void openFile()}>
             <FolderOpen size={15} /> Open file
           </button>
+          <DownloadMp4Button url={input.trim()} />
         </div>
         <span className="faint" style={{ fontSize: 'var(--fs-xs)' }}>
           Shortcuts: Space/K play · J/L ±{settings.player.seekStep}s · ←/→ ±5s · ↑/↓ volume · F fullscreen · M mute · S skip {settings.player.skipStep}s · &lt; &gt; speed · 0–9 jump

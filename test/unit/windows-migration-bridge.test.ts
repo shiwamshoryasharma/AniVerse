@@ -9,11 +9,12 @@ import type { UpdateService } from '../../electron/updater';
 
 const stub = vi.hoisted(() => ({
   find: vi.fn(), download: vi.fn(), confirm: vi.fn(), spawn: vi.fn(), quit: vi.fn(),
-  executable: 'C:\\Program Files\\AniVerse\\AniVerse.exe', resume: vi.fn(), pause: vi.fn(),
+  executable: 'C:\\Program Files\\AniVerse\\AniVerse.exe', resume: vi.fn(), pause: vi.fn(), exportWebsiteSessions: vi.fn(),
 }));
 vi.mock('electron', () => ({ app: { getVersion: () => '9.2.4', getPath: () => stub.executable, quit: stub.quit },
   dialog: { showMessageBox: stub.confirm } }));
 vi.mock('node:child_process', () => ({ spawn: stub.spawn }));
+vi.mock('../../electron/migrationWebsiteSessions', () => ({ exportWebsiteSessions: stub.exportWebsiteSessions }));
 vi.mock('../../electron/migrationRelease', () => ({ findMigrationOffer: stub.find, downloadMigrationInstaller: stub.download }));
 
 describe.skipIf(process.platform !== 'win32' || process.arch !== 'x64')('signed Windows Electron handoff', () => {
@@ -64,6 +65,20 @@ describe.skipIf(process.platform !== 'win32' || process.arch !== 'x64')('signed 
     expect(stub.confirm).not.toHaveBeenCalled();
     expect(stub.download).not.toHaveBeenCalled();
     expect(stub.quit).not.toHaveBeenCalled();
+  });
+
+  it('keeps the original installation and only sends the encrypted archive to supported signed versions', async () => {
+    stub.find.mockResolvedValue({ offer: { version: '3.0.4' }, signed: { manifest: 'old-fixture' } });
+    launch('spawn');
+    await expect(bridge.start(window)).resolves.toBe('starting');
+    expect(stub.exportWebsiteSessions).not.toHaveBeenCalled();
+    expect(stub.confirm.mock.calls[0]?.[1].detail).toContain('AniVerse stays installed');
+    await mkdir(path.join(folder, 'next-attempt'));
+    stub.download.mockResolvedValue({ staging: path.join(folder, 'next-attempt'), file: path.join(folder, 'setup.exe') });
+    stub.find.mockResolvedValue({ offer: { version: '3.0.5' }, signed: { manifest: 'next-fixture' } });
+    await expect(bridge.start(window)).resolves.toBe('starting');
+    expect(stub.exportWebsiteSessions).toHaveBeenCalledExactlyOnceWith(paths.dataDir, path.join(folder, 'next-attempt'), expect.stringMatching(/^[a-f0-9-]{36}$/), []);
+    expect(await readFile(path.join(paths.configDir, 'streaming-sites.txt'), 'utf8')).toBe('https://fixture.test/\r\n');
   });
 
   it('requires confirmation before downloading', async () => {
