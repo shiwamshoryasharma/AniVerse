@@ -71,20 +71,19 @@ fn refuses_other_origins_and_credentialized_or_ambiguous_media_references() {
         "http://media.example.test/file.ts",
         "//127.0.0.1/admin",
         "file:///C:/Windows/win.ini",
-        "file.ts?token=secret",
         "file.ts#private",
         "https://u:p@media.example.test/video/file.ts",
     ] {
         let input = format!("#EXTM3U\n#EXTINF:2,\n{uri}\n#EXT-X-ENDLIST\n");
         assert!(rejected(&input).message.contains("outside"));
     }
-    rejected("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=200\nhigh.m3u8\n");
-    rejected("#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,URI=\"audio.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=200,AUDIO=\"a\"\nhigh.m3u8\n");
+    assert!(parsed("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=200\nhigh.m3u8\n").is_ok());
+    assert!(parsed("#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"Default\",URI=\"audio.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=200,AUDIO=\"a\"\nhigh.m3u8\n").is_ok());
     rejected("#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\",BYTERANGE=\"512@0\"\n#EXTINF:2,\npart.m4s\n#EXT-X-ENDLIST\n");
 }
 
 #[test]
-fn active_media_url_is_public_https_and_queryless() {
+fn generic_active_media_url_remains_public_https_and_queryless() {
     for value in [BASE, "https://media.example.test/episode.MP4"] {
         assert!(super::super::is_active_media_url(
             &Url::parse(value).unwrap()
@@ -94,8 +93,8 @@ fn active_media_url_is_public_https_and_queryless() {
         "https://localhost/file.m3u8",
         "https://192.168.0.1/file.mp4",
         "https://media.example.test:445/file.m3u8",
+        "https://media.example.test/files/a.m3u8?opaque=example",
         "https://media.example.test/a.mpd",
-        "https://media.example.test/files/a.m3u8?token=example",
         "https://media.example.test/a.m3u8#x",
     ] {
         assert!(
@@ -103,4 +102,14 @@ fn active_media_url_is_public_https_and_queryless() {
             "{value}"
         );
     }
+}
+
+#[test]
+fn accepts_selected_master_audio_and_subtitle_renditions_with_opaque_queries() {
+    assert!(parse_owned(&Url::parse(BASE).unwrap(), "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Original\",DEFAULT=YES,URI=\"audio.m3u8?opaque=1\"\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"English\",LANGUAGE=\"en\",URI=\"subs.m3u8?opaque=2\"\n#EXT-X-STREAM-INF:BANDWIDTH=100,AUDIO=\"audio\",SUBTITLES=\"subs\"\nlow.m3u8?opaque=3\n#EXT-X-STREAM-INF:BANDWIDTH=200,AUDIO=\"audio\",SUBTITLES=\"subs\"\nhigh.m3u8?opaque=4\n").is_ok());
+}
+
+#[test]
+fn accepts_manifest_listed_image_suffixes_without_treating_them_as_images() {
+    assert!(parse_owned(&Url::parse(BASE).unwrap(), "#EXTM3U\n#EXTINF:1,\nfirst.png?opaque=one\n#EXTINF:1,\nsecond.webp?opaque=two\n#EXT-X-ENDLIST\n").is_ok());
 }

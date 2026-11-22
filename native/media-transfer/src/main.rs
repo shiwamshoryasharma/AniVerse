@@ -1,6 +1,7 @@
 mod hls;
 mod remux;
 mod transfer;
+mod vtt;
 
 use aniverse_security::allows_public_address;
 use reqwest::{redirect::Policy, Client, Url};
@@ -36,8 +37,114 @@ struct Request {
     url: String,
     observed: Option<String>,
     destination: PathBuf,
+    #[serde(default)]
+    playlists: Vec<String>,
+    #[serde(default)]
+    observations: Vec<String>,
+    subtitle: Option<SubtitleRequest>,
+    #[serde(rename = "expectedDuration")]
+    expected_duration: Option<f64>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SubtitleRequest {
+    url: Option<String>,
+    language: Option<String>,
+    label: Option<String>,
+}
+fn selection(request: &Request) -> Result<remux::Selection, RpcError> {
+    let bad = || invalid("The active media selection is invalid.");
+    if request.playlists.len() > 8 || request.observations.len() > 32 {
+        return Err(bad());
+    }
+    if request
+        .expected_duration
+        .is_some_and(|value| !value.is_finite() || value <= 0.0 || value > 21_600.0)
+    {
+        return Err(bad());
+    }
+    let owned = request.expected_duration.is_some() && !request.playlists.is_empty();
+    let public = |value: &str| {
+        Url::parse(value)
+            .ok()
+            .filter(|url| {
+                if owned {
+                    owned_media_url(url)
+                } else {
+                    public_media_url(url)
+                }
+            })
+            .ok_or_else(bad)
+    };
+    let playlists = request
+        .playlists
+        .iter()
+        .map(|value| {
+            public(value).and_then(|url| {
+                if has_extension(&url, "m3u8") {
+                    Ok(url)
+                } else {
+                    Err(bad())
+                }
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut observations = request
+        .observations
+        .iter()
+        .map(|value| public(value))
+        .collect::<Result<Vec<_>, _>>()?;
+    if let Some(observed) = &request.observed {
+        let url = public(observed)?;
+        if !observations.contains(&url) {
+            if observations.len() >= 32 {
+                return Err(bad());
+            }
+            observations.push(url);
+        }
+    }
+    let subtitle = request
+        .subtitle
+        .as_ref()
+        .map(|track| {
+            if track
+                .language
+                .as_ref()
+                .is_some_and(|value| value.len() > 64 || value.chars().any(char::is_control))
+                || track
+                    .label
+                    .as_ref()
+                    .is_some_and(|value| value.len() > 128 || value.chars().any(char::is_control))
+            {
+                return Err(bad());
+            }
+            Ok(remux::SubtitleChoice {
+                url: track.url.as_deref().map(public).transpose()?,
+                language: track.language.clone(),
+                label: track.label.clone(),
+            })
+        })
+        .transpose()?;
+    let scope = if owned {
+        Some(remux::OwnedScope::from_owned_selection(
+            &playlists,
+            subtitle.as_ref().and_then(|track| track.url.as_ref()),
+        )?)
+    } else {
+        if subtitle.is_some() {
+            return Err(bad());
+        }
+        None
+    };
+    Ok(remux::Selection {
+        scope,
+        expected_duration: request.expected_duration,
+        playlists,
+        observations,
+        subtitle,
+    })
+}
 fn main() -> ExitCode {
     let result = run();
     match result {
@@ -51,7 +158,7 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), RpcError> {
-    const REQUEST_LIMIT: u64 = 24 * 1024;
+    const REQUEST_LIMIT: u64 = 192 * 1024;
     let mut bytes = Vec::new();
     io::stdin()
         .lock()
@@ -71,21 +178,26 @@ fn run() -> Result<(), RpcError> {
     {
         return Err(invalid("Choose an absolute destination ending in .mp4."));
     }
-    let url = media_url(&request.url).ok_or_else(|| invalid("Choose a supported public video."))?;
-    let observed = request
-        .observed
-        .as_deref()
-        .map(|value| {
-            Url::parse(value)
-                .ok()
-                .filter(|url| public_media_url(url))
-                .ok_or_else(|| invalid("The active video reference is invalid."))
+    let selection = selection(&request)?;
+    let url = Url::parse(&request.url)
+        .ok()
+        .filter(|url| {
+            media_url(url.as_str()).is_some()
+                || (has_extension(url, "m3u8")
+                    && selection
+                        .scope
+                        .as_ref()
+                        .is_some_and(|scope| scope.contains(url)))
         })
-        .transpose()?;
+        .ok_or_else(|| invalid("Choose a supported public video."))?;
     let hls = has_extension(&url, "m3u8");
-    if observed.is_some() && !hls {
+    if !hls
+        && (!selection.observations.is_empty()
+            || !selection.playlists.is_empty()
+            || selection.subtitle.is_some())
+    {
         return Err(invalid(
-            "The active video reference does not match the transfer.",
+            "The selected tracks require a clear on-demand HLS stream.",
         ));
     }
     let format = convertible_format(&url);
@@ -106,7 +218,7 @@ fn run() -> Result<(), RpcError> {
         .build()
         .map_err(|_| invalid("Could not start the download worker."))?;
     let transfer = runtime.spawn(async move {
-        let transport = public_transport(&url).await?;
+        let transport = remux::selection_transport(&url, &selection).await?;
         let progress = |received, total| publish(json!({"received": received, "total": total}));
         timeout(Duration::from_secs(45 * 60), async {
             if let Some(ffmpeg) = ffmpeg.as_ref() {
@@ -121,10 +233,10 @@ fn run() -> Result<(), RpcError> {
                     )
                     .await
                 } else {
-                    remux::save(
+                    remux::save_selected(
                         &transport,
                         &url,
-                        observed.as_ref(),
+                        &selection,
                         &request.destination,
                         ffmpeg,
                         progress,
@@ -243,8 +355,10 @@ fn has_extension(url: &Url, expected: &str) -> bool {
 }
 
 fn public_media_url(url: &Url) -> bool {
+    url.query().is_none() && owned_media_url(url)
+}
+fn owned_media_url(url: &Url) -> bool {
     url.as_str().len() <= 4096
-        && url.query().is_none()
         && url.fragment().is_none()
         && url.username().is_empty()
         && url.password().is_none()
@@ -264,6 +378,17 @@ fn public_media_url(url: &Url) -> bool {
 }
 
 async fn public_transport(url: &Url) -> Result<Client, RpcError> {
+    if !public_media_url(url) {
+        return Err(invalid(
+            "Choose a public media URL without query parameters.",
+        ));
+    }
+    public_transport_checked(url).await
+}
+async fn public_transport_checked(url: &Url) -> Result<Client, RpcError> {
+    if !owned_media_url(url) {
+        return Err(invalid("The media URL is invalid."));
+    }
     let failed = || RpcError::new("network", "Could not reach a public media host.");
     let fixture = fixture_source(url);
     let host = url.host_str().ok_or_else(failed)?.trim_matches(['[', ']']);

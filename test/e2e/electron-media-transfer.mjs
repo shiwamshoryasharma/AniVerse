@@ -119,7 +119,7 @@ try {
 
   for (const [manifest, observed, wording] of [
     ['/protected.m3u8', undefined, /protected/],
-    ['/ts/episode.m3u8', '/fragmented/part-0.m4s', /does not match/],
+    ['/ts/episode.m3u8', '/fragmented/part-0.m4s', /(?:does|do) not match/],
   ]) {
     const index = requests.length;
     const missing = path.join(scratch, 'refused.mp4');

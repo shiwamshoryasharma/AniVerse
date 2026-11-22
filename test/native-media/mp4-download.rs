@@ -38,6 +38,8 @@ fn request(listener: &TcpListener) -> (TcpStream, String) {
             Err(error) => panic!("missing expected request: {error}"),
         }
     };
+    // Windows can inherit the listener nonblocking mode on an accepted socket.
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();

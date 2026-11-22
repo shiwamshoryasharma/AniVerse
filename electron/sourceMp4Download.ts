@@ -11,7 +11,8 @@ import { SourceNetworkGuard } from './sourceNetwork';
 import { readOwnedPlayer } from './ownedPlayerFrame';
 
 declare const __ANIVERSE_DOWNLOAD_SCRIPT__: string;
-type MediaCandidate = { media: string; url: string; observed?: string };
+type SubtitleChoice = { url?: string; language?: string; label?: string };
+type MediaCandidate = { media: string; url: string; observed?: string; playlists?: string[]; observations?: string[]; subtitle?: SubtitleChoice; expectedDuration?: number };
 type Mp4Progress = { received: number; total: number | null };
 
 const maxBytes = 8 * 1024 ** 3;
@@ -95,8 +96,8 @@ export class SourceMp4Download {
     return this.saveMedia(guest, selected, async () => {
       if (!current()) return false;
       const refreshed = await this.inspect(guest);
-      return !!refreshed && refreshed.media === selected.media && refreshed.url === selected.url && current();
-    });
+      return !!refreshed && refreshed.media === selected.media && refreshed.url === selected.url && refreshed.expectedDuration === selected.expectedDuration && current();
+    }, current);
   }
 
   private async inspect(guest: WebContents): Promise<MediaCandidate | null> {
@@ -104,37 +105,50 @@ export class SourceMp4Download {
     if (!observed || typeof observed !== 'object') return null;
     const raw = observed as Record<string, unknown>;
     if (typeof raw.media !== 'string' || raw.media.length > 4096) return null;
-    const url = this.publicUrl(raw.url, downloadableVideoPath);
+    const url = this.publicUrl(raw.url, downloadableVideoPath, true);
     if (!url) return null;
     if (!raw.media.startsWith('blob:')) {
-      return this.publicUrl(raw.media, downloadableVideoPath)?.href === url.href
-        ? { media: raw.media, url: url.href } : null;
+      if (this.publicUrl(raw.media, downloadableVideoPath, true)?.href !== url.href) return null;
+      if (!/\.m3u8$/i.test(url.pathname)) return { media: raw.media, url: url.href };
     }
-    const segment = this.publicUrl(raw.observed, /\.(?:ts|m4s|cmfv)$/i);
-    return segment && /\.m3u8$/i.test(url.pathname) && segment.origin === url.origin
-      ? { media: raw.media, url: url.href, observed: segment.href } : null;
+    const values = (value: unknown, limit: number, extension?: RegExp) => {
+      if (!Array.isArray(value) || value.length > limit) return [];
+      return [...new Set(value.map(item => this.publicUrl(item, extension, true)?.href).filter((item): item is string => !!item))];
+    };
+    const playlists = values(raw.playlists ?? [url.href], 8, /\.m3u8$/i);
+    const observations = values(raw.observations ?? (raw.observed ? [raw.observed] : []), 32);
+    if (!playlists.includes(url.href) || (raw.media.startsWith('blob:') && !observations.length)) return null;
+    const expectedDuration = raw.expectedDuration;
+    if (typeof expectedDuration !== 'number' || !Number.isFinite(expectedDuration) || expectedDuration <= 0 || expectedDuration > 21600) return null;
+    let subtitle: SubtitleChoice | undefined;
+    if (raw.subtitle && typeof raw.subtitle === 'object') {
+      const track = raw.subtitle as Record<string, unknown>;
+      const trackUrl = this.publicUrl(track.url, undefined, true)?.href;
+      const language = typeof track.language === 'string' && track.language.length <= 64 ? track.language : undefined;
+      const label = typeof track.label === 'string' && track.label.length <= 128 ? track.label : undefined;
+      subtitle = { ...(trackUrl ? { url: trackUrl } : {}), ...(language ? { language } : {}), ...(label ? { label } : {}) };
+    }
+    return { media: raw.media, url: url.href, playlists, observations, ...(expectedDuration !== undefined ? { expectedDuration } : {}), ...(subtitle ? { subtitle } : {}) };
   }
 
-  private publicUrl(value: unknown, extension: RegExp): URL | null {
+  private publicUrl(value: unknown, extension?: RegExp, owned = false): URL | null {
     if (typeof value !== 'string' || value.length > 4096) return null;
     try {
       const url = new URL(value);
       const fixture = process.env.ANIVERSE_TEST_PROFILE === '1'
         && url.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(url.hostname)
         && url.origin === process.env.ANIVERSE_TEST_MEDIA_ORIGIN;
-      if (!extension.test(url.pathname) || url.search || url.hash || url.username || url.password) return null;
+      if ((extension && !extension.test(url.pathname)) || (!owned && url.search) || url.hash || url.username || url.password) return null;
       if (fixture || (url.protocol === 'https:' && !url.port
-        && this.policy.decide({ context: 'handoff', url: url.href, source: url.href }).allowed)) {
-        return url;
-      }
+        && this.policy.decide({ context: 'handoff', url: url.href, source: url.href }).allowed)) return url;
     } catch { /* Invalid source URL. */ }
     return null;
   }
-
   private async saveMedia(
     owner: WebContents,
     selected: MediaCandidate,
     validate: () => boolean | Promise<boolean>,
+    current: () => boolean = () => !owner.isDestroyed(),
   ): Promise<boolean> {
     if (process.platform !== 'win32') throw Error('MP4 saving is available on Windows.');
     if (this.busy) throw Error('An MP4 download is already in progress.');
@@ -152,13 +166,13 @@ export class SourceMp4Download {
       if (canceled || !filePath || owner.isDestroyed()) return false;
       if (path.extname(filePath).toLowerCase() !== '.mp4') throw Error('Choose a filename ending in .mp4.');
       if (!await validate()) throw Error('The active video changed before the download started.');
-      return await this.transfer(owner, { url: selected.url, observed: selected.observed, destination: filePath });
+      return await this.transfer(owner, { ...selected, destination: filePath }, current);
     } finally {
       this.busy = false;
     }
   }
 
-  private async transfer(owner: WebContents, request: { url: string; observed?: string; destination: string }) {
+  private async transfer(owner: WebContents, request: MediaCandidate & { destination: string }, current: () => boolean) {
     const resources = app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build/vendor');
     const worker = spawn(path.join(resources, 'ffmpeg/aniverse-media-transfer.exe'), [], {
       stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true,
@@ -167,14 +181,16 @@ export class SourceMp4Download {
       worker.once('error', () => resolve(null));
       worker.once('close', code => resolve(code));
     });
-    const stop = () => worker.stdin.end();
+    let cancelled = false;
+    const stop = () => { cancelled = true; worker.stdin.end(); };
+    const monitor = setInterval(() => { if (!current()) stop(); }, 250);
     owner.once('destroyed', stop);
     worker.stdin.on('error', () => { /* Worker startup and transfer failure are reported below. */ });
     const lines = createInterface({ input: worker.stdout });
     let completed = false;
     let message = 'The bundled MP4 download helper could not complete the transfer.';
     try {
-      worker.stdin.write(JSON.stringify(request) + '\n');
+      worker.stdin.write(JSON.stringify({ url: request.url, observed: request.observed, playlists: request.playlists, observations: request.observations, subtitle: request.subtitle, expectedDuration: request.expectedDuration, destination: request.destination }) + '\n');
       for await (const line of lines) {
         if (line.length > 4096) continue;
         let event: { done?: boolean; error?: string; received?: number; total?: number | null };
@@ -188,11 +204,12 @@ export class SourceMp4Download {
         }
       }
       const code = await result;
-      if (owner.isDestroyed()) return false;
+      if (cancelled || owner.isDestroyed() || !current()) return false;
       if (code === -1073741515 || code === 3221225781) throw Error('Windows could not load the bundled video download helper. Update or reinstall AniVerse.');
       if (code !== 0 || !completed) throw Error(message);
       return true;
     } finally {
+      clearInterval(monitor);
       owner.removeListener('destroyed', stop);
       lines.close();
       stop();

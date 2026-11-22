@@ -5,6 +5,13 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.3.3',date:'2026-11-22',title:'Save the playing video, audio and captions',
+   summary:'More supported clear on-demand HLS downloads, with the playing rendition and accessible WebVTT subtitles.',
+   items:[
+    {kind:'fixed',icon:'cast',title:'Recognize media behind misleading filenames',description:'Manifest-listed TS and fragmented MP4 segments can be saved even when their names or MIME types suggest PNG or WebP. Actual images and unsupported protected streams are rejected.'},
+    {kind:'improved',icon:'fix',title:'Match the playing quality and audio',description:'Download selection checks recent playback observations, playlist membership and video duration. Separate audio is combined into the MP4 while existing files remain protected.',action:{label:'Open Player settings',path:'/settings/player'}},
+    {kind:'added',icon:'layout',title:'Keep accessible WebVTT captions',description:'The current subtitle track, or a declared default when available, becomes selectable MP4 captions. Clear complete on-demand streams are required; live, encrypted and byte-range HLS remain unsupported.'},
+   ]},
   {version:'2.3.2',date:'2026-11-22',title:'Your selected colours, from startup',
    summary:'The Electron app restores your saved theme and custom interface colours when it opens.',
    items:[

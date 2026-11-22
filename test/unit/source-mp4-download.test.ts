@@ -1,29 +1,33 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RustPolicy } from '../../app/core/security/rustPolicy';
 import { SourceMp4Download } from '../../electron/sourceMp4Download';
 
-const mocks = vi.hoisted(() => ({ showSaveDialog: vi.fn(), fetch: vi.fn() }));
+const mocks = vi.hoisted(() => ({ showSaveDialog: vi.fn(), fetch: vi.fn(), inspect: vi.fn(), spawn: vi.fn() }));
 vi.mock('electron', () => ({
-  app: { getPath: () => 'windows-downloads' },
+  app: { getPath: () => 'windows-downloads', getAppPath: () => '.' },
   BrowserWindow: { fromWebContents: () => ({}) },
   dialog: { showSaveDialog: mocks.showSaveDialog },
   session: { fromPartition: () => ({ fetch: mocks.fetch, protocol: { isProtocolHandled: async () => true } }) },
 }));
+vi.mock('../../electron/ownedPlayerFrame', () => ({ readOwnedPlayer: mocks.inspect }));
+vi.mock('node:child_process', () => ({ spawn: mocks.spawn }));
 const policy = new RustPolicy(readFileSync('dist/electron/security.wasm'));
 const mp4 = Buffer.from('000000146674797069736f6d000000006d703432', 'hex');
 const url = 'https://media.test/clip.mp4';
 let folder: string;
 let output: string;
 beforeEach(() => {
+  vi.stubGlobal('__ANIVERSE_DOWNLOAD_SCRIPT__', 'owned readonly player inspection');
   folder = mkdtempSync(path.join('test/cache/', 'windows-mp4-'));
   output = path.join(folder, 'saved.mp4');
   mocks.showSaveDialog.mockReset().mockResolvedValue({ canceled: false, filePath: output });
   mocks.fetch.mockReset();
 });
-afterEach(() => rmSync(folder, { recursive: true, force: true }));
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); rmSync(folder, { recursive: true, force: true }); });
 
 function save(bytes: Buffer, length = bytes.length) {
   const body = new ReadableStream({ start(controller) {
@@ -51,4 +55,44 @@ it('preserves an existing destination even when the save dialog returns its name
   writeFileSync(output, 'existing');
   await expect(save(mp4)).rejects.toThrow('already exists');
   expect(readFileSync(output, 'utf8')).toBe('existing');
+});
+
+type CandidateInspector = { inspect(guest: unknown): Promise<Record<string, unknown> | null> };
+it('validates bounded HLS observations while preserving opaque queries and a selected public subtitle', async () => {
+  const offered = { media: 'blob:https://player.test/playing', url: 'https://media.test/video.m3u8?opaque=1', expectedDuration: 120,
+    playlists: ['https://media.test/video.m3u8?opaque=1'], observations: ['https://media.test/part.png?opaque=2'],
+    subtitle: { url: 'https://captions.test/en.vtt?opaque=3', language: 'en', label: 'English' } };
+  mocks.inspect.mockResolvedValue(offered);
+  const inspector = new SourceMp4Download(policy, () => folder) as unknown as CandidateInspector;
+  await expect(inspector.inspect({})).resolves.toEqual(offered);
+  mocks.inspect.mockResolvedValue({ ...offered, media: offered.url });
+  await expect(inspector.inspect({})).resolves.toEqual({ ...offered, media: offered.url });
+  mocks.inspect.mockResolvedValue({ ...offered, observations: ['https://user:password@media.test/private.png'] });
+  await expect(inspector.inspect({})).resolves.toBeNull();
+  mocks.inspect.mockResolvedValue({ ...offered, observations: Array(33).fill(offered.observations[0]) });
+  await expect(inspector.inspect({})).resolves.toBeNull();
+  mocks.inspect.mockResolvedValue({ ...offered, media: 'https://media.test/different.m3u8' });
+  await expect(inspector.inspect({})).resolves.toBeNull();
+});
+it('cancels its owned worker when the playing episode scope changes during a transfer', async () => {
+  vi.useFakeTimers();
+  const stdout = new PassThrough(), stdin = new PassThrough();
+  const worker = Object.assign(new EventEmitter(), { stdout, stdin });
+  mocks.spawn.mockReturnValue(worker);
+  stdin.once('finish', () => { stdout.end(); worker.emit('close', 1); });
+  const owner = Object.assign(new EventEmitter(), { isDestroyed: () => false });
+  let current = true;
+  const service = new SourceMp4Download(policy, () => folder) as unknown as {
+    transfer(owner: unknown, request: unknown, current: () => boolean): Promise<boolean>;
+  };
+  const result = service.transfer(owner, { media: url, url, destination: output }, () => current);
+  current = false;
+  await vi.advanceTimersByTimeAsync(251);
+  await expect(result).resolves.toBe(false);
+  expect(stdin.writableEnded).toBe(true);
+});
+
+it('keeps generic public URL actions queryless while the owned player uses scoped references', () => {
+  const service = new SourceMp4Download(policy, () => folder);
+  expect(() => service.saveDirect({} as never, url + '?opaque=not-an-owned-selection')).toThrow('supported public HTTPS video');
 });
