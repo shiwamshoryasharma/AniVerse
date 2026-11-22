@@ -113,10 +113,14 @@ try {
     '<button data-episode="1" aria-selected="true">Episode 1</button></main>' +
     '<script src="/hls.min.js"></script><script>const video=document.querySelector("video");' +
     'const hls=new Hls({enableWorker:false});hls.loadSource("/fixture.m3u8?master=fixture");hls.attachMedia(video);' +
-    'hls.on(Hls.Events.MANIFEST_PARSED,()=>video.play().catch(()=>{}));</script>';
+    'hls.on(Hls.Events.MANIFEST_PARSED,()=>video.play().catch(()=>{}));'+
+    'let tick=0;setInterval(()=>{if(video.currentTime>0)fetch("/audio.m3u8?audio=fixture&inspection="+(++tick)).then(response=>response.text()).catch(()=>{});},600);</script>';
   const mediaHits = new Map();
+  const churnHits=[];
   server = createServer((request, response) => {
-    const route = new URL(request.url, 'http://127.0.0.1').pathname;
+    const incoming=new URL(request.url,'http://127.0.0.1');
+    const route=incoming.pathname;
+    if(incoming.searchParams.has('inspection'))churnHits.push(Date.now());
     if(stallDownloads && /^\/(?:video|audio)-/.test(route) && !request.headers["user-agent"]){nativeSegmentWaiting?.();return;}
     if (files.has(route)) {
       mediaHits.set(route, (mediaHits.get(route) ?? 0) + 1);
@@ -196,7 +200,7 @@ try {
     button.onclick = async () => {
       try {
         window.streamSaveResult = {value:await window.aniverse.invoke('site.surface',{
-          action:'downloadMedia',webContentsId:id,save:true,
+          action:'downloadMedia',webContentsId:id,save:true,filenameContext:{title:'Stream Fixture',season:2,episode:1},
         })};
       } catch (error) {
         window.streamSaveResult = {error:error.message};
@@ -204,18 +208,28 @@ try {
     };
     document.body.append(button);
   },webContentsId);
+  const expectedName='Stream Fixture - S02E01.mp4';
+  const dialogProof=path.join(run,'delayed-dialog.json');
   dialog = spawn('powershell.exe', [
     '-NoProfile','-NonInteractive','-File',path.resolve('test/e2e/fixtures/aniverse2-submit-save.ps1'),
-    '-AppPid',String(child.pid),'-Destination',path.join(destination,'fixture.mp4'),
+    '-AppPid',String(child.pid),'-Destination',path.join(destination,expectedName),
+    '-DelayMilliseconds','3500','-StateFile',dialogProof,
   ], {windowsHide:true,env,stdio:['ignore','ignore','inherit']});
   const dialogExit = once(dialog, 'exit');
   await page.locator('#fixture-save-stream').click();
   assert.equal((await dialogExit)[0],0,'Native Save As did not submit');
   const saved = await poll(()=>page.evaluate(()=>window.streamSaveResult), 'The MP4 transfer did not finish', 45000);
   assert.deepEqual(saved,{value:true});
+  const dialogState=JSON.parse(await readFile(dialogProof,'utf8'));
+  const changesWhileOpen=churnHits.filter(at=>at>=Date.parse(dialogState.openedUtc)&&at<=Date.parse(dialogState.submittedUtc)).length;
+  assert.ok(changesWhileOpen>=2,'The fixture must advance real audio-playlist observations while Save As is open');
+  report.dialog={...dialogState,changesWhileOpen};
+  report.checks.sameVideoSurvivesDelayedSaveAs=true;
+  report.checks.seriesSeasonEpisodeDefaultFilename=true;
   const outputs = await readdir(destination);
   assert.equal(outputs.length,1);
-  assert.match(outputs[0],/\.mp4$/i);
+  assert.equal(outputs[0],expectedName);
+  report.dialog.defaultFilenameVerifiedBySavedOutput=true;
   const output = path.join(destination,outputs[0]);
   const measured = JSON.parse(ff('ffprobe',[
     '-v','error','-show_entries','format=duration:stream=codec_type,codec_name,start_time,duration','-of','json',output,
@@ -243,8 +257,17 @@ try {
   ff('ffmpeg', ['-v','error','-xerror','-i',output,'-f','null','-']);
   await poll(async () => (await rpc('player.probe',{webContentsId}))?.video?.totalFrames>before.video.totalFrames,
     'Video stopped decoding while saving');
-  report.output = {bytes:(await readFile(output)).length,duration,onsetGap,endGap,video:video.codec_name,audio:audio.codec_name,subtitle:subtitle.codec_name,cueStarts};
+  report.output = {filename:outputs[0],bytes:(await readFile(output)).length,duration,onsetGap,endGap,video:video.codec_name,audio:audio.codec_name,subtitle:subtitle.codec_name,cueStarts};
   report.checks.nativeSaveAsRemuxedSyncedAudioVideo = true;
+
+  await page.evaluate(()=>{delete window.streamSaveResult;});
+  dialog=spawn('powershell.exe',['-NoProfile','-NonInteractive','-File',path.resolve('test/e2e/fixtures/aniverse2-submit-save.ps1'),'-AppPid',String(child.pid),'-Destination',path.join(destination,expectedName),'-Cancel'],{windowsHide:true,env,stdio:['ignore','ignore','inherit']});
+  const canceledDialogExit=once(dialog,'exit');
+  await page.locator('#fixture-save-stream').click();
+  assert.equal((await canceledDialogExit)[0],0);
+  assert.deepEqual(await poll(()=>page.evaluate(()=>window.streamSaveResult),'Dialog cancellation did not finish'),{value:false});
+  assert.deepEqual(await readdir(destination),[expectedName]);
+  report.checks.cancelledSaveAsLeavesExistingFileUntouched=true;
 
   // Revoke a real in-flight native request while its first segment is stalled.
   // The already verified file is retained outside the destination during this case.

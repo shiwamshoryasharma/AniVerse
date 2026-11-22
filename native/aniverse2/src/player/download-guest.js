@@ -11,6 +11,12 @@
   const video = videos[0], media = video.currentSrc;
   if (!media || media.length > 4096 || video.mediaKeys || video.srcObject) return null;
 
+  // Private isolated-world state binds the actual video element and document.
+  // Rolling request order, text-track discovery and playhead changes are evidence, not identity.
+  const state = globalThis.__avDownloadNodes ??= { document: crypto.randomUUID(), nodes: new WeakMap(), next: 0 };
+  if (!state.nodes.has(video)) state.nodes.set(video, ++state.next);
+  const identity = state.document + ':' + state.nodes.get(video);
+
   const plain = name => {
     if (typeof name !== 'string' || name.length > 4096 || /[\u0000-\u001f\u007f]/.test(name)) return null;
     try {
@@ -38,7 +44,7 @@
   };
   const subtitle = subtitleHint();
   const direct = plain(media);
-  if (direct && /\.mp4$/i.test(new URL(direct).pathname)) return { media, expectedDuration: video.duration, url: direct, ...(subtitle ? { subtitle } : {}) };
+  if (direct && /\.mp4$/i.test(new URL(direct).pathname)) return { identity, media, expectedDuration: video.duration, url: direct, ...(subtitle ? { subtitle } : {}) };
   if (!media.startsWith('blob:') && (!direct || !/\.m3u8$/i.test(new URL(direct).pathname))) return null;
 
   const resources = performance.getEntriesByType('resource').filter(entry =>
@@ -60,5 +66,5 @@
     playlists.length = Math.min(playlists.length, 8);
   }
   if (!playlists.length || (!direct && !observations.length)) return null;
-  return { media, expectedDuration: video.duration, url: playlists[0], playlists, observations, ...(subtitle ? { subtitle } : {}) };
+  return { identity, media, expectedDuration: video.duration, url: playlists[0], playlists, observations, ...(subtitle ? { subtitle } : {}) };
 })()

@@ -1,3 +1,4 @@
+mod filename;
 mod hls;
 mod remux;
 mod transfer;
@@ -26,6 +27,7 @@ use tokio::{net::lookup_host, sync::oneshot, time::timeout};
 struct SaveRequest {
     url: String,
     source_id: Option<String>,
+    filename_context: Option<Value>,
 }
 
 pub(crate) struct Service {
@@ -105,6 +107,9 @@ impl Service {
         input: Option<&Value>,
         data: &Path,
     ) -> Result<Value, RpcError> {
+        if input.is_some_and(|input| input.get("filenameContext").is_some_and(Value::is_null)) {
+            return Err(invalid("The episode filename context is invalid."));
+        }
         let input = input
             .cloned()
             .and_then(|value| serde_json::from_value::<SaveRequest>(value).ok())
@@ -127,6 +132,7 @@ impl Service {
             window,
             url,
             Selection::default(),
+            filename_from_context(input.filename_context.as_ref())?,
             || async { true },
             || true,
         )
@@ -138,6 +144,7 @@ impl Service {
         window: &Webview,
         url: Url,
         selection: Selection,
+        filename_context: Option<Value>,
         validate: impl Fn() -> Fut,
         owned: impl Fn() -> bool + Sync,
     ) -> Result<Value, RpcError> {
@@ -149,8 +156,15 @@ impl Service {
             ));
         }
         let selection = bind_player_scope(&url, selection, &owned)?;
-        self.save_validated(window, url, selection, validate, owned)
-            .await
+        self.save_validated(
+            window,
+            url,
+            selection,
+            filename_from_context(filename_context.as_ref())?,
+            validate,
+            owned,
+        )
+        .await
     }
 
     async fn save_validated<Fut: Future<Output = bool>>(
@@ -158,6 +172,7 @@ impl Service {
         window: &Webview,
         url: Url,
         selection: Selection,
+        filename: Option<String>,
         validate: impl Fn() -> Fut,
         owned: impl Fn() -> bool + Sync,
     ) -> Result<Value, RpcError> {
@@ -166,7 +181,7 @@ impl Service {
             .file()
             .set_title("Save MP4 as")
             .add_filter("MP4 video", &["mp4"])
-            .set_file_name(suggested_name(&url))
+            .set_file_name(filename.unwrap_or_else(|| suggested_name(&url)))
             .set_parent(&window.window());
         if let Some(directory) = self.initial_directory(window) {
             dialog = dialog.set_directory(directory);
@@ -514,3 +529,12 @@ async fn while_owned<T>(
 #[cfg(test)]
 #[path = "../../../test/tauri-compat/download-ownership.rs"]
 mod ownership_tests;
+
+fn filename_from_context(context: Option<&Value>) -> Result<Option<String>, RpcError> {
+    context
+        .map(|context| {
+            filename::episode_filename(context)
+                .ok_or_else(|| invalid("The episode filename context is invalid."))
+        })
+        .transpose()
+}

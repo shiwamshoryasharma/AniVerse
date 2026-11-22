@@ -1,9 +1,9 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import type { BrowseQuery, CommentsQuery, DeepPartial, ListStatus, MediaRef, MediaSnapshot, ProgressSave, Settings, SourceOverridePatch } from '../../../app/shared/types';
 import { call, isAniVerse2, onEvent } from './bridge';
 import { DEFAULT_SETTINGS_FALLBACK } from './settingsFallback';
-import { refreshSourcesOnFocus } from './refreshManager';
+import { automaticQueriesVisible, subscribeAutomaticVisibility } from './automaticRefresh';
 
 export const keys = {
   home: ['home'] as const,
@@ -42,7 +42,8 @@ export function latestQueryOptions(page: number, enabled: boolean, ready: boolea
 }
 export function useHome() {
   const ready = useSettingsReady();
-  return useQuery(homeQueryOptions(ready));
+  const visible = useAutomaticQueriesVisible();
+  return useQuery(homeQueryOptions(ready && visible));
 }
 
 export const useDetails = (id: number) =>
@@ -115,6 +116,13 @@ export function useSettingsQuery() {
   return useQuery({ queryKey: keys.settings, queryFn: () => call('settings.get'), staleTime: Infinity });
 }
 export function useSettingsReady() { return useSettingsQuery().isSuccess; }
+export function useAutomaticQueriesVisible() {
+  const client = useQueryClient();
+  return useSyncExternalStore(
+    listener => subscribeAutomaticVisibility(client, listener),
+    () => !isAniVerse2 || automaticQueriesVisible(client),
+  );
+}
 export function useSettings(): Settings {
   return useSettingsQuery().data ?? DEFAULT_SETTINGS_FALLBACK;
 }
@@ -218,11 +226,8 @@ export function useBridgeEvents(qc: QueryClient) {
         }
       }),
     ];
-    const refreshSources = () => void refreshSourcesOnFocus(qc);
-    if (isAniVerse2) window.addEventListener('focus', refreshSources);
     return () => {
       offs.forEach((off) => off());
-      if (isAniVerse2) window.removeEventListener('focus', refreshSources);
     };
   }, [qc]);
 }

@@ -14,6 +14,7 @@ import './styles/aniverse2-appearance.css';
 import './lib/aniverse2Appearance';
 import { isAniVerse2 } from './lib/bridge';
 import { retryQuery } from './lib/refreshManager';
+import { initializeDesktopRefresh } from './lib/automaticRefresh';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -33,6 +34,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+if (isAniVerse2) initializeDesktopRefresh(queryClient);
 
 const router = createHashRouter([
   {

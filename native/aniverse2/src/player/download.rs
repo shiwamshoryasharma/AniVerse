@@ -19,6 +19,14 @@ pub(super) async fn request(
         .lock()
         .ok()
         .and_then(|active| *active);
+    let filename_context = input.get("filenameContext").cloned();
+    if filename_context.as_ref().is_some_and(|context| {
+        !episode.is_some_and(|(_, number)| context["episode"].as_u64() == Some(number as u64))
+    }) {
+        return Err(failure(
+            "The episode filename context does not match the selected episode.",
+        ));
+    }
     let current = || {
         episode.is_some()
             && session
@@ -52,6 +60,7 @@ pub(super) async fn request(
             owner,
             selected.url.clone(),
             selected.selection.clone(),
+            filename_context,
             || async {
                 if !current() {
                     return false;
@@ -68,6 +77,7 @@ pub(super) async fn request(
 }
 
 struct Candidate {
+    identity: String,
     media: String,
     url: Url,
     selection: downloads::Selection,
@@ -75,16 +85,16 @@ struct Candidate {
 
 impl Candidate {
     fn same_media(&self, next: &Self) -> bool {
-        let subtitle = |candidate: &Self| {
-            candidate.selection.subtitle.as_ref().map(|choice| {
-                (
-                    choice.url.clone(),
-                    choice.language.clone(),
-                    choice.label.clone(),
-                )
-            })
-        };
-        self.media == next.media && self.url == next.url && subtitle(self) == subtitle(next)
+        self.identity == next.identity
+            && self.media == next.media
+            && match (
+                self.selection.expected_duration,
+                next.selection.expected_duration,
+            ) {
+                (Some(before), Some(after)) => (before - after).abs() <= 0.5,
+                (None, None) => true,
+                _ => false,
+            }
     }
 }
 
@@ -144,7 +154,8 @@ fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
     if object.keys().any(|key| {
         !matches!(
             key.as_str(),
-            "media"
+            "identity"
+                | "media"
                 | "url"
                 | "observed"
                 | "playlists"
@@ -153,6 +164,15 @@ fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
                 | "expectedDuration"
         )
     }) {
+        return None;
+    }
+    let identity = offer["identity"].as_str()?.to_owned();
+    if identity.is_empty()
+        || identity.len() > 96
+        || !identity
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b':'))
+    {
         return None;
     }
     let media = offer["media"].as_str()?.to_owned();
@@ -224,6 +244,7 @@ fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
     };
     let direct_primary = media == primary.as_str();
     Some(Candidate {
+        identity,
         media,
         url: primary,
         selection: downloads::Selection {

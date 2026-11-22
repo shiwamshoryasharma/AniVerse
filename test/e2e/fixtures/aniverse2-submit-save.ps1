@@ -1,4 +1,4 @@
-param([int]$AppPid,[string]$Destination)
+param([int]$AppPid,[string]$Destination,[int]$DelayMilliseconds=0,[string]$StateFile,[switch]$Cancel)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
@@ -23,7 +23,14 @@ while([datetime]::UtcNow -lt $end) {
         if($item.Current.Name -ne 'Save MP4 as') {continue}
         $handle=[IntPtr]$item.Current.NativeWindowHandle
         if($handle -eq [IntPtr]::Zero) {continue}
-        if(![OwnedSaveQa]::PostMessage($handle,0x111,[IntPtr]1,[IntPtr]::Zero)) {throw 'Could not invoke Save on the fixture dialog.'}
+        // Never edit the filename: the saved output basename proves the app's default.
+        $state=[ordered]@{openedUtc=[datetime]::UtcNow.ToString('o');delayMilliseconds=$DelayMilliseconds;cancel=[bool]$Cancel}
+        if($StateFile){if(!$StateFile.StartsWith($path+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Dialog evidence must stay inside the isolated QA cache.'};[IO.File]::WriteAllText($StateFile,($state|ConvertTo-Json))}
+        if($DelayMilliseconds -gt 0){Start-Sleep -Milliseconds $DelayMilliseconds}
+        $state.submittedUtc=[datetime]::UtcNow.ToString('o')
+        if($StateFile){[IO.File]::WriteAllText($StateFile,($state|ConvertTo-Json))}
+        $action=if($Cancel){2}else{1}
+        if(![OwnedSaveQa]::PostMessage($handle,0x111,[IntPtr]$action,[IntPtr]::Zero)) {throw 'Could not invoke Save on the fixture dialog.'}
         exit 0
     }
     Start-Sleep -Milliseconds 150

@@ -476,7 +476,7 @@ pub(super) async fn devtools(
     method: &'static str,
     params: Value,
 ) -> Result<Value, RpcError> {
-    devtools_for(view, None, method, params).await
+    devtools_for(view, None, method, params, EVAL_LIMIT).await
 }
 
 async fn devtools_for(
@@ -484,6 +484,7 @@ async fn devtools_for(
     session: Option<String>,
     method: &'static str,
     params: Value,
+    result_limit: usize,
 ) -> Result<Value, RpcError> {
     let (send, recv) = oneshot::channel();
     view.with_webview(move |platform| {
@@ -496,7 +497,7 @@ async fn devtools_for(
                         let result = status
                             .map_err(|_| failure("The source page changed."))
                             .and_then(|_| {
-                                if reply.len() > EVAL_LIMIT {
+                                if reply.len() > result_limit {
                                     return Err(failure("Source page result is too large."));
                                 }
                                 serde_json::from_str(&reply)
@@ -526,6 +527,38 @@ async fn devtools_for(
         .await
         .map_err(|_| failure("Source page inspection timed out."))?
         .map_err(|_| failure("The source page changed."))?
+}
+
+pub(super) async fn image_resource(
+    session: &Session,
+    frame: &str,
+    url: &str,
+) -> Result<Value, RpcError> {
+    devtools_for(
+        &session.view,
+        None,
+        "Page.getResourceContent",
+        json!({"frameId":frame,"url":url}),
+        2 * 1024 * 1024 * 4 / 3 + 4096,
+    )
+    .await
+}
+
+pub(super) async fn image_script(session: &Session, expression: String) -> Result<Value, RpcError> {
+    let context = site_world(session).await?;
+    let result = devtools(
+        &session.view,
+        "Runtime.evaluate",
+        json!({
+            "expression":expression,"contextId":context,"returnByValue":true,
+            "awaitPromise":true,"userGesture":false,"allowUnsafeEvalBlockedByCSP":false
+        }),
+    )
+    .await?;
+    if !result["exceptionDetails"].is_null() {
+        return Err(failure("The source image could not be read."));
+    }
+    Ok(result["result"]["value"].clone())
 }
 
 pub(super) async fn evaluate(session: &Session, expression: String) -> Result<Value, RpcError> {
@@ -626,6 +659,7 @@ async fn audio_eval(
             "expression": expression, "contextId": context, "returnByValue": true,
             "awaitPromise": true, "userGesture": user_gesture, "allowUnsafeEvalBlockedByCSP": false,
         }),
+        EVAL_LIMIT,
     )
     .await?;
     if !audio_generation(session, generation)
@@ -737,10 +771,16 @@ async fn player_world(
     .await?;
     let target = protocol_id(&attached["sessionId"])
         .ok_or_else(|| failure("Could not attach to the selected source player frame."))?;
-    match devtools_for(&session.view, Some(target.clone()), method, options)
-        .await
-        .ok()
-        .and_then(|world| world["executionContextId"].as_i64())
+    match devtools_for(
+        &session.view,
+        Some(target.clone()),
+        method,
+        options,
+        EVAL_LIMIT,
+    )
+    .await
+    .ok()
+    .and_then(|world| world["executionContextId"].as_i64())
     {
         Some(context) => Ok(AudioFrameWorld {
             generation,

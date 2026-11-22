@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
+import { createContext, runInContext, runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 const script = readFileSync('native/aniverse2/src/player/download-guest.js', 'utf8');
@@ -14,7 +15,7 @@ function discover(options: { resources?: string[]; drm?: boolean; tracks?: objec
   };
   return runInNewContext(script, {
     document: { querySelector: () => null, querySelectorAll: () => Array(options.videos ?? 1).fill(video) },
-    HTMLIFrameElement: class {}, URL,
+    HTMLIFrameElement: class {}, URL, crypto: { randomUUID },
     performance: { getEntriesByType: () => (options.resources ?? [playlist, segment]).map(name => ({ name, initiatorType: 'fetch' })) },
   });
 }
@@ -47,4 +48,17 @@ describe('selected-player HLS discovery', () => {
     expect(offer.observations.length).toBeLessThanOrEqual(32);
     expect(offer.observations.some((url: string) => invalid.includes(url))).toBe(false);
   });
+});
+
+it('binds the same document/video node while request order advances and rejects replacement identity',()=>{
+  let video={clientWidth:640,clientHeight:360,checkVisibility:()=>true,readyState:4,videoWidth:320,duration:120,currentSrc:'blob:https://source.example.test/selected',mediaKeys:null,srcObject:null,querySelectorAll:()=>[]};
+  const resources=['https://media.example.test/master.m3u8','https://media.example.test/video.m3u8','https://media.example.test/1.webp'];
+  const context=createContext({document:{querySelector:()=>null,querySelectorAll:()=>[video]},HTMLIFrameElement:class{},URL,crypto:{randomUUID},performance:{getEntriesByType:()=>resources.map(name=>({name,initiatorType:'fetch'}))}});
+  const selected=runInContext(script,context);
+  resources.push('https://media.example.test/audio.m3u8','https://media.example.test/2.png');
+  const advanced=runInContext(script,context);
+  expect(advanced.identity).toBe(selected.identity);
+  expect(advanced.url).not.toBe(selected.url);
+  video={...video};
+  expect(runInContext(script,context).identity).not.toBe(selected.identity);
 });

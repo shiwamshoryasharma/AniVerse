@@ -7,7 +7,7 @@ import { isAniVerse2, platform } from '../lib/bridge';
 import { cx, timeAgo, titleOf } from '../lib/format';
 import {SourceCatalogueResults} from './SourceCatalogueResults';
 import {AudioFilter,type AudioChoice} from './AudioFilter';
-import { latestQueryOptions, useSettings, useSettingsReady } from '../lib/queries';
+import { latestQueryOptions, useSettings, useSettingsReady, useAutomaticQueriesVisible } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { ErrorState } from './common';
 import { MediaCard, SkeletonCards } from './MediaCard';
@@ -45,8 +45,9 @@ export function LatestGrid() {
   const toast = useToast();
   const lang = useSettings().appearance.titleLanguage;
   const ready = useSettingsReady();
+  const visible = useAutomaticQueriesVisible();
   const { data, error, refetch, isPlaceholderData, dataUpdatedAt } = useQuery({
-    ...latestQueryOptions(page, audio === 'all', ready),
+    ...latestQueryOptions(page, audio === 'all', ready && visible),
     placeholderData: keepPreviousData,
   });
 

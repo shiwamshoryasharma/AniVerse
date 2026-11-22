@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {deflateSync} from 'node:zlib';
 import {once} from 'node:events';
 import {createServer} from 'node:http';
 import {createServer as createSocket} from 'node:net';
@@ -11,7 +12,7 @@ import {chromium} from 'playwright-core';
 import {verifyGuestMirror} from './fixtures/aniverse2-capture-mirror.mjs';
 import {createSiteFocusFixture} from './fixtures/aniverse2-site-focus.mjs';
 
-const cache = path.resolve('test/cache/aniverse2');
+const cache = path.resolve(process.env.ANIVERSE2_TEST_CACHE ?? 'test/cache/aniverse2');
 const run = await mkdtemp(path.join(cache, 'rendered-player-'));
 const profile = path.join(run, 'profile');
 const clips = Object.fromEntries(await Promise.all(['sub', 'dub'].map(async key =>
@@ -25,6 +26,7 @@ const checkCapture = process.env.ANIVERSE2_CHECK_PLAYER_CAPTURE === '1';
 const checkMirror = process.env.ANIVERSE2_MIRROR_FIXTURE === '1';
 const checkSearchFlow = process.env.ANIVERSE2_CHECK_SEARCH_FLOW === '1';
 const checkArtwork = process.env.ANIVERSE2_CHECK_EPISODE_ARTWORK === '1';
+const checkArtworkParity = process.env.ANIVERSE2_CHECK_EPISODE_ARTWORK_PARITY === '1';
 const searchTerms = [];
 const fixtureTitle = checkSearchFlow ? 'Fixture Show: Special Edition' : 'Fixture Show';
 const privateRequests = [];
@@ -39,6 +41,10 @@ const html = `<!doctype html><meta charset="utf-8"><title>${fixtureTitle}</title
 <div class="servers"><button aria-pressed="true">SUB</button><button aria-pressed="false">DUB</button></div>
 <div class="episode"><button data-episode="1" aria-selected="true">Episode 1${checkArtwork?'<img src="/episode-art.svg" alt="">':''}</button></div></main>
 <script>
+if (${checkArtworkParity}) setTimeout(() => {
+  document.querySelector('.episode').innerHTML = '<button data-episode="1">Episode 1<img src="__ART_ORIGIN__/episode-art.png" alt=""></button>' +
+    '<button data-episode="2">Episode 2<img loading="lazy" data-src="__ART_ORIGIN__/episode-art.png?lazy" alt=""></button>';
+}, 6500);
 const video = document.querySelector('video');
 const buttons = [...document.querySelectorAll('.servers button')];
 let selection = 0;
@@ -48,12 +54,23 @@ for (const button of buttons) button.addEventListener('click', () => {
   video.play().catch(() => {});
 });
 </script>`;
+// An image fixture with two distinguishable pixel regions, without external assets.
+function artworkPng() {
+  const crc = bytes => {let c=0xffffffff;for(const b of bytes){c^=b;for(let n=0;n<8;n++)c=(c>>>1)^((c&1)?0xedb88320:0);}return (c^0xffffffff)>>>0;};
+  const chunk=(name,bytes)=>{const kind=Buffer.from(name),size=Buffer.alloc(4),sum=Buffer.alloc(4);size.writeUInt32BE(bytes.length);sum.writeUInt32BE(crc(Buffer.concat([kind,bytes])));return Buffer.concat([size,kind,bytes,sum]);};
+  const header=Buffer.alloc(13);header.writeUInt32BE(320);header.writeUInt32BE(180,4);header[8]=8;header[9]=2;
+  const rows=Buffer.alloc(180*(1+320*3));for(let y=0;y<180;y++)for(let x=0;x<320;x++){const at=y*(1+320*3)+1+x*3;rows.set(x<160?[232,59,53]:[23,99,131],at);}
+  return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',deflateSync(rows)),chunk('IEND',Buffer.alloc(0))]);
+}
+const artworkBytes=artworkPng();
+const artworkRequests=[];
 function serve(req, res) {
+  if(checkArtworkParity && req.url?.split('?')[0]==='/episode-art.png'){const owned=req.headers.cookie?.includes('fixture_artwork=owned')??false;artworkRequests.push(owned);if(!owned){res.writeHead(403);res.end();return;}res.writeHead(200,{'Content-Type':'image/png','Content-Length':artworkBytes.length});res.end(artworkBytes);return;}
   const [route] = (req.url ?? '').split('?');
   if (focusFixture?.serve(req,res,route)) return;
-  if (checkArtwork && route === '/episode-art.svg') {
+  if ((checkArtwork || checkArtworkParity) && route === '/episode-art.svg') {
     res.writeHead(200, {'Content-Type':'image/svg+xml'});
-    res.end('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#176383"/></svg>');
+    res.end('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#176383"/><rect width="160" height="180" fill="#e83b35"/></svg>');
     return;
   }
   if (checkUpscale && route === '/upscale-fixture-status') {
@@ -152,9 +169,10 @@ function serve(req, res) {
     return;
   }
   if (route === '/watch/fixture-show/1') {
+    if(checkArtworkParity)res.setHeader('Set-Cookie','fixture_artwork=owned; HttpOnly; SameSite=Lax; Path=/');
     res.writeHead(200, {'Content-Type':'text/html; charset=utf-8'});
     const monitor = checkUpscale ? '<script>(' + upscaleFixtureMonitor.toString() + ')()</script>' : '';
-    res.end(html + monitor); return;
+    res.end(html.replaceAll('__ART_ORIGIN__',frameOrigin) + monitor); return;
   }
   res.writeHead(404); res.end('Missing fixture');
 }
@@ -221,10 +239,11 @@ try {
       if ((await fetch(endpoint + '/json/version', {signal: AbortSignal.timeout(400)})).ok) {
         return await chromium.connectOverCDP(endpoint, {timeout: 1500});
       }
-    } catch { /* wait for owned test window */ }
+    } catch (error) { report.lastCdpError=String(error.message); }
     return null;
   });
-  assert.ok(browser, 'The test window did not attach');
+  assert.ok(browser, 'The test window did not attach: '+stderr.slice(-4000));
+  delete report.lastCdpError;
   const context = browser.contexts()[0];
   const page = context.pages()[0] ?? await context.waitForEvent('page');
   await page.waitForURL('https://tauri.localhost/**', {timeout: 15000});
@@ -240,10 +259,10 @@ try {
   assert.equal(opened.ok, true, JSON.stringify(opened));
   assert.equal(searchRequested,true,'The source did not receive the search shown by its rendered link');
   report.checks.correctRenderedEpisode = true;
-  if (checkArtwork) {
+  if (checkArtwork || checkArtworkParity) {
     const card = await poll(async () => (await rpc('site.episodes',{webContentsId}))
       .find(entry => entry.episode === 1 && entry.thumbnail));
-    assert.ok(card?.thumbnail?.startsWith('data:image/jpeg;base64,/9j/'));
+    assert.ok(card?.thumbnail?.startsWith('data:image/jpeg;base64,/9j/'), 'Delayed cross-origin episode image is missing');
     assert.ok(card.thumbnail.length <= 10240);
     const size = await page.evaluate(async (url) => {
       const image = new Image();
@@ -253,6 +272,27 @@ try {
     }, card.thumbnail);
     assert.deepEqual(size, [192, 108]);
     report.checks.boundedEpisodeArtwork = true;
+    if (checkArtworkParity) {
+      const lazy = await poll(async () => (await rpc('site.episodes',{webContentsId})).find(row => row.episode === 2 && row.thumbnail));
+      assert.ok(lazy?.thumbnail, 'Lazy DOM image is missing even after list hydration');
+      const pixels = await page.evaluate(async urls => {
+        const result = [];
+        for (const src of urls) {
+          const image = new Image(); image.src=src; await image.decode();
+          const canvas=document.createElement('canvas'); canvas.width=192; canvas.height=108;
+          const ctx=canvas.getContext('2d'); ctx.drawImage(image,0,0,192,108);
+          result.push({left:[...ctx.getImageData(24,54,1,1).data],right:[...ctx.getImageData(168,54,1,1).data]});
+          image.style.cssText='position:relative;width:192px;height:108px'; document.querySelector('.app').append(image);
+        }
+        return result;
+      }, [card.thumbnail,lazy.thumbnail]);
+      for(const value of pixels){assert.ok(value.left[0]>200 && value.left[1]<100 && value.right[2]>100 && value.right[0]<70,JSON.stringify(value));}
+      assert.ok(artworkRequests.length>=2 && artworkRequests.every(Boolean),'Image loads did not retain only the owned source session');
+      report.checks.ownedSourceCookieImages=true;
+      report.artworkPixels=pixels; report.checks.crossOriginAndLazyPixelsRendered=true;
+      await page.screenshot({path:path.join(run,'episode-artwork.png')});
+      report.artworkScreenshot=path.join(run,'episode-artwork.png');
+    }
   }
   if (checkSearchFlow) {
     assert.deepEqual(searchTerms.slice(0,2), ['Fixture Show Special Edition','Fixture Show']);
@@ -513,6 +553,10 @@ try {
   if (focusFixture) {
     await focusFixture.verify(rpc,poll,source,bounds);
     report.checks.strictCspLatePlayerFocusAndRelease = true;
+  }
+  if(checkArtworkParity) {
+    await assert.rejects(rpc('site.episodes',{webContentsId}));
+    report.checks.artworkClosedOwnerRevoked=true;
   }
   report.passed = true;
 } catch (error) {

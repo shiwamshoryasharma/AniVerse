@@ -2,6 +2,7 @@ use super::*;
 
 fn offer() -> Value {
     json!({
+        "identity":"document-1:video-1",
         "media":"blob:https://source.example.test/selected",
         "url":"https://media.example.test/episode.m3u8",
         "expectedDuration":1200.0,
@@ -57,11 +58,24 @@ fn rejects_private_unbounded_or_ambiguous_download_descriptors() {
     assert!(from_offer(&input, true).is_none());
 }
 #[test]
-fn pre_save_validation_binds_the_same_media_and_caption_choice() {
+fn pre_save_validation_binds_the_same_video_and_keeps_the_captured_caption_choice() {
     let selected = from_offer(&offer(), true).unwrap();
     assert!(selected.same_media(&from_offer(&offer(), true).unwrap()));
     let mut changed = offer();
     changed["subtitle"]["language"] = json!("ja");
+    assert!(selected.same_media(&from_offer(&changed, true).unwrap()));
+    assert_eq!(
+        selected
+            .selection
+            .subtitle
+            .as_ref()
+            .unwrap()
+            .language
+            .as_deref(),
+        Some("en")
+    );
+    let mut changed = offer();
+    changed["identity"] = json!("document-1:video-2");
     assert!(!selected.same_media(&from_offer(&changed, true).unwrap()));
     let mut changed = offer();
     changed["media"] = json!("blob:https://source.example.test/another");
@@ -89,5 +103,26 @@ fn query_references_require_an_owned_frame_and_the_exact_captured_playlist() {
     assert!(
         from_offer(&input, true).is_none(),
         "An arbitrary query root cannot borrow another observed playlist"
+    );
+}
+
+#[test]
+fn same_playing_video_survives_playlist_order_and_caption_discovery_churn() {
+    let selected = from_offer(&offer(), true).unwrap();
+    let mut advanced = offer();
+    advanced["url"] = json!("https://media.example.test/audio.m3u8");
+    advanced["playlists"] = json!([
+        "https://media.example.test/audio.m3u8",
+        "https://media.example.test/episode.m3u8"
+    ]);
+    advanced["observations"] = json!([
+        "https://media.example.test/new-audio.webp",
+        "https://media.example.test/new-video.png"
+    ]);
+    advanced["expectedDuration"] = json!(1200.02);
+    advanced["subtitle"]["label"] = json!("English CC");
+    assert!(
+        selected.same_media(&from_offer(&advanced, true).unwrap()),
+        "Ordinary continued playback is not a changed selected video"
     );
 }

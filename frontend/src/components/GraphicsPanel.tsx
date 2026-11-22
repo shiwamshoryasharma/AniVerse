@@ -1,5 +1,5 @@
 import { Check, ChevronRight, Cpu, ExternalLink, Info, Monitor, RefreshCw, Settings2, ShieldCheck, Sparkles, Zap } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import windowsGuide from '../assets/graphics/windows-graphics.svg';
 import rtxGuide from '../assets/graphics/rtx-video.svg';
 import { useAppInfo } from '../lib/queries';
@@ -10,6 +10,7 @@ import { Anime4KPanel } from './Anime4K';
 import { useToast } from '../lib/useToast';
 import { Select } from './controls';
 import type { UiRenderingMode } from '../../../app/shared/graphics';
+import { applyRenderingChoice } from '../lib/uiRenderingAction';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: Monitor },
@@ -24,11 +25,17 @@ export function GraphicsPanel() {
   const graphics = data?.graphics;
   const rendering = data?.uiRendering ?? graphics?.uiRendering;
   const [savingRendering, setSavingRendering] = useState(false);
-  const saveRendering = async (mode: UiRenderingMode) => {
+  const renderingJob = useRef<Promise<void> | null>(null);
+  const saveRendering = async (mode: UiRenderingMode, restart = false) => {
+    if (renderingJob.current) return;
     setSavingRendering(true);
-    try { await call('app.setUiRendering', { mode }); await refetch(); }
-    catch (e) { toast.push({ level: 'error', message: errorText(e) }); }
-    finally { setSavingRendering(false); }
+    try {
+      await applyRenderingChoice(renderingJob, mode, restart);
+      if (!restart) await refetch();
+    } catch (e) {
+      toast.push({ level: 'error', message: errorText(e) });
+      if (restart) await refetch();
+    } finally { setSavingRendering(false); }
   };
   const toast = useToast();
   const openSettings = () => void call('app.openGraphicsSettings').catch((e) => toast.push({ level: 'error', message: errorText(e) }));
@@ -55,11 +62,20 @@ export function GraphicsPanel() {
             {rendering && <>
             <section className="gpu-rendering">
               <h3>Interface rendering</h3>
-              <p>Stable UI avoids GPU composition of text, buttons and menus. Video decoding, Anime4K and sender encoding can still use the GPU.</p>
+              <p>{isAniVerse2
+                ? 'Accelerated UI uses GPU compositing for scrolling, menus and animations. Try it if movement feels choppy. Stable UI keeps software compositing available for compatibility.'
+                : 'Stable UI avoids GPU composition of text, buttons and menus. Video decoding, Anime4K and sender encoding can still use the GPU.'}</p>
               <Select<UiRenderingMode> ariaLabel="Interface rendering" width={250} disabled={savingRendering} value={rendering.preferred} onChange={mode=>void saveRendering(mode)}
                 options={[{value:'stable',label:isAniVerse2 ? 'Stable UI · compatibility' : 'Stable UI · recommended'},{value:'accelerated',label:'Accelerated UI'}]} />
               <p className="faint">Active: {rendering.active === 'stable' ? 'Stable UI' : 'Accelerated UI'}. This device only. Stable composition may use more CPU.</p>
-              {rendering.restartRequired && <div className="row" role="status"><span>Restart AniVerse to apply this change.</span><button className="btn sm" onClick={()=>void call('app.restart').catch(e=>toast.push({level:'error',message:errorText(e)}))}><RefreshCw size={14}/>Restart AniVerse</button></div>}
+              {isAniVerse2 && rendering.active === 'stable' && <>
+                <p className="faint">This changes interface rendering only. Video decoding and Anime4K keep their own GPU settings. You can return to Stable UI here.</p>
+                <button className="btn sm" disabled={savingRendering} aria-busy={savingRendering}
+                  onClick={() => void saveRendering('accelerated', true)}>
+                  <Zap size={14} />Use Accelerated UI and restart
+                </button>
+              </>}
+              {rendering.restartRequired && <div className="row" role="status"><span>Restart AniVerse to apply this change.</span><button className="btn sm" disabled={savingRendering} onClick={()=>{if(!renderingJob.current)void call('app.restart').catch(e=>toast.push({level:'error',message:errorText(e)}));}}><RefreshCw size={14}/>Restart AniVerse</button></div>}
             </section>
             </>}
             {graphics ? <>

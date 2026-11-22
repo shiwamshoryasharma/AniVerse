@@ -1,3 +1,4 @@
+mod artwork;
 mod capture;
 mod catalogue;
 mod discovery;

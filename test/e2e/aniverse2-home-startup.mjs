@@ -11,8 +11,11 @@ const fixture = await build({ stdin: {
     "import { createRoot } from 'react-dom/client';",
     "import { MemoryRouter } from 'react-router';",
     "import { HomePage } from './frontend/src/pages/Home';",
+    "import { initializeDesktopRefresh } from './frontend/src/lib/automaticRefresh';",
     "import { ToastProvider } from './frontend/src/lib/toast';",
     "const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });",
+    // Synthetic component fixture: native window-state delivery is tested separately in the real Tauri app.
+    "initializeDesktopRefresh(client, listener => { listener(false); return () => {}; });",
     "createRoot(document.querySelector('.main')).render(<QueryClientProvider client={client}><MemoryRouter><ToastProvider><HomePage /></ToastProvider></MemoryRouter></QueryClientProvider>);",
   ].join('\n'), loader: 'tsx', resolveDir: process.cwd(),
 }, outdir: cache, write: false, bundle: true, minify: true, jsx: 'automatic', define: {'process.env.NODE_ENV': '"production"'} });

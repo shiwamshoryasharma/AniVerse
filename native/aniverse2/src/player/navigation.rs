@@ -886,6 +886,10 @@ pub(super) async fn episodes(owner: &Webview, session: &Session) -> Value {
 }
 
 async fn read_episodes(owner: &Webview, session: &Session, artwork: bool) -> Value {
+    let page_generation = session.page_generation.load(Ordering::Acquire);
+    let job = session.job.load(Ordering::Acquire);
+    let private = session.browsing_private();
+    let source_url = session.view.url().ok();
     let context = session.active_episode.lock().ok().and_then(|state| *state);
     let thumbnail_near = context
         .filter(|_| artwork && !session.browsing_private())
@@ -924,7 +928,19 @@ async fn read_episodes(owner: &Webview, session: &Session, artwork: bool) -> Val
         })
         .take(500)
         .collect::<Vec<_>>();
-    let cards = json!(rows);
+    let mut cards = json!(rows);
+    if let Some(context) = context.filter(|_| thumbnail_near.is_some()) {
+        super::artwork::fill(session, context, &mut cards).await;
+    }
+    if session.closed.load(Ordering::Acquire)
+        || session.page_generation.load(Ordering::Acquire) != page_generation
+        || session.job.load(Ordering::Acquire) != job
+        || session.browsing_private() != private
+        || session.view.url().ok() != source_url
+        || session.active_episode.lock().ok().and_then(|state| *state) != context
+    {
+        return json!([]);
+    }
     if let Some((id, _)) = context {
         let origin = session.source.base.origin().ascii_serialization();
         owner.state::<patterns::Service>().observe_audio(
@@ -938,7 +954,7 @@ async fn read_episodes(owner: &Webview, session: &Session, artwork: bool) -> Val
     cards
 }
 
-fn valid_episode_thumbnail(value: &str) -> bool {
+pub(super) fn valid_episode_thumbnail(value: &str) -> bool {
     value.len() <= 10_240
         && value
             .strip_prefix("data:image/jpeg;base64,")

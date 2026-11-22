@@ -14,6 +14,7 @@ vi.mock('../../frontend/src/components/RouteCrash', () => ({ RouteCrash: () => n
 vi.mock('../../frontend/src/pages/Home', () => ({ HomePage: () => null }));
 vi.mock('../../frontend/src/lib/toast', () => ({ ToastProvider: () => null }));
 vi.mock('../../frontend/src/lib/bridge', () => ({ isAniVerse2: true }));
+vi.mock('../../frontend/src/lib/automaticRefresh', () => ({ initializeDesktopRefresh: () => () => {} }));
 
 // Vitest transforms the renderer entrypoint separately from the Node-only test tsconfig.
 const rendererEntrypoint = '../../frontend/src/main';
