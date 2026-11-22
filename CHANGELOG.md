@@ -2,6 +2,13 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.3.2 Windows (Electron) · 2026-11-22
+
+- Restore your saved desktop theme when AniVerse starts, before visiting Settings.
+- Apply custom header, page, button and other interface colours on Home after restarting.
+
+[Windows release notes](docs/releases/2.3.2.md)
+
 ## 2.3.1 Windows (Electron) · 2026-11-22
 
 - Restore history-based search recommendations and reuse local catalogue data.

@@ -5,6 +5,12 @@ export interface ReleaseNote {
   items: { kind: ChangeKind; icon: ChangeIcon; title: string; description: string; action?: { label: string; path: string } }[];
 }
 export const RELEASES: ReleaseNote[] = [
+  {version:'2.3.2',date:'2026-11-22',title:'Your selected colours, from startup',
+   summary:'The Electron app restores your saved theme and custom interface colours when it opens.',
+   items:[
+    {kind:'fixed',icon:'layout',title:'Restore your selected desktop theme',description:'Home uses your saved palette on startup without requiring a visit to Settings.',action:{label:'Open Interface themes',path:'/settings/themes'}},
+    {kind:'fixed',icon:'sparkles',title:'Keep custom interface colours after restarting',description:'Saved colours for the header, pages, buttons and other interface layers are applied when AniVerse opens.'},
+   ]},
   {version:'2.3.1',date:'2026-11-22',title:'Better suggestions, sound and video downloads',
    summary:'Search learns from your existing profile. Quantum Audio keeps playing as you interact with the player, and Save MP4 handles more sources.',
    items:[
