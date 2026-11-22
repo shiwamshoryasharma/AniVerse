@@ -12,6 +12,8 @@ import './styles/desktop-display.css';
 import './styles/aniverse2-theme-surfaces.css';
 import './styles/aniverse2-appearance.css';
 import './lib/aniverse2Appearance';
+import { isAniVerse2 } from './lib/bridge';
+import { retryQuery } from './lib/refreshManager';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -25,7 +27,8 @@ import { HomePage } from './pages/Home';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: (count, err) => count < 1 && (err as { code?: string }).code !== 'invalid-input' && (err as { code?: string }).code !== 'not-found',
+      retry: (count, err) => isAniVerse2 ? retryQuery(count, err) : count < 1 && (err as { code?: string }).code !== 'invalid-input' && (err as { code?: string }).code !== 'not-found',
+      ...(isAniVerse2 ? { retryDelay: 2000 } : {}),
       refetchOnWindowFocus: false,
     },
   },

@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import type { BrowseQuery, CommentsQuery, DeepPartial, ListStatus, MediaRef, MediaSnapshot, ProgressSave, Settings, SourceOverridePatch } from '../../../app/shared/types';
 import { call, isAniVerse2, onEvent } from './bridge';
 import { DEFAULT_SETTINGS_FALLBACK } from './settingsFallback';
+import { refreshSourcesOnFocus } from './refreshManager';
 
 export const keys = {
   home: ['home'] as const,
@@ -28,7 +29,21 @@ export const keys = {
   update: ['update'] as const,
 };
 
-export const useHome = () => useQuery({ queryKey: keys.home, queryFn: () => call('meta.home'), staleTime: 5 * 60_000 });
+export function homeQueryOptions(ready: boolean) {
+  return { queryKey: keys.home, queryFn: () => call('meta.home'), enabled: !isAniVerse2 || ready, staleTime: 5 * 60_000 };
+}
+export function latestQueryOptions(page: number, enabled: boolean, ready: boolean) {
+  return {
+    queryKey: ['latest', page], queryFn: () => call('meta.latest', { page }),
+    enabled: enabled && (!isAniVerse2 || ready),
+    refetchInterval: 5 * 60_000, refetchIntervalInBackground: !isAniVerse2,
+    refetchOnWindowFocus: !isAniVerse2, staleTime: 60_000,
+  };
+}
+export function useHome() {
+  const ready = useSettingsReady();
+  return useQuery(homeQueryOptions(ready));
+}
 
 export const useDetails = (id: number) =>
   useQuery({ queryKey: keys.details(id), queryFn: () => call('meta.details', { id }), enabled: id > 0, staleTime: 30 * 60_000 });
@@ -96,11 +111,13 @@ export const useComments = (q: CommentsQuery | null) =>
     staleTime: 60_000,
   });
 
-export function useSettings(): Settings {
-  const { data } = useQuery({ queryKey: keys.settings, queryFn: () => call('settings.get'), staleTime: Infinity });
-  return data ?? DEFAULT_SETTINGS_FALLBACK;
+export function useSettingsQuery() {
+  return useQuery({ queryKey: keys.settings, queryFn: () => call('settings.get'), staleTime: Infinity });
 }
-
+export function useSettingsReady() { return useSettingsQuery().isSuccess; }
+export function useSettings(): Settings {
+  return useSettingsQuery().data ?? DEFAULT_SETTINGS_FALLBACK;
+}
 export function useUpdateSettings() {
   const qc = useQueryClient();
   return useMutation({
@@ -201,7 +218,7 @@ export function useBridgeEvents(qc: QueryClient) {
         }
       }),
     ];
-    const refreshSources = () => void qc.invalidateQueries({ queryKey: keys.sources });
+    const refreshSources = () => void refreshSourcesOnFocus(qc);
     if (isAniVerse2) window.addEventListener('focus', refreshSources);
     return () => {
       offs.forEach((off) => off());

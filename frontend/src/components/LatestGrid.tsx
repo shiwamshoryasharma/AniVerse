@@ -3,11 +3,11 @@ import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { AiringItem } from '../../../app/shared/types';
-import { call, isAniVerse2, platform } from '../lib/bridge';
+import { isAniVerse2, platform } from '../lib/bridge';
 import { cx, timeAgo, titleOf } from '../lib/format';
 import {SourceCatalogueResults} from './SourceCatalogueResults';
 import {AudioFilter,type AudioChoice} from './AudioFilter';
-import { useSettings } from '../lib/queries';
+import { latestQueryOptions, useSettings, useSettingsReady } from '../lib/queries';
 import { useToast } from '../lib/useToast';
 import { ErrorState } from './common';
 import { MediaCard, SkeletonCards } from './MediaCard';
@@ -20,7 +20,6 @@ const FILTERS: [Filter, string][] = [
   ['other', 'ONA / Other'],
   ['top', 'Top rated'],
 ];
-const REFRESH_MS = 5 * 60_000;
 const SEEN_KEY = 'aniverse.latestSeen';
 
 function readSeen(): number {
@@ -45,15 +44,10 @@ export function LatestGrid() {
   const navigate = useNavigate();
   const toast = useToast();
   const lang = useSettings().appearance.titleLanguage;
+  const ready = useSettingsReady();
   const { data, error, refetch, isPlaceholderData, dataUpdatedAt } = useQuery({
-    queryKey: ['latest', page],
-    enabled:audio==='all',
-    queryFn: () => call('meta.latest', { page }),
+    ...latestQueryOptions(page, audio === 'all', ready),
     placeholderData: keepPreviousData,
-    refetchInterval: REFRESH_MS,
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: true,
-    staleTime: 60_000,
   });
 
   // Remember the newest episode seen so the next visit can highlight newer ones.

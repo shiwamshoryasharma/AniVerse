@@ -12,10 +12,11 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
+    future::{poll_fn, Future},
     sync::{Arc, Mutex, MutexGuard, OnceLock, Weak},
     time::{Duration, Instant},
 };
-use tokio::sync::{Mutex as AsyncMutex, Semaphore};
+use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 
 const ENDPOINT: &str = "https://graphql.anilist.co";
 const HOME: &str = include_str!(concat!(env!("OUT_DIR"), "/anilist-home.graphql"));
@@ -25,6 +26,7 @@ const CATALOGUE: &str = include_str!(concat!(env!("OUT_DIR"), "/anilist-catalogu
 const MAX_RESPONSE: usize = 2 * 1024 * 1024;
 const MAX_ENTRIES: usize = 128;
 const MAX_PENDING: usize = 32;
+const FAILURE_COOLDOWN: Duration = Duration::from_secs(2);
 const DAY: i64 = 86_400;
 
 #[derive(Deserialize)]
@@ -64,9 +66,16 @@ struct Entry {
     value: Value,
 }
 
+struct Failure {
+    until: Instant,
+    code: &'static str,
+    message: String,
+}
+
 #[derive(Default)]
 struct Cache {
     entries: HashMap<Key, Entry>,
+    failures: HashMap<Key, Failure>,
     flights: HashMap<Key, Weak<AsyncMutex<()>>>,
     cooldown: Option<Instant>,
     generation: u64,
@@ -105,6 +114,38 @@ impl Cache {
         );
     }
 
+    fn failure(&mut self, key: &Key) -> Option<RpcError> {
+        let failure = self.failures.get(key)?;
+        if failure.until <= Instant::now() {
+            self.failures.remove(key);
+            return None;
+        }
+        Some(RpcError::new(failure.code, failure.message.clone()))
+    }
+
+    fn failed(&mut self, key: Key, error: &RpcError) {
+        let now = Instant::now();
+        self.failures.retain(|_, failure| failure.until > now);
+        if self.failures.len() >= MAX_ENTRIES && !self.failures.contains_key(&key) {
+            if let Some(oldest) = self
+                .failures
+                .iter()
+                .min_by_key(|(_, failure)| failure.until)
+                .map(|(key, _)| key.clone())
+            {
+                self.failures.remove(&oldest);
+            }
+        }
+        self.failures.insert(
+            key,
+            Failure {
+                until: now + FAILURE_COOLDOWN,
+                code: error.code,
+                message: error.message.clone(),
+            },
+        );
+    }
+
     fn flight(&mut self, key: &Key) -> Option<Arc<AsyncMutex<()>>> {
         if let Some(running) = self.flights.get(key).and_then(Weak::upgrade) {
             return Some(running);
@@ -123,6 +164,10 @@ pub(crate) struct Client {
     http: reqwest::Client,
     cache: Mutex<Cache>,
     outbound: Semaphore,
+    pending: Semaphore,
+    changed: Notify,
+    #[cfg(test)]
+    test_endpoint: String,
 }
 
 impl Client {
@@ -136,6 +181,10 @@ impl Client {
                 .build()?,
             cache: Mutex::new(Cache::default()),
             outbound: Semaphore::new(4),
+            pending: Semaphore::new(MAX_PENDING),
+            changed: Notify::new(),
+            #[cfg(test)]
+            test_endpoint: ENDPOINT.to_owned(),
         })
     }
 
@@ -146,17 +195,26 @@ impl Client {
     pub(crate) fn clear_cache(&self) {
         let mut cache = self.cache();
         cache.entries.clear();
+        cache.failures.clear();
+        cache.flights.clear();
         cache.generation = cache.generation.wrapping_add(1);
+        drop(cache);
+        self.changed.notify_waiters();
     }
 
+    /// Manager: admission, deduplication, cancellation and all shared job results live here.
     pub(crate) async fn get(
         &self,
         request: Request,
         adult: bool,
         excluded: Vec<i32>,
     ) -> Result<Value, RpcError> {
+        let generation = self.cache().generation;
         if crate::runtime_privacy::active() {
-            return self.fetch(&request, adult, &excluded).await;
+            let _pending = self.pending.try_acquire().map_err(|_| busy())?;
+            return self
+                .run_worker(&request, adult, &excluded, generation)
+                .await;
         }
         let key = (request, adult, excluded);
         let flight = {
@@ -164,39 +222,119 @@ impl Client {
             if let Some((true, cached)) = cache.cached(&key) {
                 return Ok(cached);
             }
-            match cache.flight(&key) {
-                Some(flight) => flight,
-                None => {
-                    return cache.cached(&key).map(|(_, value)| value).ok_or_else(|| {
-                        RpcError::new(
-                            "rate-limited",
-                            "AniList metadata is busy. Try again shortly.",
-                        )
-                    })
-                }
-            }
+            cache.flight(&key).ok_or_else(busy)?
         };
+        let _pending = self.pending.try_acquire().map_err(|_| busy())?;
         let _guard = flight.lock().await;
+        if self.cache().generation != generation {
+            return Err(cancelled());
+        }
         let stale = match self.cache().cached(&key) {
             Some((true, cached)) => return Ok(cached),
             Some((false, value)) => Some(value),
             None => None,
         };
-        let generation = self.cache().generation;
-        match self.fetch(&key.0, adult, &key.2).await {
+        if let Some(error) = self.cache().failure(&key) {
+            return stale.ok_or(error);
+        }
+        match self.run_worker(&key.0, adult, &key.2, generation).await {
             Ok(value) => {
                 let ttl = key.0.ttl();
                 let mut cache = self.cache();
-                if cache.generation == generation {
-                    cache.insert(key, ttl, value.clone());
+                if cache.generation != generation {
+                    return Err(cancelled());
                 }
+                cache.insert(key, ttl, value.clone());
                 Ok(value)
             }
-            Err(error) if error.code == "not-found" => Err(error),
-            Err(error) => stale.ok_or(error),
+            Err(error) if error.code == "cancelled" => Err(error),
+            Err(error) => {
+                let mut cache = self.cache();
+                if cache.generation != generation {
+                    return Err(cancelled());
+                }
+                cache.failed(key, &error);
+                if error.code == "not-found" {
+                    Err(error)
+                } else {
+                    stale.ok_or(error)
+                }
+            }
         }
     }
 
+    async fn run_worker(
+        &self,
+        request: &Request,
+        adult: bool,
+        excluded: &[i32],
+        generation: u64,
+    ) -> Result<Value, RpcError> {
+        // Created before checking generation, so invalidation cannot miss an unpolled waiter.
+        let changed = self.changed.notified();
+        finish_or_cancel(self.execute(request, adult, excluded, generation), changed)
+            .await
+            .unwrap_or_else(|| Err(cancelled()))
+    }
+    async fn execute(
+        &self,
+        request: &Request,
+        adult: bool,
+        excluded: &[i32],
+        generation: u64,
+    ) -> Result<Value, RpcError> {
+        let _permit = tokio::time::timeout(Duration::from_secs(15), self.outbound.acquire())
+            .await
+            .map_err(|_| busy())?
+            .map_err(|_| busy())?;
+        {
+            let cache = self.cache();
+            if cache.generation != generation {
+                return Err(cancelled());
+            }
+            if cache.cooldown.is_some_and(|until| until > Instant::now()) {
+                return Err(rate_limit());
+            }
+        }
+        let worker = Worker {
+            http: self.http.clone(),
+            endpoint: {
+                #[cfg(test)]
+                {
+                    self.test_endpoint.clone()
+                }
+                #[cfg(not(test))]
+                {
+                    ENDPOINT.to_owned()
+                }
+            },
+            cooldown: Mutex::new(None),
+        };
+        let result = worker.fetch(request, adult, excluded).await;
+        let delay = worker
+            .cooldown
+            .into_inner()
+            .unwrap_or_else(|error| error.into_inner());
+        let mut cache = self.cache();
+        if let Some(delay) = delay {
+            let until = Instant::now() + delay;
+            cache.cooldown = Some(cache.cooldown.map_or(until, |previous| previous.max(until)));
+        }
+        if cache.generation != generation {
+            return Err(cancelled());
+        }
+        result
+    }
+}
+
+/// Workers have no shared cache or scheduler access; completion and retry-after return to the manager.
+struct Worker {
+    http: reqwest::Client,
+    endpoint: String,
+    cooldown: Mutex<Option<Duration>>,
+}
+
+impl Worker {
     async fn fetch(
         &self,
         request: &Request,
@@ -324,18 +462,10 @@ impl Client {
     }
 
     async fn query(&self, query: &str, variables: Value) -> Result<Value, RpcError> {
-        let _permit = self.outbound.acquire().await.map_err(|_| incomplete())?;
-        if self
-            .cache()
-            .cooldown
-            .is_some_and(|until| until > Instant::now())
-        {
-            return Err(rate_limit());
-        }
         let offline = |_: reqwest::Error| RpcError::new("network", "Could not reach AniList.");
         let mut response = self
             .http
-            .post(ENDPOINT)
+            .post(&self.endpoint)
             .json(&json!({"query": query, "variables": variables}))
             .send()
             .await
@@ -347,7 +477,10 @@ impl Client {
                 .and_then(|value| value.to_str().ok()?.parse::<u64>().ok())
                 .unwrap_or(60)
                 .clamp(1, 300);
-            self.cache().cooldown = Some(Instant::now() + Duration::from_secs(delay));
+            *self
+                .cooldown
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()) = Some(Duration::from_secs(delay));
             return Err(rate_limit());
         }
         if response.status() == StatusCode::NOT_FOUND {
@@ -382,6 +515,32 @@ impl Client {
     }
 }
 
+async fn finish_or_cancel<T>(
+    job: impl Future<Output = T>,
+    signal: impl Future<Output = ()>,
+) -> Option<T> {
+    let mut job = std::pin::pin!(job);
+    let mut signal = std::pin::pin!(signal);
+    poll_fn(|context| {
+        if signal.as_mut().poll(context).is_ready() {
+            return std::task::Poll::Ready(None);
+        }
+        job.as_mut().poll(context).map(Some)
+    })
+    .await
+}
+fn busy() -> RpcError {
+    RpcError::new(
+        "rate-limited",
+        "AniList metadata is busy. Try again shortly.",
+    )
+}
+fn cancelled() -> RpcError {
+    RpcError::new(
+        "cancelled",
+        "The metadata request changed before its result was ready.",
+    )
+}
 fn take_rows(data: &mut Value, key: &str) -> Result<Vec<Value>, RpcError> {
     match data.get_mut(key).map(Value::take) {
         Some(Value::Array(rows)) => Ok(rows),
@@ -403,3 +562,7 @@ fn rate_limit() -> RpcError {
 fn not_found() -> RpcError {
     RpcError::new("not-found", "AniList could not find that title.")
 }
+
+#[cfg(test)]
+#[path = "../../../test/tauri-compat/metadata-jobs.rs"]
+mod metadata_jobs;

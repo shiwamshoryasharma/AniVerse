@@ -24,12 +24,24 @@ struct Transfer {
     prefix: Vec<u8>,
 }
 
+#[cfg(test)]
 pub(super) async fn save(
     client: &Client,
     url: &Url,
     destination: &Path,
-    mut progress: impl FnMut(u64, Option<u64>),
+    progress: impl FnMut(u64, Option<u64>),
 ) -> Result<(), RpcError> {
+    save_guarded(client, url, destination, progress, &|| true).await
+}
+
+pub(super) async fn save_guarded(
+    client: &Client,
+    url: &Url,
+    destination: &Path,
+    mut progress: impl FnMut(u64, Option<u64>),
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<(), RpcError> {
+    super::require_owner(owned)?;
     if tokio::fs::try_exists(destination)
         .await
         .map_err(|_| disk())?
@@ -78,6 +90,7 @@ pub(super) async fn save(
     }
     file.sync_all().await.map_err(|_| disk())?;
     drop(file);
+    super::require_owner(owned)?;
     tauri::async_runtime::spawn_blocking(move || {
         staging
             .persist_noclobber(destination)

@@ -1,4 +1,4 @@
-import { useIsFetching, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
   Copy,
@@ -28,9 +28,9 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { call, isAniVerse2, platform, onEvent } from '../lib/bridge';
 import { cx, formatLabel, titleOf } from '../lib/format';
-import { useAccounts, useAdblockStats, useBridgeEvents, useSearch, useSettings } from '../lib/queries';
+import { useAccounts, useAdblockStats, useBridgeEvents, useSearch, useSettings, useSettingsQuery } from '../lib/queries';
 import { useToast } from '../lib/useToast';
-import { Logo, Spinner } from './common';
+import { ErrorState, Logo, Spinner } from './common';
 import { ContextMenuProvider } from './ContextMenu';
 import { useInterfaceLayout } from '../lib/interfaceLayout';
 import { seasonalVisuals } from '../../../app/shared/seasonal';
@@ -40,6 +40,8 @@ import { IncognitoButton } from './Privacy';
 import { ReleaseAnnouncements } from './Changelog';
 import { UpdateBadge } from './Updates';
 import { DesktopSearch } from './DesktopSearch';
+import { RefreshButton } from './RefreshButton';
+import { DEFAULT_SETTINGS_FALLBACK } from '../lib/settingsFallback';
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -63,7 +65,8 @@ function readRailPref(): boolean {
 export function Shell() {
   const qc = useQueryClient();
   useBridgeEvents(qc);
-  const settings = useSettings();
+  const initialization = useSettingsQuery();
+  const settings = initialization.data ?? DEFAULT_SETTINGS_FALLBACK;
   const [open, setOpen] = useState(() => !isAniVerse2 && readRailPref());
   const midnight = useMidnightTheme();
   const layout = useInterfaceLayout(settings.appearance.style);
@@ -176,7 +179,10 @@ export function Shell() {
 
       <main className="main" ref={main}>
         <ContextMenuProvider>
-          <Outlet />
+          {isAniVerse2 && initialization.error
+            ? <ErrorState error={initialization.error} title="Couldn’t load local settings"
+                onRetry={() => void initialization.refetch({ cancelRefetch: false })} />
+            : <Outlet />}
         </ContextMenuProvider>
       </main>
     </div>
@@ -298,26 +304,6 @@ function SearchBox() {
         </div>
       )}
     </div>
-  );
-}
-
-/** Re-fetches everything on screen (AniList data, library, sources). */
-function RefreshButton() {
-  const qc = useQueryClient();
-  const fetching = useIsFetching();
-  const [spin, setSpin] = useState(false);
-  return (
-    <button
-      className="icon-btn bordered"
-      aria-label="Refresh"
-      title="Refresh (F5)"
-      onClick={() => {
-        setSpin(true);
-        void qc.invalidateQueries().finally(() => setSpin(false));
-      }}
-    >
-      <RefreshCw size={15} className={spin || fetching > 0 ? 'spin' : undefined} />
-    </button>
   );
 }
 

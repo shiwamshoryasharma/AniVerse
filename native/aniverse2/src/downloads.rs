@@ -1,6 +1,8 @@
 mod hls;
 mod remux;
 mod transfer;
+mod vtt;
+pub(crate) use remux::{Selection, SubtitleChoice};
 
 use crate::{profile, RpcError};
 use aniverse_security::{allows_public_address, allows_public_mp4};
@@ -121,37 +123,43 @@ impl Service {
             return Err(invalid("Choose a public HTTPS MP4 file from this source."));
         }
         let url = Url::parse(&input.url).map_err(|_| invalid("The MP4 link is invalid."))?;
-        self.save_validated(window, url, None, || async { true })
-            .await
+        self.save_validated(
+            window,
+            url,
+            Selection::default(),
+            || async { true },
+            || true,
+        )
+        .await
     }
 
     pub(crate) async fn save_active<Fut: Future<Output = bool>>(
         &self,
         window: &Webview,
         url: Url,
-        observed: Option<Url>,
+        selection: Selection,
         validate: impl Fn() -> Fut,
+        owned: impl Fn() -> bool + Sync,
     ) -> Result<Value, RpcError> {
         let _operation = self.begin()?;
-        if !is_active_media_url(&url) || (observed.is_some() && !has_extension(&url, "m3u8")) {
-            return Err(invalid(
-                "Choose a public MP4 or clear on-demand HLS stream.",
-            ));
-        }
+        require_owner(&owned)?;
         if !validate().await {
             return Err(invalid(
                 "The active video changed before the download started.",
             ));
         }
-        self.save_validated(window, url, observed, validate).await
+        let selection = bind_player_scope(&url, selection, &owned)?;
+        self.save_validated(window, url, selection, validate, owned)
+            .await
     }
 
     async fn save_validated<Fut: Future<Output = bool>>(
         &self,
         window: &Webview,
         url: Url,
-        observed: Option<Url>,
+        selection: Selection,
         validate: impl Fn() -> Fut,
+        owned: impl Fn() -> bool + Sync,
     ) -> Result<Value, RpcError> {
         let mut dialog = window
             .dialog()
@@ -173,36 +181,48 @@ impl Service {
         {
             return Err(invalid("Choose a filename ending in .mp4."));
         }
+        require_owner(&owned)?;
         if !validate().await {
             return Err(invalid(
                 "The active video changed before the download started.",
             ));
         }
-        let client = public_transport(&url).await?;
+        let client = remux::selection_transport(&url, &selection).await?;
         let progress = |received, total| {
             let _ = window.emit(
                 "aniverse:mp4/progress",
-                json!({ "received": received, "total": total }),
+                json!({"received":received,"total":total}),
             );
         };
-        timeout(Duration::from_secs(45 * 60), async {
+        let operation = async {
             if has_extension(&url, "m3u8") {
                 let ffmpeg = bundled_ffmpeg(window)?;
-                remux::save(
+                remux::save_selected_guarded(
                     &client,
                     &url,
-                    observed.as_ref(),
+                    &selection,
                     &destination,
                     &ffmpeg,
                     progress,
+                    &owned,
                 )
                 .await
             } else {
-                transfer::save(&client, &url, &destination, progress).await
+                if selection
+                    .subtitle
+                    .as_ref()
+                    .is_some_and(|choice| choice.url.is_some())
+                {
+                    return Err(invalid(
+                        "Separate subtitle tracks currently require a supported HLS stream.",
+                    ));
+                }
+                transfer::save_guarded(&client, &url, &destination, progress, &owned).await
             }
-        })
-        .await
-        .map_err(|_| RpcError::new("network", "The MP4 download timed out."))??;
+        };
+        timeout(Duration::from_secs(45 * 60), while_owned(operation, &owned))
+            .await
+            .map_err(|_| RpcError::new("network", "The MP4 download timed out."))??;
         Ok(Value::Bool(true))
     }
 
@@ -312,9 +332,20 @@ fn has_extension(url: &Url, expected: &str) -> bool {
         .is_some_and(|(_, value)| value.eq_ignore_ascii_case(expected))
 }
 
-fn public_media_url(url: &Url) -> bool {
+pub(crate) fn public_media_url(url: &Url) -> bool {
+    url.query().is_none() && owned_media_url(url)
+}
+
+// Syntax only, used for data read from an already owned player frame. It grants
+// no transport authority: only bind_player_scope, after checking the live lease,
+// can authorize captured roots and verified same-origin playlist children.
+pub(crate) fn is_owned_player_endpoint(url: &Url) -> bool {
+    owned_media_url(url)
+}
+
+fn owned_media_url(url: &Url) -> bool {
     url.as_str().len() <= 4096
-        && url.query().is_none()
+        && !url.as_str().bytes().any(|byte| byte.is_ascii_control())
         && url.fragment().is_none()
         && url.username().is_empty()
         && url.password().is_none()
@@ -355,6 +386,18 @@ fn bundled_ffmpeg(window: &Webview) -> Result<PathBuf, RpcError> {
 }
 
 async fn public_transport(url: &Url) -> Result<Client, RpcError> {
+    if !public_media_url(url) {
+        return Err(invalid(
+            "Choose a public media URL without query parameters.",
+        ));
+    }
+    public_transport_checked(url).await
+}
+
+async fn public_transport_checked(url: &Url) -> Result<Client, RpcError> {
+    if !owned_media_url(url) {
+        return Err(invalid("The media URL is invalid."));
+    }
     let failed = || RpcError::new("network", "Could not reach a public media host.");
     let fixture = crate::player::fixture_source(url);
     let host = url.host_str().ok_or_else(failed)?.trim_matches(['[', ']']);
@@ -364,14 +407,11 @@ async fn public_transport(url: &Url) -> Result<Client, RpcError> {
         .map_err(|_| failed())?
         .map_err(|_| failed())?
         .collect::<Vec<_>>();
-    if addresses.is_empty()
-        || !addresses.iter().all(|address| {
-            allows_public_address(address.ip()) || (fixture && address.ip().is_loopback())
-        })
-    {
+    if !permitted_media_addresses(&addresses, fixture) {
         return Err(failed());
     }
-    // Connect only to the DNS results already checked. A proxy or redirect could change the destination.
+    // Query bytes never affect origin validation. Connect only to the DNS
+    // results already checked; no proxy, redirect, cookies or auth are used.
     Client::builder()
         .https_only(!fixture)
         .no_proxy()
@@ -381,6 +421,13 @@ async fn public_transport(url: &Url) -> Result<Client, RpcError> {
         .read_timeout(Duration::from_secs(30))
         .build()
         .map_err(|_| failed())
+}
+
+fn permitted_media_addresses(addresses: &[std::net::SocketAddr], fixture: bool) -> bool {
+    !addresses.is_empty()
+        && addresses.iter().all(|address| {
+            allows_public_address(address.ip()) || (fixture && address.ip().is_loopback())
+        })
 }
 
 fn invalid(message: &str) -> RpcError {
@@ -394,3 +441,76 @@ fn config_error() -> RpcError {
 #[cfg(test)]
 #[path = "../../../test/tauri-compat/mp4-public.rs"]
 mod public_tests;
+
+fn bind_player_scope(
+    url: &Url,
+    mut selection: Selection,
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<Selection, RpcError> {
+    require_owner(owned)?;
+    // A scope is never accepted from a renderer descriptor. Recreate it from
+    // exact captured playlist roots only after the owner/generation check.
+    selection.scope = None;
+    if has_extension(url, "m3u8")
+        && selection.expected_duration.is_some()
+        && !selection.playlists.is_empty()
+    {
+        if !selection.playlists.contains(url) {
+            return Err(invalid(
+                "The active playlist was not observed in this player.",
+            ));
+        }
+        selection.scope = Some(remux::OwnedScope::from_owned_selection(
+            &selection.playlists,
+            selection
+                .subtitle
+                .as_ref()
+                .and_then(|choice| choice.url.as_ref()),
+        )?);
+    }
+    let allowed = selection
+        .scope
+        .as_ref()
+        .map_or_else(|| is_active_media_url(url), |scope| scope.contains(url));
+    if !allowed || (!selection.observations.is_empty() && !has_extension(url, "m3u8")) {
+        return Err(invalid(
+            "Choose a public MP4 or clear on-demand HLS stream.",
+        ));
+    }
+    Ok(selection)
+}
+
+fn require_owner(owned: &(impl Fn() -> bool + Sync)) -> Result<(), RpcError> {
+    if owned() {
+        Ok(())
+    } else {
+        Err(invalid(
+            "The selected player changed. The download was cancelled.",
+        ))
+    }
+}
+
+async fn while_owned<T>(
+    operation: impl Future<Output = Result<T, RpcError>>,
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<T, RpcError> {
+    require_owner(owned)?;
+    let mut operation = std::pin::pin!(operation);
+    let mut timer = std::pin::pin!(tokio::time::sleep(Duration::from_millis(250)));
+    std::future::poll_fn(|context| {
+        if timer.as_mut().poll(context).is_ready() {
+            if let Err(error) = require_owner(owned) {
+                return std::task::Poll::Ready(Err(error));
+            }
+            timer
+                .as_mut()
+                .reset(tokio::time::Instant::now() + Duration::from_millis(250));
+        }
+        operation.as_mut().poll(context)
+    })
+    .await
+}
+
+#[cfg(test)]
+#[path = "../../../test/tauri-compat/download-ownership.rs"]
+mod ownership_tests;
