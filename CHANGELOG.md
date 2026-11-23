@@ -2,6 +2,14 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 3.2.1 Windows · 2026-11-23
+
+- Recognize selected SUB/DUB controls and provider grids on supported watch-page layouts.
+- Refresh late-loading server controls and use the original episode control on single-page layouts.
+- Keep download actions out of the playback server menu.
+
+[Windows release notes](docs/releases/aniverse2-3.2.1.md)
+
 ## 2.2.4 Windows — 2026-11-20
 
 - Add **Update AniVerse to AniVerse2** in Settings → About → Updates.
