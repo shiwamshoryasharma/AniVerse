@@ -52,7 +52,9 @@ app.whenReady().then(async () => {
   assert.ok(next.pick);
   await run({op:'click', pick:next.pick});
   assert.deepEqual(await run({op:'episodeCheck', episode:2}), {matches:true});
-  await win.loadURL('https://control-selection.test/watch/alternate');
+  await win.loadURL('https://control-selection.test/catalogue/alternate');
+  assert.deepEqual(await options(), []);
+  await win.loadURL('https://control-selection.test/anime/alternate?ep=opaque-episode');
   const alternateOptions = await options();
   assert.equal(alternateOptions.find(option => option.value === 'backup serverbackup')?.label, 'Backup server');
   assert.equal(alternateOptions.find(option => option.value === 'default')?.active, true);
