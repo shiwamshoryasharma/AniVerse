@@ -2,6 +2,14 @@
 
 AniVerse also includes this history in **Settings → Changelog**, with release highlights shown after updates.
 
+## 2.4.1 Windows · 2026-11-23
+
+- Recognize selected SUB/DUB controls and provider grids on supported watch-page layouts.
+- Refresh late-loading server controls and use the original episode control on single-page layouts.
+- Keep download actions out of the playback server menu.
+
+[Windows release notes](docs/releases/2.4.1.md)
+
 ## 2.3.5 Windows (Electron) · 2026-11-22
 
 - Keep the selected video valid while the native Save As dialog is open, despite rolling audio/subtitle observations or small metadata corrections.

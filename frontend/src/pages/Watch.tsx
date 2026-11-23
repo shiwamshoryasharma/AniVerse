@@ -221,8 +221,8 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
         }
         if (shouldFallback(r)) sourceUnavailable(r.destinationSourceId);
         else if (!r.ok && r.message) toast.push({ level: 'warn', message: r.message });
-        // A source may render servers before the audio rows finish loading.
-        if (r.ok && r.options.types.length < 2) {
+        // Audio and server rows can hydrate independently after episode navigation.
+        if (r.ok && (r.options.types.length < 2 || r.options.servers.length === 0)) {
           let found = false;
           for (const delay of [4000, 10000]) {
             retries.push(
@@ -230,9 +230,12 @@ function Watch({ media, sources, episode }: { media: MediaDetails; sources: Sour
                 if (found || cancelled) return;
                 void call('site.options', { webContentsId })
                   .then((o) => {
-                    if (cancelled || o.types.length <= r.options.types.length) return;
-                    found = o.types.length >= 2;
-                    setSiteOptions(o);
+                    if (cancelled) return;
+                    found = o.types.length >= 2 && o.servers.length > 0;
+                    setSiteOptions(current => {
+                      if (o.types.length < current.types.length || o.servers.length < current.servers.length) return current;
+                      return o.types.length > current.types.length || o.servers.length > current.servers.length ? o : current;
+                    });
                   })
                   .catch(() => undefined);
               }, delay),

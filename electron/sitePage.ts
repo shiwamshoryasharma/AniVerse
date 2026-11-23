@@ -109,6 +109,33 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     const w = u.pathname.match(/\/watch\/[^/]+\/(\d{1,4})\/?$/i);
     return w ? Number(w[1]) : null;
   };
+  const episodeAttributes = ['data-episode', 'data-num', 'data-number', 'data-ep', 'data-episode-number'];
+  const exactEpisode = (el: Element, n: number) => episodeAttributes.find(name => el.getAttribute(name) === String(n));
+  // Numbered SPA episode cards can contain a long synopsis and have no URL or data attribute.
+  const numberedButton = (el: Element) => el.matches('button,[role="button"]') ?
+    Number(text(el).match(/^(\d{1,4})\.\s+\S/)?.[1] || 0) : 0;
+  const numberedLists = new WeakMap<Element, boolean>();
+  const numberedEpisode = (el: Element) => {
+    const n = numberedButton(el);
+    const parent = el.parentElement;
+    if (!n || !parent || el.closest('header,footer,nav,[class*="comment" i],[class*="pagination" i]')) return null;
+    if (!numberedLists.has(parent)) {
+      const peers = new Set([...parent.children].map(numberedButton).filter(Boolean));
+      numberedLists.set(parent, peers.size >= 3 && [...peers].some(ep => peers.has(ep + 1) && peers.has(ep + 2)));
+    }
+    return numberedLists.get(parent) ? n : null;
+  };
+  const episodeCard = 'button,[role="button"],[role="option"]';
+  const cardBadges = 'span,small,strong,b,em';
+  const episodeBadge = (el: Element) => {
+    if (!el.matches(episodeCard) || el.closest('header,footer,nav,[class*="comment" i]')) return null;
+    const numbers = new Set([...el.querySelectorAll(cardBadges)].flatMap(badge => {
+      if (badge.childElementCount > 1) return [];
+      const value = text(badge).match(/^ep(?:isode)?\.?\s*#?\s*0*(\d{1,4})$/i)?.[1];
+      return value ? [Number(value)] : [];
+    }));
+    return numbers.size === 1 ? [...numbers][0] : null;
+  };
   let picks = 0;
   const mark = (el: Element) => {
     const id = 'av' + Date.now().toString(36) + picks++;
@@ -144,14 +171,18 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     if (fromUrl !== null) return { matches: fromUrl === A.episode };
     const label = new RegExp('^(?:ep(?:isode)?\\.?\\s*#?\\s*)0*' + A.episode + '(?!\\d)', 'i');
     const selected = document.querySelectorAll(
-      '[aria-current="page"],[aria-selected="true"],[data-state="active"],' +
-      '[data-episode].active,[data-episode].selected,[class*="episode" i] .active,[class*="episode" i] .selected',
+      '[aria-current="page"],[aria-current="true"],[aria-selected="true"],[data-state="active"],' +
+      episodeAttributes.flatMap(name => ['active', 'selected'].map(state => '[' + name + '].' + state)).join(',') +
+      ',[class*="episode" i] .active,[class*="episode" i] .selected',
     );
-    return {
-      matches: [...selected].some(el => vis(el) && (
-        el.getAttribute('data-episode') === String(A.episode) || label.test(text(el))
-      )),
-    };
+    const matchesEpisode = (el: Element) =>
+      vis(el) && (exactEpisode(el, A.episode) || episodeBadge(el) === A.episode || label.test(text(el)));
+    if ([...selected].some(matchesEpisode)) return { matches: true };
+    // Some watch pages use an opaque URL identifier and mark the playing episode inside its card.
+    const cards = document.querySelectorAll(episodeCard);
+    return { matches: [...cards].some(el =>
+      vis(el) && episodeBadge(el) === A.episode && [...el.querySelectorAll(cardBadges)].some(marker =>
+        marker.childElementCount === 0 && /^now playing$/i.test(text(marker)) && vis(marker))) };
   }
 
   if (A.op === 'siteOptions') {
@@ -159,13 +190,16 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     document.querySelectorAll('[data-aniverse-opt]').forEach((e) => e.removeAttribute('data-aniverse-opt'));
     const TYPE = /^(h-?sub|hard\s?sub|soft\s?sub|s-?sub|sub(bed|titled|s)?|dub(bed|s)?|eng(lish)?\s?dub|raw)$/i;
     const typeValue = (t: string) => (/dub/i.test(t) ? 'dub' : /raw/i.test(t) ? 'raw' : 'sub');
+    const highlighted = (el: Element) => el.classList.contains('bg-primary') && el.classList.contains('text-primary-foreground');
     const isActive = (el: Element) =>
       /(^|[\s_-])(active|selected|current|is-active|on|checked)($|[\s_-])/i.test(String((el as HTMLElement).className)) ||
       ['aria-pressed', 'aria-selected', 'aria-checked', 'aria-current'].some((a) => /^(true|page)$/.test(el.getAttribute(a) || '')) ||
       /^(active|on|checked)$/i.test(el.getAttribute('data-state') || '');
     const CLICKABLE = 'button, a, [role="button"], [role="tab"], [role="radio"], li, label, [data-id], [data-server], [data-type], [data-link-id]';
     const leaf = (els: Element[]) => els.filter((el) => !els.some((o) => o !== el && el.contains(o)));
-    const player = document.querySelector('[data-aniverse-player]') || [...document.querySelectorAll('iframe, video')].sort((a, b) => area(b) - area(a))[0];
+    const player = document.querySelector('[data-aniverse-player]') || [...document.querySelectorAll('iframe, video')]
+      .filter(el => vis(el) && area(el) >= 15000).sort((a, b) => area(b) - area(a))[0];
+    if (!player && !/\/(?:watch|play|player|stream|episode)(?:[-_/]|$)/i.test(location.pathname)) return [];
     const near = (el: Element) => {
       if (!player) return true;
       const p = player.getBoundingClientRect();
@@ -175,7 +209,7 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     // Download rows ("DL", "Kiwi Sub 720p") sit next to the servers but don't switch playback.
     const DOWNLOAD = '[class*="download" i], [class*="mapper-dl" i], [class*="dl-row" i], [class*="dl-links" i], a[download]';
     const clickables = [...document.querySelectorAll(CLICKABLE)].filter(
-      (el) => vis(el) && near(el) && !el.closest('header, footer, nav, [class*="comment" i]') && !el.closest(DOWNLOAD) && !/^(dl|download)$/i.test(text(el)),
+      (el) => vis(el) && near(el) && !el.closest('header, footer, nav, [class*="comment" i]') && !el.closest(DOWNLOAD) && !/(?:^|\s)(?:dl|download)$/i.test(text(el)) && !el.matches(':disabled,[aria-disabled="true"]'),
     );
     // A real SUB/DUB switch is something you can click. "SUB:" / "DUB:" captions above
     // each server group are plain text; those groups become the audio choice below.
@@ -183,19 +217,34 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
       el.matches('button, a[href], input, [role="button"], [role="tab"], [role="radio"], [role="switch"], [onclick]') || getComputedStyle(el).cursor === 'pointer';
     let out: RawSiteOption[] = [];
     const seen = new Set<string>();
-    leaf(clickables.filter((el) => TYPE.test(text(el)) && interactive(el))).forEach((el) => {
+    const typeEls = leaf(clickables.filter(el => TYPE.test(text(el)) && interactive(el)));
+    typeEls.forEach((el) => {
       const label = text(el);
       const key = 'type:' + label.toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
-      out.push({ pick: '', kind: 'type', label, value: typeValue(label), active: isActive(el) || isActive(el.parentElement!), group: null });
+      out.push({ pick: '', kind: 'type', label, value: typeValue(label), active: isActive(el) || isActive(el.parentElement!) ||
+        (el.tagName === 'BUTTON' && highlighted(el)), group: null });
       el.setAttribute('data-aniverse-opt', String(out.length - 1));
     });
     const containers = [...document.querySelectorAll('[class*="server" i], [id*="server" i], [class*="source" i], [id*="source" i], [class*="mirror" i], [class*="provider" i], [data-server]')].filter(vis);
+    // Some players render an unlabeled provider grid immediately after their audio buttons.
+    // Require a complete audio row, a compact group of native buttons, and a selected provider.
+    const adjacentProviders = new Set<Element>();
+    for (const row of new Set(typeEls.map(el => el.parentElement))) {
+      if (!row || new Set(typeEls.filter(el => el.parentElement === row).map(el => typeValue(text(el)))).size < 2) continue;
+      const providers = row.nextElementSibling;
+      if (!providers || getComputedStyle(providers).display !== 'grid') continue;
+      const buttons = [...providers.children];
+      if (buttons.length < 2 || buttons.length > 16 || !buttons.every(button => button.tagName === 'BUTTON' &&
+          vis(button) && text(button).length > 0 && text(button).length <= 24 && !TYPE.test(text(button))) ||
+          !buttons.some(button => isActive(button) || highlighted(button))) continue;
+      buttons.forEach(button => adjacentProviders.add(button));
+    }
     const serverEls = leaf(
       clickables.filter((el) => {
         const t = text(el);
-        return t.length > 0 && t.length <= 24 && !TYPE.test(t) && !/^(servers?|sources?|sub|dub)$/i.test(t) && containers.some((c) => c === el || c.contains(el));
+        return t.length > 0 && t.length <= 24 && !TYPE.test(t) && !/^(servers?|sources?|sub|dub)$/i.test(t) && (adjacentProviders.has(el) || containers.some(c => c === el || c.contains(el)));
       }),
     );
     serverEls.forEach((el) => {
@@ -207,11 +256,13 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
         const lbl = [...p.children].map((c) => text(c)).find((t) => /^(h-?sub|s-?sub|soft\s?sub|sub|dub|raw)\s*:?$/i.test(t));
         if (lbl) group = typeValue(lbl);
       }
-      const label = text(el);
-      const key = 'server:' + (group || '') + label.toLowerCase();
+      const value = text(el).toLowerCase();
+      const key = 'server:' + (group || '') + value;
       if (seen.has(key)) return;
       seen.add(key);
-      out.push({ pick: '', kind: 'server', label, value: label.toLowerCase(), active: isActive(el), group });
+      const accessible = el.getAttribute('aria-label')?.trim();
+      const label = accessible && accessible.length <= 32 && /\bserver\b/i.test(accessible) ? accessible : text(el);
+      out.push({ pick: '', kind: 'server', label, value, active: isActive(el) || (adjacentProviders.has(el) && highlighted(el)), group });
       el.setAttribute('data-aniverse-opt', String(out.length - 1));
     });
     out.forEach((o, i) => {
@@ -224,6 +275,16 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     // clicks the same-named server in that group (HD-1 → DUB HD-1), else its first server.
     const servers = out.filter((o) => o.kind === 'server');
     const groups = [...new Set(servers.map((o) => o.group).filter((g): g is string => !!g))];
+    // An alternate-server switch returns to the default route when turned off.
+    if (servers.length && !groups.length && servers.every(server => {
+      const control = document.querySelector('[data-aniverse-pick="' + server.pick + '"]');
+      return control?.matches('[role="switch"][aria-checked]') && /\bserver\b/i.test(control.getAttribute('aria-label') || '');
+    })) {
+      const alternatives = servers.filter(server => server.active);
+      if (alternatives.length <= 1) {
+        out.push({ ...(alternatives[0] ?? servers[0]), label: 'Default', value: 'default', active: alternatives.length === 0 });
+      }
+    }
     if (!out.some((o) => o.kind === 'type') && groups.length >= 2) {
       const current = servers.find((o) => o.active);
       // Sites that don't mark the active server usually carry it in the address (?lang=dub, /dub/).
@@ -327,7 +388,7 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
       const ds=(el as HTMLElement).dataset||{};
       const marker=[ds.episode,ds.episodeNumber,ds.number,ds.num,ds.ep].find(value=>value&&/^\d{1,4}$/.test(value));
       const explicit=text(el).match(/^(?:ep(?:isode)?\.?\s*#?\s*)0*(\d{1,4})(?!\d)/i);
-      const episode=marker?Number(marker):((u?epFromUrl(u):null)??(explicit?Number(explicit[1]):null));
+      const episode=marker?Number(marker):((u?epFromUrl(u):null)??numberedEpisode(el)??episodeBadge(el)??(explicit?Number(explicit[1]):null));
       if(!episode||episode>5000)continue;
       let card=el;
       for(let parent=el.parentElement,i=0;!card.querySelector('img')&&parent&&i<2;i++,parent=parent.parentElement){
@@ -385,22 +446,26 @@ function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
         }
       }
       const link = el.tagName === 'A' ? el : el.querySelector('a[href]');
-      const u = link ? abs(link.getAttribute('href')) : el.hasAttribute('data-href') ? abs(el.getAttribute('data-href')) : null;
+      const href = link ? link.getAttribute('href') : el.getAttribute('data-href');
+      const u = href?.trim().startsWith('#') ? null : abs(href);
+      const visible = vis(el);
+      if ((!u && !visible) || (u && !onSite(u))) return;
       if (u && epFromUrl(u) === N) s += 3;
+      if (numberedEpisode(el) === N || episodeBadge(el) === N) s += 4;
       const t = text(el);
       if (t && ((t.length <= 160 && explicit.test(t)) || (t.length <= 40 && bare.test(t)))) s += 2;
       else if ([...el.querySelectorAll('span, small, strong, b, em, p, div')].some((c) => c.childElementCount <= 1 && badge.test(text(c)))) s += 2;
       if (s < 2) return;
       if (el.closest('[class*="episode" i], [id*="episode" i], [class*="ep-list" i], [class*="ep-item" i], [class*="eps" i]') || inEpisodeList(el)) s += 1.5;
       if (u && A.slug && u.pathname.includes(A.slug)) s += 2;
-      if (u && !onSite(u)) s -= 3;
+      if (visible) s += 0.25;
       if (el.closest('header, footer, nav, [class*="comment" i], [class*="pagination" i]')) s -= 2;
       if (el.tagName === 'A') s += 0.5;
       if (!best || s > best.s) best = { s, el, u };
     });
     const b = best as { s: number; el: Element; u: URL | null } | null;
     if (!b || b.s < 3) return null;
-    const marker = ['data-episode', 'data-num', 'data-number', 'data-ep', 'data-episode-number'].find(name => b.el.getAttribute(name) === String(N));
+    const marker = exactEpisode(b.el, N);
     return { href: b.u && onSite(b.u) && b.el.tagName === 'A' ? b.u.href : null, pick: b.u && b.el.tagName === 'A' ? null : mark(b.el), score: b.s,
       selector: marker ? b.el.tagName.toLowerCase() + '[' + marker + '="{n}"]' : undefined };
   }
