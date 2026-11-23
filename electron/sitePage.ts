@@ -199,7 +199,9 @@ export function PAGE_FN(A: PageOp, markers:typeof seriesMarkers): unknown {
     const leaf = (els: Element[]) => els.filter((el) => !els.some((o) => o !== el && el.contains(o)));
     const player = document.querySelector('[data-aniverse-player]') || [...document.querySelectorAll('iframe, video')]
       .filter(el => vis(el) && area(el) >= 15000).sort((a, b) => area(b) - area(a))[0];
-    if (!player && !/\/(?:watch|play|player|stream|episode)(?:[-_/]|$)/i.test(location.pathname)) return [];
+    const address = new URL(location.href);
+    const episodeAddress = ['ep', 'episode'].some(key => !!address.searchParams.get(key));
+    if (!player && !episodeAddress && !/\/(?:watch|play|player|stream|episode)(?:[-_/]|$)/i.test(address.pathname)) return [];
     const near = (el: Element) => {
       if (!player) return true;
       const p = player.getBoundingClientRect();
