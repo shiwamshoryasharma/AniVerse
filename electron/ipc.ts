@@ -238,7 +238,7 @@ export const schemas: { [M in RpcMethod]: z.ZodType<RpcContract[M][0]> } = {
   'player.mp4Folder': z.object({ action: z.enum(['get', 'choose', 'reset']) }),
 
   'player.saveMp4': z.object({ url, sourceId: text(200).min(1).optional(), filenameContext }).strict(),
-  'player.saveSiteMp4': z.object({ webContentsId: id, filenameContext }).strict(),
+  'player.saveSiteMp4': z.object({ webContentsId: id, filenameContext, maxHeight: z.number().int().min(144).max(4320).optional() }).strict(),
   'player.quantum': z.object({ webContentsId: id, action: z.enum(['enable', 'off', 'level', 'status']), intensity: z.number().finite().min(0).max(1).optional() }).strict(),
   'sources.hoverAudio': z.object({ sourceId: text(200).min(1), mediaId: id }).strict(),
 

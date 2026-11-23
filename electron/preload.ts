@@ -35,7 +35,8 @@ const bridge: AniverseBridge = {
   ...(process.platform === 'win32' ? {
     modernWindows: true,
     saveMp4: (url: string, sourceId?: string, filenameContext?: EpisodeDownloadContext) => bridge.invoke('player.saveMp4', { url, sourceId, filenameContext }),
-    saveSiteMp4: (webContentsId: number, filenameContext?: EpisodeDownloadContext) => bridge.invoke('player.saveSiteMp4', { webContentsId, filenameContext }),
+    saveSiteMp4: (webContentsId: number, filenameContext?: EpisodeDownloadContext, maxHeight?: number) =>
+      bridge.invoke('player.saveSiteMp4', { webContentsId, filenameContext, maxHeight }),
     onMp4Progress: (listener: (progress: import('../app/shared/rpc').EventContract['mp4.progress']) => void) => bridge.on('mp4.progress', listener),
     hoverSourceAudio: (sourceId: string, mediaId: number) => bridge.invoke('sources.hoverAudio', { sourceId, mediaId }),
   } : {}),

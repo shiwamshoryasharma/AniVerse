@@ -612,14 +612,14 @@ async function bootstrap() {
       if (source && (!source.enabled || source.kind !== 'web')) return false;
       return mp4.saveDirect(mainWindow.webContents, url, source?.url, filenameContext);
     },
-    'player.saveSiteMp4': ({ webContentsId, filenameContext }) => {
+    'player.saveSiteMp4': ({ webContentsId, filenameContext, maxHeight }) => {
       if (process.platform !== 'win32' || store.isIncognito()) return false;
       const guest = guestFor(webContentsId);
       const source = sessions.sourceForSession(guest.session);
       if (!source?.enabled || source.kind !== 'web' || !source.partition.startsWith('persist:')) return false;
       const current = navigator.currentEpisodeScope(guest, source.id);
       if (!current) return false;
-      return mp4.saveActive(guest, () => current() && sessions.sourceForSession(guest.session)?.url === source.url, filenameContext);
+      return mp4.saveActive(guest, () => current() && sessions.sourceForSession(guest.session)?.url === source.url, filenameContext, maxHeight);
     },
     'player.quantum': (input) => process.platform === 'win32'
       ? quantum.request(guestFor(input.webContentsId), input) : { state: 'off' },

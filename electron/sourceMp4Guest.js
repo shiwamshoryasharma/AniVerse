@@ -15,29 +15,29 @@
   const plain = name => {
     try {
       const url = new URL(name);
-      if (/^https?:$/.test(url.protocol) && !url.hash && !url.username && !url.password && name.length <= 4096) return url.href;
+      if (/^https?:$/.test(url.protocol) && !url.hash && !url.username && !url.password && url.href.length <= 4096) return url.href;
     } catch { /* Invalid references are not download candidates. */ }
     return null;
   };
   const direct = plain(media);
-  const supported = direct && /\.(?:mp4|m3u8|ts|m2ts|mts|webm|mkv|mov|m4v|avi|mpg|mpeg|ogv|flv|wmv|3gp)$/i.test(new URL(direct).pathname);
-  if (!media.startsWith('blob:') && !supported) return null;
-  if (supported && !/\.m3u8$/i.test(new URL(direct).pathname)) return { identity, media, url:direct };
+  if (!media.startsWith('blob:') && !direct) return null;
 
   // These are observations, not an ordered media list. Native code must find an
-  // exact member of a finite playlist before transferring any media fragments.
-  const resources = performance.getEntriesByType('resource').slice(-256).filter(entry =>
+  // exact member of a finite manifest before transferring any media fragments.
+  const entries = performance.getEntriesByType('resource').slice(-256).filter(entry =>
     ['video', 'fetch', 'xmlhttprequest'].includes(entry.initiatorType));
-  const playlists = [], observations = [];
+  const resources = [], playlists = [], observations = [];
+  const manifest = /\.(?:m3u8|mpd)$/i;
   const add = (list, value, limit) => { if (value && list.length < limit && !list.includes(value)) list.push(value); };
-  if (supported) add(playlists, direct, 8);
-  for (let index = resources.length - 1; index >= 0; index--) {
-    const url = plain(resources[index].name);
+  if (direct && manifest.test(new URL(direct).pathname)) add(playlists, direct, 8);
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const url = plain(entries[index].name);
     if (!url) continue;
-    if (/\.m3u8$/i.test(new URL(url).pathname)) add(playlists, url, 8);
+    add(resources, url, 192);
+    if (manifest.test(new URL(url).pathname)) add(playlists, url, 8);
     else add(observations, url, 32);
   }
-  if (!playlists.length || (media.startsWith('blob:') && !observations.length)) return null;
+  if (!direct && !resources.length) return null;
   let subtitle;
   const selected = [...(video.textTracks ?? [])].find(track => track.mode === 'showing' && ['subtitles','captions'].includes(track.kind));
   if (selected) {
@@ -46,5 +46,6 @@
     subtitle = { ...(url ? { url } : {}), ...(selected.language ? { language:selected.language.slice(0,64) } : {}),
       ...(selected.label ? { label:selected.label.slice(0,128) } : {}) };
   }
-  return { identity, media, url:playlists[0], playlists, observations, expectedDuration:video.duration, ...(subtitle ? { subtitle } : {}) };
+  return { identity, media, url:direct ?? playlists[0], playlists, observations, resources,
+    expectedDuration:video.duration, ...(subtitle ? { subtitle } : {}) };
 })()

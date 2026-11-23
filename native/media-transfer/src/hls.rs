@@ -11,6 +11,8 @@ pub(super) struct Variant {
     pub url: Url,
     pub audio: Option<String>,
     pub subtitles: Option<String>,
+    pub height: Option<u32>,
+    pub bandwidth: Option<u64>,
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum RenditionKind {
@@ -115,7 +117,14 @@ fn parse_with_scope(base: &Url, text: &str, owned: bool) -> Result<Playlist, Rpc
                         .find(|(key, _)| key == name)
                         .map(|(_, value)| value.clone())
                 };
-                next_variant = Some((get("AUDIO"), get("SUBTITLES")));
+                let height = get("RESOLUTION").and_then(|resolution| {
+                    let (width, height) = resolution.split_once('x')?;
+                    let width = width.parse::<u32>().ok()?;
+                    let height = height.parse::<u32>().ok()?;
+                    (width > 0 && height > 0).then_some(height)
+                });
+                let bandwidth = get("BANDWIDTH").and_then(|value| value.parse::<u64>().ok());
+                next_variant = Some((get("AUDIO"), get("SUBTITLES"), height, bandwidth));
             }
             "#EXT-X-MAP" => {
                 if init.is_some() || !segments.is_empty() {
@@ -141,14 +150,13 @@ fn parse_with_scope(base: &Url, text: &str, owned: bool) -> Result<Playlist, Rpc
             }
             _ if !line.starts_with('#') => {
                 let url = resolve(base, line, owned)?;
-                if let Some((audio, subtitles)) = next_variant.take() {
-                    if !super::has_extension(&url, "m3u8") {
-                        return Err(unsupported());
-                    }
+                if let Some((audio, subtitles, height, bandwidth)) = next_variant.take() {
                     variants.push(Variant {
                         url,
                         audio,
                         subtitles,
+                        height,
+                        bandwidth,
                     });
                 } else {
                     let seconds = next_segment

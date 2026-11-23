@@ -25,7 +25,12 @@ describe('owned playing HLS discovery', () => {
     expect(result.subtitle).toEqual({ url: 'https://captions.example.test/en.vtt?opaque=1', language: 'en', label: 'English' });
   });
   it('never treats standalone image requests as a playlist', () => {
-    expect(inspect(['https://media.example.test/picture.png'])).toBeNull();
+    expect(inspect(['https://media.example.test/picture.png']).playlists).toEqual([]);
+  });
+  it('reports signed extensionless direct sources and bounded resource names for native classification', () => {
+    const url = 'https://media.example.test/asset?sig=fixture';
+    const result = inspect([url], { currentSrc: url });
+    expect(result).toMatchObject({ media: url, url, playlists: [], resources: [url] });
   });
   it('retains ownership, finite-duration and protected-video checks', () => {
     const resources = ['https://media.example.test/video.m3u8', 'https://media.example.test/a.png'];

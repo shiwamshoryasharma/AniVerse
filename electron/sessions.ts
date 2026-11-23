@@ -1,3 +1,4 @@
+import { observeSourceNetwork } from './ownedPlayerFrame';
 import type {RustPolicy} from '../app/core/security/rustPolicy';
 import {SourceNetworkGuard} from './sourceNetwork';
 import { randomUUID } from 'node:crypto';
@@ -98,6 +99,22 @@ export class SessionManager implements SiteFetcher {
         event.preventDefault();
         this.notify({ level: 'warn', message: `Blocked a download from ${source.name}: ${item.getFilename()}`, sourceId: source.id });
       });
+      if (this.mp4 && source.kind === 'web' && source.partition.startsWith('persist:')) {
+        const managedGuest = (details: { webContents?: WebContents; webContentsId?: number }) => {
+          const guest = details.webContents ??
+            (details.webContentsId === undefined ? undefined : webContents.fromId(details.webContentsId));
+          return guest && !guest.isDestroyed() && guest.session === ses && this.guests.get(guest.id) === source.id
+            ? guest : undefined;
+        };
+        ses.webRequest.onSendHeaders({ urls: ['<all_urls>'] }, details => {
+          const guest = managedGuest(details);
+          if (guest) this.mp4?.capture.request(guest, details);
+        });
+        ses.webRequest.onResponseStarted({ urls: ['<all_urls>'] }, details => {
+          const guest = managedGuest(details);
+          if (guest) this.mp4?.capture.response(guest, details);
+        });
+      }
     }
     this.applyAdblock(source, ses);
     return ses;
@@ -142,6 +159,10 @@ export class SessionManager implements SiteFetcher {
   /** Applies navigation, popup and Cloudflare policies to a source webview. */
   manageGuest(guest: WebContents, source: SourceInfo) {
     this.guests.set(guest.id, source.id);
+    if (this.mp4 && source.kind === 'web' && source.partition.startsWith('persist:')) {
+      this.mp4.capture.manage(guest);
+      observeSourceNetwork(guest);
+    }
     guest.once('destroyed', () => {
       this.guests.delete(guest.id);
       clearTimeout(this.challengeTimers.get(guest.id));

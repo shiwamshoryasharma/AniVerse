@@ -1,4 +1,6 @@
+mod dash;
 mod hls;
+mod media;
 mod remux;
 mod transfer;
 mod vtt;
@@ -8,6 +10,7 @@ use reqwest::{redirect::Policy, Client, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
+    collections::HashMap,
     io::{self, BufRead, Read, Write},
     net::IpAddr,
     path::PathBuf,
@@ -45,6 +48,20 @@ struct Request {
     subtitle: Option<SubtitleRequest>,
     #[serde(rename = "expectedDuration")]
     expected_duration: Option<f64>,
+    kind: Option<media::MediaFormat>,
+    #[serde(default)]
+    owned: bool,
+    #[serde(default, rename = "headersByUrl")]
+    headers_by_url: Vec<RequestHeaders>,
+    #[serde(rename = "maxHeight")]
+    max_height: Option<u32>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RequestHeaders {
+    url: String,
+    headers: HashMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -62,6 +79,11 @@ fn selection(request: &Request) -> Result<remux::Selection, RpcError> {
         .is_some_and(|media| media.len() > 4096)
         || request.playlists.len() > 8
         || request.observations.len() > 32
+        || request.headers_by_url.len() > 16
+        || (!request.owned && !request.headers_by_url.is_empty())
+        || request
+            .max_height
+            .is_some_and(|height| height == 0 || height > 8192)
     {
         return Err(bad());
     }
@@ -71,8 +93,12 @@ fn selection(request: &Request) -> Result<remux::Selection, RpcError> {
     {
         return Err(bad());
     }
-    let owned = request.expected_duration.is_some() && !request.playlists.is_empty();
+    let owned =
+        request.owned || (request.expected_duration.is_some() && !request.playlists.is_empty());
     let public = |value: &str| {
+        if value.len() > 4096 || value.bytes().any(|byte| byte.is_ascii_control()) {
+            return Err(bad());
+        }
         Url::parse(value)
             .ok()
             .filter(|url| {
@@ -89,7 +115,7 @@ fn selection(request: &Request) -> Result<remux::Selection, RpcError> {
         .iter()
         .map(|value| {
             public(value).and_then(|url| {
-                if has_extension(&url, "m3u8") {
+                if request.owned || has_extension(&url, "m3u8") {
                     Ok(url)
                 } else {
                     Err(bad())
@@ -133,9 +159,17 @@ fn selection(request: &Request) -> Result<remux::Selection, RpcError> {
             })
         })
         .transpose()?;
+    let root = public(&request.url)?;
+    let mut roots = playlists.clone();
+    if request.owned && !roots.contains(&root) {
+        if !roots.is_empty() {
+            return Err(bad());
+        }
+        roots.push(root.clone());
+    }
     let scope = if owned {
         Some(remux::OwnedScope::from_owned_selection(
-            &playlists,
+            &roots,
             subtitle.as_ref().and_then(|track| track.url.as_ref()),
         )?)
     } else {
@@ -144,7 +178,41 @@ fn selection(request: &Request) -> Result<remux::Selection, RpcError> {
         }
         None
     };
+    let mut request_contexts = media::RequestContexts::new();
+    let mut total_headers = 0;
+    for entry in &request.headers_by_url {
+        let url = public(&entry.url)?;
+        if !roots.contains(&url)
+            && !observations.contains(&url)
+            && !subtitle
+                .as_ref()
+                .is_some_and(|track| track.url.as_ref() == Some(&url))
+        {
+            return Err(bad());
+        }
+        if entry.headers.len() > 8 || request_contexts.contains_key(&url) {
+            return Err(bad());
+        }
+        let mut headers = reqwest::header::HeaderMap::new();
+        for (name, value) in &entry.headers {
+            total_headers += name.len() + value.len();
+            if value.len() > 8192 || total_headers > 32 * 1024 || !media::permitted_header(name) {
+                return Err(bad());
+            }
+            let name =
+                reqwest::header::HeaderName::from_bytes(name.as_bytes()).map_err(|_| bad())?;
+            let mut value = reqwest::header::HeaderValue::from_str(value).map_err(|_| bad())?;
+            // Prevent diagnostics from emitting captured authorization or session values.
+            value.set_sensitive(true);
+            headers.insert(name, value);
+        }
+        request_contexts.insert(url, headers);
+    }
     Ok(remux::Selection {
+        owned_root: request.owned,
+        format: request.kind,
+        request_contexts,
+        max_height: request.max_height,
         direct_primary: request.media.as_deref().is_some_and(|media| {
             Url::parse(media)
                 .is_ok_and(|media| Url::parse(&request.url).is_ok_and(|url| media == url))
@@ -190,72 +258,58 @@ fn run() -> Result<(), RpcError> {
         return Err(invalid("Choose an absolute destination ending in .mp4."));
     }
     let selection = selection(&request)?;
+
     let url = Url::parse(&request.url)
         .ok()
         .filter(|url| {
             media_url(url.as_str()).is_some()
-                || (has_extension(url, "m3u8")
-                    && selection
-                        .scope
-                        .as_ref()
-                        .is_some_and(|scope| scope.contains(url)))
+                || selection
+                    .scope
+                    .as_ref()
+                    .is_some_and(|scope| scope.contains(url))
         })
-        .ok_or_else(|| invalid("Choose a supported public video."))?;
-    let hls = has_extension(&url, "m3u8");
-    if !hls
-        && (!selection.observations.is_empty()
-            || !selection.playlists.is_empty()
-            || selection.subtitle.is_some())
-    {
-        return Err(invalid(
-            "The selected tracks require a clear on-demand HLS stream.",
-        ));
-    }
-    let format = convertible_format(&url);
-    let ffmpeg = if hls || format.is_some() {
-        bind_remux_process_tree()?;
-        Some(
-            std::env::current_exe()
-                .ok()
-                .and_then(|file| file.parent().map(|folder| folder.join("ffmpeg.exe")))
-                .filter(|file| file.is_file())
-                .ok_or_else(|| invalid("The bundled MP4 remuxer is missing."))?,
-        )
+        .ok_or_else(|| invalid("Choose a supported public or active video."))?;
+    let legacy_conversion = if selection.format.is_none() && !has_extension(&url, "webm") {
+        convertible_format(&url).filter(|_| !selection.owned_root)
     } else {
         None
     };
+    let ffmpeg = std::env::current_exe()
+        .ok()
+        .and_then(|file| file.parent().map(|folder| folder.join("ffmpeg.exe")))
+        .filter(|file| file.is_file());
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|_| invalid("Could not start the download worker."))?;
     let transfer = runtime.spawn(async move {
-        let transport = remux::selection_transport(&url, &selection).await?;
         let progress = |received, total| publish(json!({"received": received, "total": total}));
         timeout(Duration::from_secs(45 * 60), async {
-            if let Some(ffmpeg) = ffmpeg.as_ref() {
-                if let Some(format) = format {
-                    remux::save_container(
-                        &transport,
-                        &url,
-                        format,
-                        &request.destination,
-                        ffmpeg,
-                        progress,
-                    )
-                    .await
-                } else {
-                    remux::save_selected(
-                        &transport,
-                        &url,
-                        &selection,
-                        &request.destination,
-                        ffmpeg,
-                        progress,
-                    )
-                    .await
-                }
+            if let Some(format) = legacy_conversion {
+                let ffmpeg = ffmpeg
+                    .as_deref()
+                    .ok_or_else(|| invalid("The bundled MP4 remuxer is missing."))?;
+                bind_remux_process_tree()?;
+                let transport = remux::selection_transport(&url, &selection).await?;
+                remux::save_container(
+                    &transport,
+                    &url,
+                    format,
+                    &request.destination,
+                    ffmpeg,
+                    progress,
+                )
+                .await
             } else {
-                transfer::save(&transport, &url, &request.destination, progress).await
+                remux::download_guarded(
+                    &url,
+                    &selection,
+                    &request.destination,
+                    ffmpeg.as_deref(),
+                    progress,
+                    &|| true,
+                )
+                .await
             }
         })
         .await
@@ -426,6 +480,15 @@ async fn public_transport_checked(url: &Url) -> Result<Client, RpcError> {
         .read_timeout(Duration::from_secs(30))
         .build()
         .map_err(|_| failed())
+}
+
+pub(crate) fn require_owner(owned: &(impl Fn() -> bool + Sync)) -> Result<(), RpcError> {
+    if !owned() {
+        return Err(invalid(
+            "The active video changed before saving the download.",
+        ));
+    }
+    Ok(())
 }
 
 fn invalid(message: &str) -> RpcError {

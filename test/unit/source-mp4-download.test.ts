@@ -66,15 +66,52 @@ it('validates bounded HLS observations while preserving opaque queries and a sel
     subtitle: { url: 'https://captions.test/en.vtt?opaque=3', language: 'en', label: 'English' } };
   mocks.inspect.mockResolvedValue(offered);
   const inspector = new SourceMp4Download(policy, () => folder) as unknown as CandidateInspector;
-  await expect(inspector.inspect({})).resolves.toEqual(offered);
+  await expect(inspector.inspect({})).resolves.toEqual({ ...offered, owned: true, kind: 'hls' });
   mocks.inspect.mockResolvedValue({ ...offered, media: offered.url });
-  await expect(inspector.inspect({})).resolves.toEqual({ ...offered, media: offered.url });
+  await expect(inspector.inspect({})).resolves.toEqual({ ...offered, media: offered.url, owned: true, kind: 'hls' });
   mocks.inspect.mockResolvedValue({ ...offered, observations: ['https://user:password@media.test/private.png'] });
   await expect(inspector.inspect({})).resolves.toBeNull();
   mocks.inspect.mockResolvedValue({ ...offered, observations: Array(33).fill(offered.observations[0]) });
   await expect(inspector.inspect({})).resolves.toBeNull();
   mocks.inspect.mockResolvedValue({ ...offered, media: 'https://media.test/different.m3u8' });
   await expect(inspector.inspect({})).resolves.toBeNull();
+});
+
+it('selects a captured extensionless manifest and forwards only exact owned Chromium headers', async () => {
+  const manifest = 'https://media.test/authorized?sig=root';
+  const segment = 'https://cdn.test/part?sig=child';
+  const stale = 'https://media.test/authorized?sig=unselected';
+  const frame = { processId: 1, routingId: 2, frameTreeNodeId: 3, url: 'https://player.test/watch' };
+  Object.assign(frame, { top: frame });
+  const guest = Object.assign(new EventEmitter(), { mainFrame: frame, hostWebContents: {}, isDestroyed: () => false });
+  const service = new SourceMp4Download(policy, () => folder);
+  service.capture.manage(guest as never);
+  const observe = (id: number, url: string, type: string, headers: Record<string, string>) => {
+    const request = { id, url, frame, method: 'GET', resourceType: 'xhr' };
+    service.capture.request(guest as never, { ...request, requestHeaders: headers } as never);
+    service.capture.response(guest as never, { ...request, statusCode: 200, responseHeaders: { 'Content-Type': [type] } } as never);
+  };
+  observe(1, manifest, 'Application/Vnd.Apple.Mpegurl; charset=utf-8', { Cookie: 'view=fixture', Authorization: 'Bearer synthetic' });
+  observe(2, segment, 'application/octet-stream', { Accept: '*/*', Host: 'cdn.test' });
+  observe(3, stale, 'application/dash+xml', { Cookie: 'stale=fixture' });
+  mocks.inspect.mockImplementation((_guest, _script, bindFrame) => {
+    bindFrame(frame);
+    return { identity: 'doc:1', media: 'blob:https://player.test/playing', resources: [manifest, segment],
+      playlists: [], observations: [manifest, segment], expectedDuration: 90 };
+  });
+  const transfer = vi.spyOn(service as unknown as { transfer: (...args: unknown[]) => Promise<boolean> }, 'transfer').mockResolvedValue(true);
+  await expect(service.saveActive(guest as never, () => true, undefined, 720)).resolves.toBe(true);
+  expect(transfer).toHaveBeenCalledWith(guest, expect.objectContaining({
+    url: manifest, owned: true, kind: 'hls', maxHeight: 720, playlists: [manifest], observations: [segment],
+    headersByUrl: [{ url: manifest, headers: { cookie: 'view=fixture', authorization: 'Bearer synthetic' } }, { url: segment, headers: { accept: '*/*' } }],
+  }), expect.any(Function));
+});
+
+it('passes signed direct selection to the worker without using the anonymous URL path', async () => {
+  const url = 'https://media.test/asset?ticket=fixture';
+  mocks.inspect.mockResolvedValue({ identity: 'doc:1', media: url, url, playlists: [], observations: [] });
+  const inspector = new SourceMp4Download(policy, () => folder) as unknown as CandidateInspector;
+  await expect(inspector.inspect({})).resolves.toMatchObject({ url, media: url, owned: true });
 });
 it('cancels its owned worker when the playing episode scope changes during a transfer', async () => {
   vi.useFakeTimers();

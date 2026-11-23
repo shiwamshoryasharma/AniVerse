@@ -1,4 +1,6 @@
-import type { WebContents } from 'electron';
+import type { WebContents, WebFrameMain } from 'electron';
+
+import { SourceRequestCookies, type CookieLookup } from './sourceRequestCookies';
 
 const WORLD = 1021;
 const WORLD_NAME = 'aniVerseOwnedSourcePlayer';
@@ -20,6 +22,7 @@ interface GuestSession {
   subframes: Map<string,{sessionId:string; parent:string}>;
   attachSubframes?: Promise<unknown>;
   queue: Promise<unknown>;
+  cookies?: SourceRequestCookies;
 }
 const sessions = new WeakMap<WebContents, GuestSession>();
 
@@ -54,13 +57,14 @@ function releaseDebugger(guest: WebContents, state: GuestSession) {
   }
 }
 
-function ownedDebugger(guest: WebContents): GuestSession | null {
+function ownedDebugger(guest: WebContents, observeNetwork = false): GuestSession | null {
   const current = sessions.get(guest);
   if (current && guest.debugger.isAttached()) return current;
-  if (!isLive(guest) || guest.debugger.isAttached()) return null;
+  if (guest.isDestroyed() || guest.getType() !== 'webview' || (!observeNetwork && !isLive(guest)) || guest.debugger.isAttached()) return null;
   try { guest.debugger.attach('1.3'); } catch { return null; }
   let state: GuestSession;
   const cleanup = () => {
+    state.cookies?.clear();
     if (sessions.get(guest) === state) sessions.delete(guest);
     guest.removeListener('did-start-navigation', navigation);
     guest.removeListener('destroyed', cleanup);
@@ -68,13 +72,17 @@ function ownedDebugger(guest: WebContents): GuestSession | null {
     guest.debugger.removeListener('message',message);
   };
   const navigation = (details: {isMainFrame: boolean;isSameDocument: boolean}) => {
-    if (details.isMainFrame && !details.isSameDocument) releaseDebugger(guest, state);
+    if (!details.isMainFrame || details.isSameDocument) return;
+    if (state.cookies) state.cookies.clear();
+    else releaseDebugger(guest, state);
   };
-  const message = (_event: unknown, method: string, params: IframeEvent) => {
+  const message = (_event: unknown, method: string, params: IframeEvent & Record<string, unknown>, sessionId?: string) => {
+    state.cookies?.message(method, params, sessionId);
     if (method === 'Target.attachedToTarget') {
       const info = params.targetInfo;
       if (info?.type === 'iframe' && info.targetId && info.parentFrameId && params.sessionId && state.subframes.size < 16) {
         state.subframes.set(info.targetId,{sessionId:params.sessionId,parent:info.parentFrameId});
+        if (state.cookies) void guest.debugger.sendCommand('Network.enable', {}, params.sessionId).catch(() => undefined);
       }
     } else if (method === 'Target.detachedFromTarget') {
       for (const [frame,saved] of state.subframes) {
@@ -89,6 +97,32 @@ function ownedDebugger(guest: WebContents): GuestSession | null {
   guest.debugger.once('detach',cleanup);
   guest.debugger.on('message',message);
   return state;
+}
+
+function attachFrames(guest: WebContents, state: GuestSession) {
+  return state.attachSubframes ??= guest.debugger.sendCommand('Target.setAutoAttach', {
+    autoAttach:true,waitForDebuggerOnStart:false,flatten:true,filter:[{type:'iframe'},{exclude:true}],
+  }).catch(error => { state.attachSubframes = undefined; throw error; });
+}
+
+export function observeSourceNetwork(guest: WebContents) {
+  const state = ownedDebugger(guest, true);
+  if (!state || state.cookies) return;
+  state.cookies = new SourceRequestCookies();
+  void guest.debugger.sendCommand('Network.enable').catch(() => undefined);
+  void attachFrames(guest, state).catch(() => undefined);
+}
+
+export async function cookiesForTopPlayer(guest: WebContents): Promise<CookieLookup | undefined> {
+  const state = sessions.get(guest);
+  if (!state?.cookies || !isLive(guest)) return;
+  const root = guest.mainFrame, url = guest.getURL();
+  try {
+    const { frameTree }: { frameTree: FrameTree } = await guest.debugger.sendCommand('Page.getFrameTree');
+    if (isLive(guest) && guest.mainFrame === root && guest.getURL() === url && frameTree.frame.url === url) {
+      return state.cookies.lookup(guest, { frame: frameTree.frame.id, loader: frameTree.frame.loaderId });
+    }
+  } catch { /* Other tooling may have detached the observer. */ }
 }
 
 async function selectedFrame(guest: WebContents, state: GuestSession): Promise<FrameSession | null> {
@@ -110,10 +144,7 @@ async function selectedFrame(guest: WebContents, state: GuestSession): Promise<F
   }
   const local = frameTree.childFrames?.find(child => child.frame.id === frame);
   if (local) return eligible(local.frame.url) ? {frame,url:local.frame.url,loader:local.frame.loaderId} : null;
-  state.attachSubframes ??= dbg.sendCommand('Target.setAutoAttach',{
-    autoAttach:true,waitForDebuggerOnStart:false,flatten:true,filter:[{type:'iframe'},{exclude:true}],
-  });
-  await state.attachSubframes;
+  await attachFrames(guest, state);
   const child = state.subframes.get(frame);
   if (child?.parent !== frameTree.frame.id) return null;
   const {frameTree: remote}: {frameTree: FrameTree} = await dbg.sendCommand('Page.getFrameTree',{},child.sessionId);
@@ -121,7 +152,8 @@ async function selectedFrame(guest: WebContents, state: GuestSession): Promise<F
   return {frame,url:remote.frame.url,loader:remote.frame.loaderId,sessionId:child.sessionId};
 }
 
-async function readFrame(guest: WebContents, code: string, gesture = false, accept: (frame: FrameSession) => boolean = () => true) {
+async function readFrame(guest: WebContents, code: string, gesture = false,
+  accept: (frame: FrameSession) => boolean = () => true, captureFrame?: (frame: WebFrameMain, cookies?: CookieLookup) => void) {
   const state = ownedDebugger(guest);
   if (!state) return null;
   const root = guest.mainFrame, top = guest.getURL();
@@ -137,6 +169,15 @@ async function readFrame(guest: WebContents, code: string, gesture = false, acce
       expression:code,contextId:context.executionContextId,awaitPromise:true,returnByValue:true,
       userGesture:gesture,allowUnsafeEvalBlockedByCSP:false,
     },child.sessionId);
+    if (captureFrame && live() && !value.exceptionDetails) {
+      const current = await selectedFrame(guest, state);
+      if (!live() || !current || current.frame !== child.frame || current.loader !== child.loader ||
+          current.sessionId !== child.sessionId || current.url !== child.url) return null;
+      // CDP and Electron expose different frame IDs. A URL identifies this exact
+      // child only when it is unique among the current native frame siblings.
+      const matches = root.frames.filter(frame => !frame.detached && frame.url === child.url);
+      if (matches.length === 1) captureFrame(matches[0], state.cookies?.lookup(guest, child));
+    }
     return live() && !value.exceptionDetails ? value.result?.value ?? null : null;
   }).catch(() => null);
   state.queue = work;
@@ -148,9 +189,14 @@ function isFrameOffer(value: unknown): value is {frame:true} {
 }
 
 /** A trusted native caller supplies fixed readonly code. Source pages have no access to this transport. */
-export async function readOwnedPlayer(guest: WebContents, javascript: string): Promise<unknown | null> {
+export async function readOwnedPlayer(guest: WebContents, javascript: string,
+  captureFrame?: (frame: WebFrameMain, cookies?: CookieLookup) => void): Promise<unknown | null> {
+  const root = captureFrame && !guest.isDestroyed() ? guest.mainFrame : undefined;
   const top = await readTop(guest,javascript);
-  return isFrameOffer(top) ? readFrame(guest,javascript) : top;
+  if (isFrameOffer(top)) return readFrame(guest,javascript,false,undefined,captureFrame);
+  const cookies = root && top !== null ? await cookiesForTopPlayer(guest) : undefined;
+  if (root && top !== null && isLive(guest) && guest.mainFrame === root) captureFrame?.(root, cookies);
+  return top;
 }
 
 async function readBoundFrame(guest: WebContents, child: FrameSession, code: string, gesture = false) {
