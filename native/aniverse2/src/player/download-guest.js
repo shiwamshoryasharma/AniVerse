@@ -44,27 +44,30 @@
   };
   const subtitle = subtitleHint();
   const direct = plain(media);
-  if (direct && /\.mp4$/i.test(new URL(direct).pathname)) return { identity, media, expectedDuration: video.duration, url: direct, ...(subtitle ? { subtitle } : {}) };
-  if (!media.startsWith('blob:') && (!direct || !/\.m3u8$/i.test(new URL(direct).pathname))) return null;
-
+  if (!direct && !media.startsWith('blob:')) return null;
   const resources = performance.getEntriesByType('resource').filter(entry =>
-    ['video', 'fetch', 'xmlhttprequest'].includes(entry.initiatorType));
-  const playlists = [], observations = [];
+    ['video', 'audio', 'fetch', 'xmlhttprequest', 'track'].includes(entry.initiatorType));
+  const playlists = [], observations = [], seen = [];
   const add = (list, value, limit) => { if (list.length < limit && !list.includes(value)) list.push(value); };
-  // A filename or MIME label does not prove a resource is video. The worker must
-  // match observations to the selected playlist and validate actual container bytes.
+  // Only the native response observer supplies MIME and request context. These
+  // URLs let it intersect its records with this particular owned frame.
   for (let index = resources.length - 1; index >= 0; index--) {
     const url = plain(resources[index].name);
     if (!url) continue;
+    add(seen, url, 48);
     if (/\.m3u8$/i.test(new URL(url).pathname)) add(playlists, url, 8);
     else add(observations, url, 32);
   }
-  if (direct) {
+  if (direct && /\.m3u8$/i.test(new URL(direct).pathname)) {
     const at = playlists.indexOf(direct);
     if (at >= 0) playlists.splice(at, 1);
     playlists.unshift(direct);
     playlists.length = Math.min(playlists.length, 8);
   }
-  if (!playlists.length || (!direct && !observations.length)) return null;
-  return { identity, media, expectedDuration: video.duration, url: playlists[0], playlists, observations, ...(subtitle ? { subtitle } : {}) };
+  const url = direct ?? playlists[0] ?? seen[0];
+  if (!url) return null;
+  return {
+    identity, media, expectedDuration: video.duration, url, playlists, observations,
+    resources: seen, ...(subtitle ? { subtitle } : {}),
+  };
 })()

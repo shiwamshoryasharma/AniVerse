@@ -1,3 +1,4 @@
+use super::media::{self, Detected, MediaFormat, RequestContexts};
 use crate::RpcError;
 use aniverse_security::is_mp4_header;
 use reqwest::{
@@ -18,6 +19,7 @@ const LIMIT: u64 = 8 * 1024 * 1024 * 1024;
 const HEADER_LIMIT: usize = 16 * 1024;
 
 struct Transfer {
+    format: MediaFormat,
     total: Option<u64>,
     etag: Option<HeaderValue>,
     received: u64,
@@ -37,6 +39,65 @@ pub(super) async fn save(
 pub(super) async fn save_guarded(
     client: &Client,
     url: &Url,
+    destination: &Path,
+    progress: impl FnMut(u64, Option<u64>),
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<(), RpcError> {
+    super::require_owner(owned)?;
+
+    super::require_owner(owned)?;
+    if tokio::fs::try_exists(destination)
+        .await
+        .map_err(|_| disk())?
+    {
+        return Err(already_exists());
+    }
+    let contexts = RequestContexts::new();
+    let response = full_response(client, url, &contexts, MediaFormat::Mp4).await?;
+    save_response(
+        client,
+        url,
+        &contexts,
+        MediaFormat::Mp4,
+        response,
+        Vec::new(),
+        destination,
+        progress,
+        owned,
+    )
+    .await
+}
+
+pub(super) async fn save_detected(
+    client: &Client,
+    url: &Url,
+    contexts: &RequestContexts,
+    detected: Detected,
+    destination: &Path,
+    progress: impl FnMut(u64, Option<u64>),
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<(), RpcError> {
+    save_response(
+        client,
+        url,
+        contexts,
+        detected.format,
+        detected.response,
+        detected.prefix,
+        destination,
+        progress,
+        owned,
+    )
+    .await
+}
+
+async fn save_response(
+    client: &Client,
+    url: &Url,
+    contexts: &RequestContexts,
+    format: MediaFormat,
+    mut response: Response,
+    prefix: Vec<u8>,
     destination: &Path,
     mut progress: impl FnMut(u64, Option<u64>),
     owned: &(impl Fn() -> bool + Sync),
@@ -59,15 +120,15 @@ pub(super) async fn save_guarded(
     .map_err(|_| disk())?
     .map_err(|_| disk())?;
     let mut file = File::from_std(staging.reopen().map_err(|_| disk())?);
-    let mut response = full_response(client, url).await?;
-    let mut transfer = Transfer::from_response(&response)?;
+    let mut transfer = Transfer::from_response(&response, format)?;
+    transfer.write_chunk(&prefix, &mut file).await?;
     let mut complete = transfer
         .append(&mut response, &mut file, &mut progress)
         .await?;
     if !complete {
         drop(response);
         // A resumed response must prove it refers to the identical representation.
-        if let Some(mut response) = transfer.resume(client, url).await {
+        if let Some(mut response) = transfer.resume(client, url, contexts).await {
             complete = transfer
                 .append(&mut response, &mut file, &mut progress)
                 .await?;
@@ -76,8 +137,8 @@ pub(super) async fn save_guarded(
     if !complete {
         file.set_len(0).await.map_err(|_| disk())?;
         file.seek(SeekFrom::Start(0)).await.map_err(|_| disk())?;
-        let mut response = full_response(client, url).await?;
-        transfer = Transfer::from_response(&response)?;
+        let mut response = full_response(client, url, contexts, format).await?;
+        transfer = Transfer::from_response(&response, format)?;
         if !transfer
             .append(&mut response, &mut file, &mut progress)
             .await?
@@ -85,10 +146,17 @@ pub(super) async fn save_guarded(
             return Err(network());
         }
     }
-    if !is_mp4_header(&transfer.prefix) {
+    if !matches_format(&transfer.prefix, format) {
         return Err(invalid_mp4());
     }
     file.sync_all().await.map_err(|_| disk())?;
+    if !prefix.is_empty() {
+        if format == MediaFormat::Webm {
+            media::validate_clear_webm(staging.path()).await?;
+        } else {
+            media::validate_clear_mp4(staging.path()).await?;
+        }
+    }
     drop(file);
     super::require_owner(owned)?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -107,37 +175,54 @@ pub(super) async fn save_guarded(
     .map_err(|_| disk())?
 }
 
-async fn full_response(client: &Client, url: &Url) -> Result<Response, RpcError> {
-    let response = client
-        .get(url.clone())
-        .header(header::ACCEPT_ENCODING, "identity")
-        .send()
-        .await
-        .map_err(|_| network())?;
-    if response.status() != StatusCode::OK || !plain_mp4(&response) {
+async fn full_response(
+    client: &Client,
+    url: &Url,
+    contexts: &RequestContexts,
+    format: MediaFormat,
+) -> Result<Response, RpcError> {
+    let response = media::receive(client, url, contexts).await?;
+    if response.status() != StatusCode::OK || !plain_media(&response, format) {
         return Err(RpcError::new(
             "invalid-input",
-            "The source did not return a public MP4 file.",
+            "The source did not return a complete direct video file.",
         ));
     }
     Ok(response)
 }
 
-fn plain_mp4(response: &Response) -> bool {
+fn plain_media(response: &Response, format: MediaFormat) -> bool {
     let headers = response.headers();
     headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .is_some_and(|value| value.trim().eq_ignore_ascii_case("video/mp4"))
+        .is_none_or(|value| {
+            let mime = value.trim();
+            mime.eq_ignore_ascii_case("application/octet-stream")
+                || media::format_from_mime(mime) == Some(format)
+        })
         && headers
             .get(header::CONTENT_ENCODING)
             .is_none_or(|value| value.as_bytes().eq_ignore_ascii_case(b"identity"))
 }
 
+fn matches_format(bytes: &[u8], format: MediaFormat) -> bool {
+    if format == MediaFormat::Mp4 {
+        is_mp4_header(bytes)
+    } else {
+        media::sniff(bytes) == Some(format)
+    }
+}
+
 impl Transfer {
-    fn from_response(response: &Response) -> Result<Self, RpcError> {
-        let total = response.content_length();
+    fn from_response(response: &Response, format: MediaFormat) -> Result<Self, RpcError> {
+        // Detection may have consumed a chunk; use the full HTTP length.
+        let total = response
+            .headers()
+            .get(header::CONTENT_LENGTH)
+            .and_then(|length| length.to_str().ok())
+            .and_then(|length| length.parse::<u64>().ok());
         if total.is_some_and(|length| length > LIMIT) {
             return Err(oversized());
         }
@@ -149,6 +234,7 @@ impl Transfer {
             })
             .cloned();
         Ok(Self {
+            format,
             total,
             etag,
             received: 0,
@@ -156,15 +242,18 @@ impl Transfer {
         })
     }
 
-    async fn resume(&self, client: &Client, url: &Url) -> Option<Response> {
+    async fn resume(
+        &self,
+        client: &Client,
+        url: &Url,
+        contexts: &RequestContexts,
+    ) -> Option<Response> {
         let total = self.total?;
         let etag = self.etag.as_ref()?;
         if self.received == 0 || self.received >= total {
             return None;
         }
-        let response = client
-            .get(url.clone())
-            .header(header::ACCEPT_ENCODING, "identity")
+        let response = media::request(client, url, contexts)
             .header(header::RANGE, format!("bytes={}-", self.received))
             .header(header::IF_RANGE, etag.clone())
             .send()
@@ -172,7 +261,7 @@ impl Transfer {
             .ok()?;
         let expected = format!("bytes {}-{}/{total}", self.received, total - 1);
         (response.status() == StatusCode::PARTIAL_CONTENT
-            && plain_mp4(&response)
+            && plain_media(&response, self.format)
             && response.headers().get(header::ETAG) == Some(etag)
             && response
                 .headers()
@@ -199,23 +288,26 @@ impl Transfer {
                 Ok(None) => return Ok(self.total.is_none_or(|expected| self.received == expected)),
                 Err(_) => return Ok(false),
             };
-            self.received += chunk.len() as u64;
-            if self.received > self.total.unwrap_or(LIMIT) {
-                return Err(oversized());
-            }
-            let prefix_bytes = (HEADER_LIMIT - self.prefix.len()).min(chunk.len());
-            if prefix_bytes != 0 {
-                self.prefix.extend_from_slice(&chunk[..prefix_bytes]);
-                if self.prefix.len() == HEADER_LIMIT && !is_mp4_header(&self.prefix) {
-                    return Err(invalid_mp4());
-                }
-            }
-            file.write_all(&chunk).await.map_err(|_| disk())?;
+            self.write_chunk(&chunk, file).await?;
             if last.elapsed() >= Duration::from_millis(200) {
                 last = Instant::now();
                 progress(self.received, self.total);
             }
         }
+    }
+    async fn write_chunk(&mut self, chunk: &[u8], file: &mut File) -> Result<(), RpcError> {
+        self.received += chunk.len() as u64;
+        if self.received > self.total.unwrap_or(LIMIT) {
+            return Err(oversized());
+        }
+        let prefix_bytes = (HEADER_LIMIT - self.prefix.len()).min(chunk.len());
+        if prefix_bytes != 0 {
+            self.prefix.extend_from_slice(&chunk[..prefix_bytes]);
+            if self.prefix.len() == HEADER_LIMIT && !matches_format(&self.prefix, self.format) {
+                return Err(invalid_mp4());
+            }
+        }
+        file.write_all(chunk).await.map_err(|_| disk())
     }
 }
 
@@ -224,7 +316,10 @@ fn already_exists() -> RpcError {
 }
 
 fn invalid_mp4() -> RpcError {
-    RpcError::new("invalid-input", "The response is not an MP4 file.")
+    RpcError::new(
+        "invalid-input",
+        "The direct response no longer matches its detected video container.",
+    )
 }
 
 fn disk() -> RpcError {

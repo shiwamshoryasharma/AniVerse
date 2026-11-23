@@ -3,6 +3,7 @@ mod capture;
 mod catalogue;
 mod discovery;
 mod download;
+mod download_network;
 mod frames;
 mod legacy_session;
 mod native;
@@ -106,6 +107,9 @@ impl Session {
         if !self.closed.swap(true, Ordering::AcqRel) {
             capture::revoke(&self.view, &self.capture, None);
             frames::clear(&self.view, self.id);
+            if let Ok(mut observed) = self.download_responses.lock() {
+                observed.clear();
+            }
             let _ = self.view.close();
         }
     }
@@ -127,6 +131,7 @@ struct GuestState {
     visible: AtomicBool,
     capture: Mutex<Option<Arc<capture::Grant>>>,
     blocked: Mutex<Option<Url>>,
+    download_responses: Mutex<download_network::Ledger>,
 }
 
 pub(crate) struct Service {
@@ -386,6 +391,9 @@ impl Service {
         }
         if method == "site.openEpisode" {
             let job = session.job.fetch_add(1, Ordering::AcqRel) + 1;
+            if let Ok(mut observed) = session.download_responses.lock() {
+                observed.clear();
+            }
             let _guard = session.command.lock().await;
             quantum::stop(&session).await;
             return navigation::open(owner, root, &session, &input, job).await;
@@ -562,6 +570,9 @@ impl Service {
                         let finished = matches!(event.event(), PageLoadEvent::Finished);
                         if !finished {
                             load.page_generation.fetch_add(1, Ordering::Relaxed);
+                            if let Ok(mut observed) = load.download_responses.lock() {
+                                observed.clear();
+                            }
                             capture::revoke(&view, &load.capture, None);
                         }
                         load.ready.store(finished, Ordering::Release);
@@ -580,6 +591,7 @@ impl Service {
             hidden,
             !hidden && !discovery && lease.is_none(),
             (!hidden).then(|| (id, state.clone())),
+            !hidden && !discovery && lease.is_none() && source.kind == "web",
         )
         .await
         {

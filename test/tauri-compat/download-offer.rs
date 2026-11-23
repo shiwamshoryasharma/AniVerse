@@ -126,3 +126,64 @@ fn same_playing_video_survives_playlist_order_and_caption_discovery_churn() {
         "Ordinary continued playback is not a changed selected video"
     );
 }
+
+#[test]
+fn detects_signed_extensionless_direct_media_only_from_the_owned_response() {
+    let url = "https://media.example.test/asset?ticket=opaque%2Fvalue";
+    let unowned = "https://other.example.test/asset?ticket=another";
+    let direct = json!({
+        "identity":"document-1:video-1",
+        "media":url,
+        "url":url,
+        "expectedDuration":120.0
+    });
+    let mut proof = reqwest::header::HeaderMap::new();
+    proof.insert(
+        reqwest::header::COOKIE,
+        "fixture_session=owned".parse().unwrap(),
+    );
+    let unrelated = download_network::Response::test_entry(unowned, "video/mp4", proof.clone());
+    let actual = download_network::Response::test_entry(url, "video/webm", proof);
+    assert!(from_observed_offer(&direct, true, &[unrelated.clone()]).is_none());
+    assert!(from_observed_offer(&direct, false, &[actual.clone()]).is_none());
+    let selected = from_observed_offer(&direct, true, &[actual, unrelated]).unwrap();
+    assert_eq!(selected.selection.format, Some(MediaFormat::Webm));
+    assert!(selected.selection.owned_root);
+    assert_eq!(selected.selection.request_contexts.len(), 1);
+    assert!(selected
+        .selection
+        .request_contexts
+        .contains_key(&selected.url));
+
+    let generic =
+        download_network::Response::test_entry(url, "application/octet-stream", Default::default());
+    let selected = from_observed_offer(&direct, true, &[generic]).unwrap();
+    assert!(selected.selection.owned_root);
+    assert_eq!(selected.selection.format, None);
+}
+
+#[test]
+fn selects_extensionless_dash_only_from_the_owned_frame_urls() {
+    let manifest = "https://media.example.test/describe?ticket=opaque";
+    let segment = "https://media.example.test/part/1";
+    let mut view = json!({
+        "identity":"document-1:video-1",
+        "media":"blob:https://source.example.test/selected",
+        "url":segment,
+        "expectedDuration":120.0,
+        "observations":[segment],
+        "resources":[segment]
+    });
+    let header = download_network::Response::test_entry(
+        manifest,
+        "application/dash+xml",
+        Default::default(),
+    );
+    assert!(from_observed_offer(&view, true, &[header.clone()]).is_none());
+    view["resources"] = json!([segment, manifest]);
+    let selected = from_observed_offer(&view, true, &[header]).unwrap();
+    assert_eq!(selected.selection.format, Some(MediaFormat::Dash));
+    assert_eq!(selected.url.as_str(), manifest);
+    assert_eq!(selected.selection.observations[0].as_str(), segment);
+    assert!(selected.selection.owned_root);
+}

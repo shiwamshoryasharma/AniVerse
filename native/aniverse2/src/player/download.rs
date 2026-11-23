@@ -1,5 +1,8 @@
-use super::{allowed_top, failure, invalid, native, Session};
-use crate::{downloads, RpcError};
+use super::{allowed_top, download_network, failure, invalid, native, Session};
+use crate::{
+    downloads::{self, media::MediaFormat},
+    RpcError,
+};
 use serde_json::{json, Value};
 use std::sync::atomic::Ordering;
 use tauri::{Manager, Url, Webview};
@@ -20,6 +23,15 @@ pub(super) async fn request(
         .ok()
         .and_then(|active| *active);
     let filename_context = input.get("filenameContext").cloned();
+    let max_height = match input.get("maxHeight") {
+        None => None,
+        Some(value) => Some(
+            value
+                .as_u64()
+                .filter(|height| (144..=4320).contains(height))
+                .ok_or_else(invalid)? as u32,
+        ),
+    };
     if filename_context.as_ref().is_some_and(|context| {
         !episode.is_some_and(|(_, number)| context["episode"].as_u64() == Some(number as u64))
     }) {
@@ -53,7 +65,10 @@ pub(super) async fn request(
     if !save {
         return Ok(json!({"available":offer.is_some()}));
     }
-    let selected = offer.ok_or_else(|| failure("This player did not expose a clear MP4 or a supported HLS stream. Start playback, then try again."))?;
+    let mut selected = offer.ok_or_else(|| failure(
+        "No supported clear video was detected in the selected player. Start playback, then try again.",
+    ))?;
+    selected.selection.max_height = max_height;
     owner
         .state::<downloads::Service>()
         .save_active(
@@ -107,7 +122,13 @@ async fn candidate(session: &Session, generation: u64) -> Option<Candidate> {
     } else {
         top
     };
-    from_offer(&offer, true)
+    let responses = session
+        .download_responses
+        .lock()
+        .ok()
+        .map(|entries| entries.snapshot(generation, session.job.load(Ordering::Acquire)))
+        .unwrap_or_default();
+    from_observed_offer(&offer, true, &responses)
 }
 
 fn url(value: &Value, owned_frame: bool) -> Option<Url> {
@@ -149,7 +170,27 @@ fn metadata(value: Option<&Value>, limit: usize) -> Option<Option<String>> {
     Some(Some(value.to_owned()))
 }
 
+fn path_format(url: &Url) -> Option<MediaFormat> {
+    let (_, suffix) = url.path().rsplit_once('.')?;
+    match suffix.to_ascii_lowercase().as_str() {
+        "mp4" => Some(MediaFormat::Mp4),
+        "webm" => Some(MediaFormat::Webm),
+        "m3u8" => Some(MediaFormat::Hls),
+        "mpd" => Some(MediaFormat::Dash),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
 fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
+    from_observed_offer(offer, owned_frame, &[])
+}
+
+fn from_observed_offer(
+    offer: &Value,
+    owned_frame: bool,
+    responses: &[download_network::Response],
+) -> Option<Candidate> {
     let object = offer.as_object()?;
     if object.keys().any(|key| {
         !matches!(
@@ -160,6 +201,7 @@ fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
                 | "observed"
                 | "playlists"
                 | "observations"
+                | "resources"
                 | "subtitle"
                 | "expectedDuration"
         )
@@ -179,15 +221,11 @@ fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
     if media.len() > 4096 || media.chars().any(char::is_control) {
         return None;
     }
-    let primary = url(&offer["url"], owned_frame)?;
-    let hls = primary.path().to_ascii_lowercase().ends_with(".m3u8");
-    if !downloads::is_active_media_url(&primary) && !(owned_frame && hls) {
-        return None;
-    }
-    let playlists = urls(offer, "playlists", 8, owned_frame)?;
+    let proposed = url(&offer["url"], owned_frame)?;
+    let mut playlists = urls(offer, "playlists", 8, owned_frame)?;
     if playlists
         .iter()
-        .any(|url| !url.path().to_ascii_lowercase().ends_with(".m3u8"))
+        .any(|url| path_format(url) != Some(MediaFormat::Hls))
     {
         return None;
     }
@@ -198,12 +236,70 @@ fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
             observations.push(observed);
         }
     }
-    if media.starts_with("blob:") {
-        if !primary.path().to_ascii_lowercase().ends_with(".m3u8") || observations.is_empty() {
+    let resources = urls(offer, "resources", 48, owned_frame)?;
+    let direct_primary = !media.starts_with("blob:");
+    let observed_response = |url: &Url| responses.iter().find(|entry| &entry.url == url);
+    let historical_or_observed_format = |url: &Url| {
+        observed_response(url)
+            .and_then(|entry| downloads::media::format_from_mime(&entry.mime))
+            .or_else(|| path_format(url))
+    };
+    let mut primary = proposed.clone();
+    if direct_primary {
+        if Url::parse(&media).ok().as_ref() != Some(&proposed) {
             return None;
         }
-    } else if Url::parse(&media).ok().as_ref() != Some(&primary) {
+        // New direct formats (including generic MIME and extensionless paths)
+        // need an actual response in the selected view. The old public MP4/HLS
+        // paths still work on runtimes without response metadata.
+        if observed_response(&primary).is_none()
+            && !matches!(
+                path_format(&primary),
+                Some(MediaFormat::Mp4 | MediaFormat::Hls)
+            )
+        {
+            return None;
+        }
+    } else {
+        for resource in &resources {
+            if matches!(
+                observed_response(resource)
+                    .and_then(|entry| downloads::media::format_from_mime(&entry.mime)),
+                Some(MediaFormat::Hls | MediaFormat::Dash)
+            ) && !playlists.contains(resource)
+                && playlists.len() < 8
+            {
+                playlists.push(resource.clone());
+            }
+        }
+        if !playlists.contains(&primary) {
+            if matches!(
+                path_format(&primary),
+                Some(MediaFormat::Hls | MediaFormat::Dash)
+            ) {
+                return None;
+            }
+            primary = playlists.first()?.clone();
+        }
+        // The downloader will also match these references and duration to the
+        // selected manifest and never treat resource order alone as ownership.
+        if observations.is_empty() {
+            return None;
+        }
+    }
+    let format = historical_or_observed_format(&primary);
+    if !direct_primary && !matches!(format, Some(MediaFormat::Hls | MediaFormat::Dash)) {
         return None;
+    }
+    if matches!(format, Some(MediaFormat::Hls | MediaFormat::Dash)) {
+        playlists.retain(|url| historical_or_observed_format(url) == format);
+        if !playlists.contains(&primary) {
+            playlists.truncate(7);
+            playlists.insert(0, primary.clone());
+        }
+    } else if format.is_some() {
+        playlists.clear();
+        observations.clear();
     }
     let expected_duration = match offer.get("expectedDuration") {
         None => None,
@@ -213,8 +309,11 @@ fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
                 .filter(|value| value.is_finite() && *value > 0.0 && *value <= 21_600.0)?,
         ),
     };
+    let owned_root = owned_frame && observed_response(&primary).is_some();
     if primary.query().is_some()
-        && (!owned_frame || expected_duration.is_none() || !playlists.contains(&primary))
+        && (!owned_frame
+            || expected_duration.is_none()
+            || !(owned_root || format == Some(MediaFormat::Hls) && playlists.contains(&primary)))
     {
         return None;
     }
@@ -242,7 +341,23 @@ fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
             Some(choice)
         }
     };
-    let direct_primary = media == primary.as_str();
+    let subtitle_url = subtitle.as_ref().and_then(|choice| choice.url.as_ref());
+    let mut request_contexts = downloads::media::RequestContexts::default();
+    if owned_frame {
+        for response in responses {
+            let url = &response.url;
+            let observed = url == &primary
+                || subtitle_url == Some(url)
+                || (format.is_none()
+                    || matches!(format, Some(MediaFormat::Hls | MediaFormat::Dash)))
+                    && (playlists.contains(url)
+                        || observations.contains(url)
+                        || resources.contains(url));
+            if observed && !response.headers.is_empty() {
+                request_contexts.insert(url.clone(), response.headers.clone());
+            }
+        }
+    }
     Some(Candidate {
         identity,
         media,
@@ -250,6 +365,9 @@ fn from_offer(offer: &Value, owned_frame: bool) -> Option<Candidate> {
         selection: downloads::Selection {
             direct_primary,
             expected_duration,
+            format,
+            request_contexts,
+            owned_root,
             playlists,
             observations,
             subtitle,

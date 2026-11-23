@@ -1,5 +1,7 @@
+mod dash;
 mod filename;
 mod hls;
+pub(crate) mod media;
 mod remux;
 mod transfer;
 mod vtt;
@@ -202,7 +204,6 @@ impl Service {
                 "The active video changed before the download started.",
             ));
         }
-        let client = remux::selection_transport(&url, &selection).await?;
         let progress = |received, total| {
             let _ = window.emit(
                 "aniverse:mp4/progress",
@@ -210,16 +211,10 @@ impl Service {
             );
         };
         let operation = async {
-            if has_extension(&url, "m3u8") {
-                let ffmpeg = bundled_ffmpeg(window)?;
-                remux::save_selected_guarded(
-                    &client,
-                    &url,
-                    &selection,
-                    &destination,
-                    &ffmpeg,
-                    progress,
-                    &owned,
+            if selection.scope.is_some() || selection.format.is_some() {
+                let ffmpeg = bundled_ffmpeg(window).ok();
+                remux::download_guarded(
+                    &url, &selection, &destination, ffmpeg.as_deref(), progress, &owned,
                 )
                 .await
             } else {
@@ -229,15 +224,16 @@ impl Service {
                     .is_some_and(|choice| choice.url.is_some())
                 {
                     return Err(invalid(
-                        "Separate subtitle tracks currently require a supported HLS stream.",
+                        "Separate subtitles require a supported adaptive stream.",
                     ));
                 }
+                let client = public_transport(&url).await?;
                 transfer::save_guarded(&client, &url, &destination, progress, &owned).await
             }
         };
         timeout(Duration::from_secs(45 * 60), while_owned(operation, &owned))
             .await
-            .map_err(|_| RpcError::new("network", "The MP4 download timed out."))??;
+            .map_err(|_| RpcError::new("network", "The media download timed out."))??;
         Ok(Value::Bool(true))
     }
 
@@ -466,31 +462,26 @@ fn bind_player_scope(
     // A scope is never accepted from a renderer descriptor. Recreate it from
     // exact captured playlist roots only after the owner/generation check.
     selection.scope = None;
-    if has_extension(url, "m3u8")
+    let legacy_hls = has_extension(url, "m3u8")
         && selection.expected_duration.is_some()
         && !selection.playlists.is_empty()
-    {
-        if !selection.playlists.contains(url) {
-            return Err(invalid(
-                "The active playlist was not observed in this player.",
-            ));
-        }
+        && selection.playlists.contains(url);
+    if selection.owned_root || legacy_hls {
+        let mut roots = vec![url.clone()];
+        roots.extend(selection.playlists.iter().filter(|candidate| *candidate != url).take(7).cloned());
         selection.scope = Some(remux::OwnedScope::from_owned_selection(
-            &selection.playlists,
-            selection
-                .subtitle
-                .as_ref()
-                .and_then(|choice| choice.url.as_ref()),
+            &roots,
+            selection.subtitle.as_ref().and_then(|choice| choice.url.as_ref()),
         )?);
     }
     let allowed = selection
         .scope
         .as_ref()
         .map_or_else(|| is_active_media_url(url), |scope| scope.contains(url));
-    if !allowed || (!selection.observations.is_empty() && !has_extension(url, "m3u8")) {
-        return Err(invalid(
-            "Choose a public MP4 or clear on-demand HLS stream.",
-        ));
+    if !allowed || (!selection.observations.is_empty() && matches!(selection.format,
+        Some(media::MediaFormat::Mp4 | media::MediaFormat::Webm)))
+    {
+        return Err(invalid("The video is outside the active player selection."));
     }
     Ok(selection)
 }

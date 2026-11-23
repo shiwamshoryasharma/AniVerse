@@ -113,3 +113,15 @@ fn accepts_selected_master_audio_and_subtitle_renditions_with_opaque_queries() {
 fn accepts_manifest_listed_image_suffixes_without_treating_them_as_images() {
     assert!(parse_owned(&Url::parse(BASE).unwrap(), "#EXTM3U\n#EXTINF:1,\nfirst.png?opaque=one\n#EXTINF:1,\nsecond.webp?opaque=two\n#EXT-X-ENDLIST\n").is_ok());
 }
+
+#[test]
+fn media_variant_urls_need_no_file_extension_and_preserve_quality() {
+    let playlist = parsed("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1700000,RESOLUTION=1280x720\nplay/720\n#EXT-X-STREAM-INF:BANDWIDTH=2900000,RESOLUTION=1920x1080\nplay/1080\n").unwrap();
+    let Playlist::Master { variants, .. } = playlist else {
+        panic!("expected a master playlist");
+    };
+    assert!(variants[0].url.path().ends_with("/play/720"));
+    assert_eq!(variants[0].height, Some(720));
+    assert_eq!(variants[1].height, Some(1080));
+    assert_eq!(variants[1].bandwidth, Some(2_900_000));
+}

@@ -14,8 +14,8 @@
     saveMp4(url, sourceId, filenameContext) {
       return window.aniverse.invoke('player.saveMp4', { url, sourceId, filenameContext });
     },
-    saveSiteMp4(webContentsId, filenameContext) {
-      return window.aniverse.invoke('site.surface', { action: 'downloadMedia', webContentsId, save: true, filenameContext });
+    saveSiteMp4(webContentsId, filenameContext, maxHeight) {
+      return window.aniverse.invoke('site.surface', { action: 'downloadMedia', webContentsId, save: true, filenameContext, maxHeight });
     },
     onMp4Progress(listener) {
       const off = window.__TAURI__.event.listen('aniverse:mp4/progress', ({ payload }) => listener(payload));

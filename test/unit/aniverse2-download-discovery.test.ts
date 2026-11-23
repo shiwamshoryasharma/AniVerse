@@ -6,11 +6,11 @@ import { describe, expect, it } from 'vitest';
 const script = readFileSync('native/aniverse2/src/player/download-guest.js', 'utf8');
 const playlist = 'https://media.example.test/episode.m3u8?ticket=opaque%2Fvalue';
 const segment = 'https://media.example.test/part.webp?chunk=2';
-function discover(options: { resources?: string[]; drm?: boolean; tracks?: object[]; videos?: number } = {}) {
+function discover(options: { resources?: string[]; drm?: boolean; tracks?: object[]; videos?: number; currentSrc?: string } = {}) {
   const video = {
     clientWidth: 640, clientHeight: 360, checkVisibility: () => true,
     readyState: 4, videoWidth: 320, duration: 10, currentTime: 1,
-    currentSrc: 'blob:https://source.example.test/selected', mediaKeys: options.drm ? {} : null, srcObject: null,
+    currentSrc: options.currentSrc ?? 'blob:https://source.example.test/selected', mediaKeys: options.drm ? {} : null, srcObject: null,
     querySelectorAll: () => options.tracks ?? [],
   };
   return runInNewContext(script, {
@@ -61,4 +61,14 @@ it('binds the same document/video node while request order advances and rejects 
   expect(advanced.url).not.toBe(selected.url);
   video={...video};
   expect(runInContext(script,context).identity).not.toBe(selected.identity);
+});
+
+it('passes an extensionless direct player URL and exact received resource hints to the native observer', () => {
+  const direct = 'https://media.example.test/episode?ticket=opaque%2Fvalue';
+  expect(discover({ currentSrc: direct, resources: [direct] })).toMatchObject({
+    media: direct, url: direct, resources: [direct],
+  });
+  expect(discover({ resources: ['https://media.example.test/manifest?id=1', segment] })).toMatchObject({
+    resources: [segment, 'https://media.example.test/manifest?id=1'],
+  });
 });

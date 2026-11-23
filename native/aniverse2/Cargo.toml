@@ -1,6 +1,6 @@
 [package]
 name = "aniverse2"
-version = "3.1.2"
+version = "3.2.0"
 edition = "2021"
 publish = false
 
@@ -13,6 +13,7 @@ serde_json = "1"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+quick-xml = "=0.42.0"
 adblock = { version = "=0.13.6", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling"] }
 aniverse-desktop-migration = { path = "../desktop-migration", optional = true }
 dirs = { version = "7", optional = true }

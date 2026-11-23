@@ -1,10 +1,11 @@
 use super::{
     hls::{self, Playlist},
     invalid,
+    media::{self, Detected, MediaFormat, RequestContexts},
 };
 use crate::RpcError;
 use aniverse_security::is_mp4_header;
-use reqwest::{header, Client, Response, StatusCode, Url};
+use reqwest::{Client, Response, Url};
 use std::{
     collections::HashSet,
     fmt::Write as _,
@@ -29,6 +30,10 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 pub(crate) struct Selection {
     pub scope: Option<OwnedScope>,
     pub direct_primary: bool,
+    pub format: Option<MediaFormat>,
+    pub request_contexts: RequestContexts,
+    pub max_height: Option<u32>,
+    pub owned_root: bool,
     pub expected_duration: Option<f64>,
     pub playlists: Vec<Url>,
     pub observations: Vec<Url>,
@@ -54,9 +59,7 @@ impl OwnedScope {
     ) -> Result<Self, RpcError> {
         if playlists.is_empty()
             || playlists.len() > 8
-            || playlists
-                .iter()
-                .any(|url| !super::owned_media_url(url) || !super::has_extension(url, "m3u8"))
+            || playlists.iter().any(|url| !super::owned_media_url(url))
             || subtitle.is_some_and(|url| !super::owned_media_url(url))
         {
             return Err(invalid("The owned media selection is invalid."));
@@ -118,6 +121,7 @@ async fn load(
     url: &Url,
     loaded: &mut Vec<Loaded>,
     scope: &mut Option<OwnedScope>,
+    contexts: &RequestContexts,
     owned: &(impl Fn() -> bool + Sync),
 ) -> Result<usize, RpcError> {
     super::require_owner(owned)?;
@@ -129,7 +133,7 @@ async fn load(
     }
     let client = scoped_transport(url, scope.as_ref()).await?;
     super::require_owner(owned)?;
-    let playlist = read_playlist(&client, url, scope.is_some()).await?;
+    let playlist = read_playlist(&client, url, scope.is_some(), contexts).await?;
     if let Some(scope) = scope {
         scope.authorize_playlist(&playlist);
     }
@@ -172,6 +176,34 @@ fn select_video(
             variants.iter().any(|variant| variant.url == *candidate)
         }
     };
+    if let (Some(maximum), Playlist::Master { variants, .. }) =
+        (selection.max_height, &primary.playlist)
+    {
+        // A cap can choose another rendition of the same root, once at least
+        // one rendition proves ownership of a blob-backed player.
+        let owned_master = selection.direct_primary
+            || loaded.iter().any(|entry| {
+                belongs_to_primary(&entry.url)
+                    && !rendition_urls.contains(&&entry.url)
+                    && matches_duration(&entry.playlist, selection.expected_duration)
+                    && observed_rank(&entry.playlist, &selection.observations).is_some()
+            });
+        if !owned_master {
+            return None;
+        }
+        return variants
+            .iter()
+            .filter_map(|variant| {
+                let height = variant.height.filter(|height| *height <= maximum)?;
+                let index = loaded.iter().position(|entry| {
+                    entry.url == variant.url
+                        && matches_duration(&entry.playlist, selection.expected_duration)
+                })?;
+                Some((height, variant.bandwidth.unwrap_or(0), index))
+            })
+            .max_by_key(|(height, bandwidth, _)| (*height, *bandwidth))
+            .map(|(_, _, index)| index);
+    }
     loaded
         .iter()
         .enumerate()
@@ -210,6 +242,7 @@ fn select_video(
 async fn select_tracks(
     url: &Url,
     selection: &Selection,
+    initial: Option<Loaded>,
     owned: &(impl Fn() -> bool + Sync),
 ) -> Result<
     (
@@ -224,7 +257,16 @@ async fn select_tracks(
     let mut loaded = Vec::new();
     let mut last_error = None;
     // The selected root must be valid even when older clear playlists remain observed.
-    load(url, &mut loaded, &mut scope, owned).await?;
+
+    let contexts = &selection.request_contexts;
+    if let Some(entry) = initial {
+        if let Some(scope) = &mut scope {
+            scope.authorize_playlist(&entry.playlist);
+        }
+        loaded.push(entry);
+    } else {
+        load(url, &mut loaded, &mut scope, contexts, owned).await?;
+    }
     let mut candidates = Vec::new();
     if !selection.direct_primary {
         for candidate in &selection.playlists {
@@ -234,7 +276,7 @@ async fn select_tracks(
         }
     }
     for candidate in candidates {
-        if let Err(error) = load(&candidate, &mut loaded, &mut scope, owned).await {
+        if let Err(error) = load(&candidate, &mut loaded, &mut scope, contexts, owned).await {
             last_error = Some(error);
         }
     }
@@ -250,6 +292,8 @@ async fn select_tracks(
                     url: uri.clone(),
                     audio: None,
                     subtitles: None,
+                    height: None,
+                    bandwidth: None,
                 }],
                 vec![],
             )),
@@ -259,7 +303,7 @@ async fn select_tracks(
     for (variants, _) in &masters {
         for variant in variants {
             // A protected or invalid declared variant must not redirect selection to stale media.
-            load(&variant.url, &mut loaded, &mut scope, owned).await?;
+            load(&variant.url, &mut loaded, &mut scope, contexts, owned).await?;
         }
     }
     let rendition_urls: Vec<_> = masters
@@ -288,7 +332,8 @@ async fn select_tracks(
                 .collect();
             let mut available = Vec::new();
             for track in tracks {
-                if let Ok(index) = load(&track.url, &mut loaded, &mut scope, owned).await {
+                if let Ok(index) = load(&track.url, &mut loaded, &mut scope, contexts, owned).await
+                {
                     if matches!(loaded[index].playlist, Playlist::Media { .. }) {
                         available.push((track, index));
                     }
@@ -375,10 +420,23 @@ async fn select_tracks(
     Ok((video, audio, subtitle, scope))
 }
 
+#[cfg(test)]
 pub(super) async fn save_selected_guarded(
     _client: &Client,
     url: &Url,
     selection: &Selection,
+    destination: &Path,
+    ffmpeg: &Path,
+    progress: impl FnMut(u64, Option<u64>),
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<(), RpcError> {
+    save_hls(url, selection, None, destination, ffmpeg, progress, owned).await
+}
+
+async fn save_hls(
+    url: &Url,
+    selection: &Selection,
+    initial: Option<Loaded>,
     destination: &Path,
     ffmpeg: &Path,
     mut progress: impl FnMut(u64, Option<u64>),
@@ -391,7 +449,7 @@ pub(super) async fn save_selected_guarded(
     {
         return Err(exists());
     }
-    let (video, audio, subtitle, scope) = select_tracks(url, selection, owned).await?;
+    let (video, audio, subtitle, scope) = select_tracks(url, selection, initial, owned).await?;
     let parent = destination.parent().ok_or_else(disk)?;
     let staging = tempfile::Builder::new()
         .prefix(".aniverse-hls-")
@@ -416,6 +474,7 @@ pub(super) async fn save_selected_guarded(
         "video",
         false,
         &mut remaining,
+        &selection.request_contexts,
         owned,
         || {
             received += 1;
@@ -430,6 +489,7 @@ pub(super) async fn save_selected_guarded(
             "audio",
             true,
             &mut remaining,
+            &selection.request_contexts,
             owned,
             || {
                 received += 1;
@@ -450,6 +510,7 @@ pub(super) async fn save_selected_guarded(
             &mut remaining,
             media_start,
             scope.as_ref(),
+            &selection.request_contexts,
             owned,
         )
         .await?
@@ -479,6 +540,7 @@ async fn stage_track(
     prefix: &str,
     audio: bool,
     remaining: &mut u64,
+    contexts: &RequestContexts,
     owned: &(impl Fn() -> bool + Sync),
     mut progress: impl FnMut(),
 ) -> Result<(), RpcError> {
@@ -496,7 +558,7 @@ async fn stage_track(
     if let Some(init) = init {
         let name = format!("{prefix}-init.mp4");
         let path = directory.join(&name);
-        copy_segment(&entry.client, init, &path, remaining, MAX_INIT).await?;
+        copy_segment(&entry.client, init, &path, remaining, MAX_INIT, contexts).await?;
         let bytes = tokio::fs::read(path).await.map_err(|_| disk())?;
         if !is_mp4_header(&bytes[..bytes.len().min(4096)]) || has_protection_box(&bytes) {
             return Err(invalid("The HLS initialization is invalid or protected."));
@@ -506,7 +568,15 @@ async fn stage_track(
     for (index, (seconds, uri)) in segments.iter().enumerate() {
         super::require_owner(owned)?;
         let temporary = directory.join(format!("{prefix}-{index}.part"));
-        copy_segment(&entry.client, uri, &temporary, remaining, MAX_SEGMENT).await?;
+        copy_segment(
+            &entry.client,
+            uri,
+            &temporary,
+            remaining,
+            MAX_SEGMENT,
+            contexts,
+        )
+        .await?;
         let mut file = File::open(&temporary).await.map_err(|_| disk())?;
         let mut bytes = vec![0; 16 * 1024];
         let length = file.metadata().await.map_err(|_| disk())?.len();
@@ -598,6 +668,7 @@ async fn stage_subtitle(
     remaining: &mut u64,
     media_start: f64,
     scope: Option<&OwnedScope>,
+    contexts: &RequestContexts,
     owned: &(impl Fn() -> bool + Sync),
 ) -> Result<bool, RpcError> {
     super::require_owner(owned)?;
@@ -608,7 +679,7 @@ async fn stage_subtitle(
     let mut scope = scope.cloned();
     let client = scoped_transport(url, scope.as_ref()).await?;
     let path = directory.join("subtitle.part");
-    copy_segment(&client, url, &path, remaining, 2 * 1024 * 1024).await?;
+    copy_segment(&client, url, &path, remaining, 2 * 1024 * 1024, contexts).await?;
     let first = tokio::fs::read(&path).await.map_err(|_| disk())?;
     let mut parts = Vec::new();
     if first.starts_with(b"#EXTM3U") || first.starts_with(b"\xef\xbb\xbf#EXTM3U") {
@@ -644,7 +715,7 @@ async fn stage_subtitle(
                 ));
             }
             let path = directory.join(format!("subtitle-{index}.part"));
-            copy_segment(&client, uri, &path, remaining, 2 * 1024 * 1024).await?;
+            copy_segment(&client, uri, &path, remaining, 2 * 1024 * 1024, contexts).await?;
             let part = tokio::fs::read(path).await.map_err(|_| disk())?;
             bytes += part.len();
             if bytes > 2 * 1024 * 1024 {
@@ -810,8 +881,13 @@ fn has_protection_box(bytes: &[u8]) -> bool {
     })
 }
 
-async fn read_playlist(client: &Client, url: &Url, owned: bool) -> Result<Playlist, RpcError> {
-    let mut response = receive(client, url).await?;
+async fn read_playlist(
+    client: &Client,
+    url: &Url,
+    owned: bool,
+    contexts: &RequestContexts,
+) -> Result<Playlist, RpcError> {
+    let mut response = media::receive(client, url, contexts).await?;
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| network())? {
         if bytes.len() + chunk.len() > hls::MAX_MANIFEST {
@@ -827,21 +903,472 @@ async fn read_playlist(client: &Client, url: &Url, owned: bool) -> Result<Playli
         hls::parse(url, text)
     }
 }
+
+pub(super) async fn download_guarded(
+    url: &Url,
+    selection: &Selection,
+    destination: &Path,
+    ffmpeg: Option<&Path>,
+    progress: impl FnMut(u64, Option<u64>),
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<(), RpcError> {
+    super::require_owner(owned)?;
+    if tokio::fs::try_exists(destination)
+        .await
+        .map_err(|_| disk())?
+    {
+        return Err(exists());
+    }
+    let client = selection_transport(url, selection).await?;
+    let detected =
+        media::detect(&client, url, &selection.request_contexts, selection.format).await?;
+    let muxer = || ffmpeg.ok_or_else(|| invalid("The bundled MP4 remuxer is missing."));
+    match detected.format {
+        MediaFormat::Mp4 => {
+            if selection
+                .subtitle
+                .as_ref()
+                .is_some_and(|choice| choice.url.is_some())
+            {
+                let text = selection.subtitle.as_ref().unwrap();
+                save_single_container(
+                    detected,
+                    url,
+                    &client,
+                    selection,
+                    destination,
+                    muxer()?,
+                    Some(text),
+                    progress,
+                    owned,
+                )
+                .await
+            } else {
+                super::transfer::save_detected(
+                    &client,
+                    url,
+                    &selection.request_contexts,
+                    detected,
+                    destination,
+                    progress,
+                    owned,
+                )
+                .await
+            }
+        }
+        MediaFormat::Webm => {
+            save_single_container(
+                detected,
+                url,
+                &client,
+                selection,
+                destination,
+                muxer()?,
+                selection
+                    .subtitle
+                    .as_ref()
+                    .filter(|choice| choice.url.is_some()),
+                progress,
+                owned,
+            )
+            .await
+        }
+        MediaFormat::Hls => {
+            let text = media::manifest(detected, hls::MAX_MANIFEST).await?;
+            let playlist = if selection.scope.is_some() {
+                hls::parse_owned(url, &text)?
+            } else {
+                hls::parse(url, &text)?
+            };
+            let initial = Loaded {
+                url: url.clone(),
+                client,
+                playlist,
+            };
+            save_hls(
+                url,
+                selection,
+                Some(initial),
+                destination,
+                muxer()?,
+                progress,
+                owned,
+            )
+            .await
+        }
+        MediaFormat::Dash => {
+            let text = media::manifest(detected, 512 * 1024).await?;
+            let manifest = super::dash::parse(url, &text)?;
+            save_dash(
+                &client,
+                url,
+                manifest,
+                selection,
+                destination,
+                muxer()?,
+                progress,
+                owned,
+            )
+            .await
+        }
+    }
+}
+
+async fn save_single_container(
+    detected: Detected,
+    url: &Url,
+    client: &Client,
+    selection: &Selection,
+    destination: &Path,
+    ffmpeg: &Path,
+    subtitle: Option<&SubtitleChoice>,
+    mut progress: impl FnMut(u64, Option<u64>),
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<(), RpcError> {
+    let parent = destination.parent().ok_or_else(disk)?;
+    let scratch = tempfile::Builder::new()
+        .prefix(".aniverse-video-")
+        .tempdir_in(parent)
+        .map_err(|_| disk())?;
+    let output = tempfile::Builder::new()
+        .prefix(".aniverse-mp4-")
+        .tempfile_in(parent)
+        .map_err(|_| disk())?
+        .into_temp_path();
+    let input = scratch.path().join("input.video");
+    progress(0, None);
+    let mut remaining = MAX_BYTES;
+    let format = detected.format;
+    super::transfer::save_detected(
+        client,
+        url,
+        &selection.request_contexts,
+        detected,
+        &input,
+        |received, total| progress(received, total.map(|total| total.saturating_add(1))),
+        owned,
+    )
+    .await?;
+    super::require_owner(owned)?;
+    if let Some(subtitle) = subtitle {
+        let mut scope = selection.scope.clone();
+        if scope.is_none() && selection.owned_root {
+            scope = Some(OwnedScope::from_owned_selection(
+                &[url.clone()],
+                subtitle.url.as_ref(),
+            )?);
+        }
+        let contains_cues = stage_subtitle(
+            subtitle,
+            scratch.path(),
+            &mut remaining,
+            0.0,
+            scope.as_ref(),
+            &selection.request_contexts,
+            owned,
+        )
+        .await?;
+        if contains_cues {
+            let mut command = ffmpeg_command(ffmpeg, scratch.path());
+            command.args([
+                "-f",
+                if format == MediaFormat::Mp4 {
+                    "mov"
+                } else {
+                    "matroska"
+                },
+                "-i",
+                "input.video",
+                "-f",
+                "webvtt",
+                "-i",
+                "captions.vtt",
+            ]);
+            command.args([
+                "-map", "0:v:0", "-map", "0:a?", "-map", "1:s:0", "-c:v", "copy", "-c:a", "copy",
+                "-c:s", "mov_text",
+            ]);
+            run_ffmpeg(finish_command(command, &output)).await?;
+        } else {
+            convert_local(
+                ffmpeg,
+                scratch.path(),
+                "input.video",
+                if format == MediaFormat::Mp4 {
+                    "mov"
+                } else {
+                    "matroska"
+                },
+                &output,
+            )
+            .await?;
+        }
+    } else {
+        convert_local(ffmpeg, scratch.path(), "input.video", "matroska", &output).await?;
+    }
+    publish_mp4(output, destination, owned).await?;
+    progress(1, Some(1));
+    Ok(())
+}
+
+async fn save_dash(
+    client: &Client,
+    root: &Url,
+    manifest: super::dash::Manifest,
+    selection: &Selection,
+    destination: &Path,
+    ffmpeg: &Path,
+    mut progress: impl FnMut(u64, Option<u64>),
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<(), RpcError> {
+    if let (Some(expected), Some(duration)) = (selection.expected_duration, manifest.duration) {
+        if (duration - expected).abs() > (expected * 0.02).max(3.0) {
+            return Err(invalid(
+                "The DASH manifest does not match the active video duration.",
+            ));
+        }
+    }
+    // A blob player's manifest must identify at least one actually observed video segment.
+    if !selection.direct_primary
+        && !manifest.video.iter().any(|track| {
+            track
+                .segments
+                .iter()
+                .any(|url| selection.observations.contains(url))
+        })
+    {
+        return Err(invalid(
+            "The DASH manifest does not match the video being played.",
+        ));
+    }
+    let maximum = selection.max_height.unwrap_or(u32::MAX);
+    let video = manifest
+        .video
+        .iter()
+        .filter(|track| {
+            track.height.is_some_and(|h| h <= maximum)
+                || (track.height.is_none() && selection.max_height.is_none())
+        })
+        .max_by_key(|track| (track.height.unwrap_or(0), track.bandwidth.unwrap_or(0)))
+        .ok_or_else(|| invalid("No available DASH video matches the selected quality."))?;
+    let audio = manifest
+        .audio
+        .iter()
+        .find(|track| {
+            track
+                .segments
+                .iter()
+                .any(|url| selection.observations.contains(url))
+        })
+        .or_else(|| manifest.audio.first());
+    let manifest_subtitle = selection
+        .subtitle
+        .as_ref()
+        .and_then(|picked| {
+            manifest.subtitles.iter().find(|track| {
+                picked.language.as_ref().is_some_and(|language| {
+                    track
+                        .language
+                        .as_ref()
+                        .is_some_and(|supported| language.eq_ignore_ascii_case(supported))
+                })
+            })
+        })
+        .or_else(|| manifest.subtitles.first());
+    let subtitle = selection
+        .subtitle
+        .as_ref()
+        .and_then(|track| track.url.as_ref())
+        .map(|_| selection.subtitle.as_ref().unwrap().clone())
+        .or_else(|| {
+            manifest_subtitle.and_then(|track| {
+                if track.init.is_none() && track.segments.len() == 1 {
+                    Some(SubtitleChoice {
+                        url: track.segments.first().cloned(),
+                        language: track.language.clone(),
+                        label: None,
+                    })
+                } else {
+                    None
+                }
+            })
+        });
+    if selection.subtitle.is_some() && subtitle.is_none() {
+        return Err(invalid("The selected DASH subtitle layout is unavailable."));
+    }
+
+    let parent = destination.parent().ok_or_else(disk)?;
+    let scratch = tempfile::Builder::new()
+        .prefix(".aniverse-dash-")
+        .tempdir_in(parent)
+        .map_err(|_| disk())?;
+    let output = tempfile::Builder::new()
+        .prefix(".aniverse-mp4-")
+        .tempfile_in(parent)
+        .map_err(|_| disk())?
+        .into_temp_path();
+    let work = scratch.path();
+    let chunks = |track: &super::dash::Track| {
+        (track.segments.len() + usize::from(track.init.is_some())) as u64
+    };
+    let total = chunks(video) + audio.map_or(0, chunks) + u64::from(subtitle.is_some()) + 1;
+    progress(0, Some(total));
+    let contexts = &selection.request_contexts;
+    let mut remaining = MAX_BYTES;
+    let mut received = 0;
+    let mut next = || {
+        received += 1;
+        progress(received, Some(total));
+    };
+    stage_dash_track(
+        client,
+        root,
+        video,
+        &work.join("video.mp4"),
+        contexts,
+        &mut remaining,
+        &mut next,
+        owned,
+    )
+    .await?;
+    if let Some(audio) = audio {
+        stage_dash_track(
+            client,
+            root,
+            audio,
+            &work.join("audio.mp4"),
+            contexts,
+            &mut remaining,
+            &mut next,
+            owned,
+        )
+        .await?;
+    }
+    let mut has_subtitle = false;
+    if let Some(subtitle) = &subtitle {
+        let mut scope = selection.scope.clone();
+        if let Some(url) = &subtitle.url {
+            if url.origin() == root.origin() || scope.as_ref().is_some_and(|s| s.contains(url)) {
+                if let Some(scope) = &mut scope {
+                    scope.allowed.insert(url.clone());
+                }
+            } else {
+                return Err(invalid(
+                    "The DASH subtitles are outside the active media selection.",
+                ));
+            }
+        }
+        has_subtitle = stage_subtitle(
+            subtitle,
+            work,
+            &mut remaining,
+            0.0,
+            scope.as_ref(),
+            contexts,
+            owned,
+        )
+        .await?;
+        next();
+    }
+    super::require_owner(owned)?;
+    let mut command = ffmpeg_command(ffmpeg, work);
+    command.args(["-f", "mov", "-i", "video.mp4"]);
+    if audio.is_some() {
+        command.args(["-f", "mov", "-i", "audio.mp4"]);
+    }
+    if has_subtitle {
+        command.args(["-f", "webvtt", "-i", "captions.vtt"]);
+    }
+    command.args([
+        "-map",
+        "0:v:0",
+        "-map",
+        if audio.is_some() { "1:a:0" } else { "0:a?" },
+        "-c:v",
+        "copy",
+        "-c:a",
+        "copy",
+    ]);
+    if has_subtitle {
+        command.args([
+            "-map",
+            if audio.is_some() { "2:s:0" } else { "1:s:0" },
+            "-c:s",
+            "mov_text",
+        ]);
+    }
+    run_ffmpeg(finish_command(command, &output)).await?;
+    publish_mp4(output, destination, owned).await?;
+    progress(total, Some(total));
+    Ok(())
+}
+
+async fn stage_dash_track(
+    client: &Client,
+    root: &Url,
+    track: &super::dash::Track,
+    destination: &Path,
+    contexts: &RequestContexts,
+    remaining: &mut u64,
+    progress: &mut impl FnMut(),
+    owned: &(impl Fn() -> bool + Sync),
+) -> Result<(), RpcError> {
+    let mut file = File::create(destination).await.map_err(|_| disk())?;
+    let partial = destination.with_extension("part");
+    for (index, url) in track.init.iter().chain(&track.segments).enumerate() {
+        super::require_owner(owned)?;
+        if url.origin() != root.origin() || !super::owned_media_url(url) {
+            return Err(invalid(
+                "A DASH segment is outside its verified media host.",
+            ));
+        }
+        let limit = if index == 0 && track.init.is_some() {
+            MAX_INIT
+        } else {
+            MAX_SEGMENT
+        };
+        copy_segment(client, url, &partial, remaining, limit, contexts).await?;
+        let mut input = File::open(&partial).await.map_err(|_| disk())?;
+        tokio::io::copy(&mut input, &mut file)
+            .await
+            .map_err(|_| disk())?;
+        progress();
+    }
+    file.flush().await.map_err(|_| disk())?;
+    drop(file);
+    media::validate_clear_mp4(destination).await
+}
+
 async fn copy_segment(
     client: &Client,
     url: &Url,
     path: &Path,
     remaining: &mut u64,
     max_bytes: u64,
+    contexts: &RequestContexts,
 ) -> Result<(), RpcError> {
-    let mut response = receive(client, url).await?;
+    let response = media::receive(client, url, contexts).await?;
+    copy_response(response, &[], path, remaining, max_bytes).await
+}
+
+async fn copy_response(
+    mut response: Response,
+    prefix: &[u8],
+    path: &Path,
+    remaining: &mut u64,
+    max_bytes: u64,
+) -> Result<(), RpcError> {
     let limit = (*remaining).min(max_bytes);
     let expected = response.content_length();
     if expected.is_some_and(|count| count == 0 || count > limit) {
         return Err(oversized());
     }
     let mut file = File::create(path).await.map_err(|_| disk())?;
-    let mut bytes = 0;
+    let mut bytes = prefix.len() as u64;
+    if bytes > limit {
+        return Err(oversized());
+    }
+    file.write_all(prefix).await.map_err(|_| disk())?;
     while let Some(chunk) = response.chunk().await.map_err(|_| network())? {
         bytes += chunk.len() as u64;
         if bytes > limit {
@@ -855,24 +1382,6 @@ async fn copy_segment(
     file.flush().await.map_err(|_| disk())?;
     *remaining -= bytes;
     Ok(())
-}
-
-async fn receive(client: &Client, url: &Url) -> Result<Response, RpcError> {
-    let response = client
-        .get(url.clone())
-        .header(header::ACCEPT_ENCODING, "identity")
-        .send()
-        .await
-        .map_err(|_| network())?;
-    if response.status() != StatusCode::OK
-        || response
-            .headers()
-            .get(header::CONTENT_ENCODING)
-            .is_some_and(|value| !value.as_bytes().eq_ignore_ascii_case(b"identity"))
-    {
-        return Err(invalid("The source did not provide accessible video."));
-    }
-    Ok(response)
 }
 
 struct RemuxChild(Child);

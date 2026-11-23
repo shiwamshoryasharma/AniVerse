@@ -58,5 +58,6 @@
 }
 :root[data-aniverse-edition='2'] .watch-media-actions [aria-disabled='true'] { color: var(--text-2); cursor: not-allowed; }
 :root[data-aniverse-edition='2'] .player-row [aria-disabled='true'] { color: #e6e6e6; cursor: not-allowed; }
+.watch-download-quality { width: auto; max-width: 100%; }
 .watch-media-hint { font-size: var(--fs-xs); color: var(--text-2); overflow-wrap: anywhere; }
 :root[data-aniverse-edition='2'] .watch .player-row:has(.quantum-audio-label) { flex-wrap: wrap; }

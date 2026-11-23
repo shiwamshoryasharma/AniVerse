@@ -122,6 +122,7 @@ pub(super) async fn install_guards(
     hidden: bool,
     record_activity: bool,
     frame_scope: Option<(u64, Arc<GuestState>)>,
+    observe_downloads: bool,
 ) -> Result<(), RpcError> {
     let (send, recv) = oneshot::channel();
     view.with_webview(move |platform| {
@@ -138,6 +139,10 @@ pub(super) async fn install_guards(
                     record_activity,
                 )?;
                 if let Some((id, state)) = frame_scope {
+                    if observe_downloads {
+                        // Discovery is optional; existing playback guards remain installed.
+                        let _ = super::download_network::install(&core, state.clone());
+                    }
                     let _ = frames::track(&core, id, state);
                 }
                 Ok(())
