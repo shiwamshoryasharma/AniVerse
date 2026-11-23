@@ -1,11 +1,11 @@
 {
-  "version": "3.2.0",
-  "pub_date": "2026-11-23T11:38:16.3285929+00:00",
-  "notes": "# AniVerse2 3.2.0 for Windows x64\n\n- Use the open episode's actual media responses to identify direct MP4 and WebM, finite clear HLS, and static clear fragmented-MP4 DASH, including signed and extensionless URLs.\n- Preserve the selected player and keep observed authentication context in native code. Credentials are replayed only to the exact request on which the browser used them.\n- Use the Watch quality limit for adaptive downloads. The native downloader retains separate audio, compatible WebVTT subtitles, FFmpeg remuxing, progress, and validated direct-file resume.\n- Protected content and live manifests are rejected. If playback authorization expires, reload the episode and try again.\n\nThese releases retain the existing Windows signing certificate and updater channels.",
+  "version": "3.2.1",
+  "pub_date": "2026-11-23T18:11:46.4136293+00:00",
+  "notes": "# AniVerse 2 for Windows x64 3.2.1\n\n- Recognize selected SUB/DUB controls and provider grids on supported watch-page layouts.\n- Refresh late-loading server controls and use the original episode control on single-page layouts.\n- Keep download actions out of the playback server menu.",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSGlOTGFMTVpPQVdSTzNnZVQyNjFjTUtLcGwrdmRrK0kzZHQyTzNqSzJ1KzZLdWFub3I0TXQxS3ZJRWk0dm9mT2xZL2JDdmlpc0xqL1FnR2Q0VzE1eFFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NDMzODk2CWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4yLjAteDY0LmV4ZQl2ZXJzaW9uOjMuMi4wCm4yZlNpWUNoM3RodlJkem9nZHhpMjQyWGZZcnlPZlVUdEpCRVo2cEw0M2o5bUZlT1FpSmM5T3RFV3QzOXFPbHlKZWREUDVGcUtlZnNTNTBXYnY5ZkRRPT0K",
-      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.2.0/AniVerse-Tauri-Setup-3.2.0-x64.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRS29nOFhLczVUSGpaWEZYaGE1SEpjMFovaHczamJPcG5Nc0ZaL0wxWFdvMUs4M0xBR1ZGZEVsNkZFL1d3ek5PUml5NElhMXdTb05ISGpjR21HZnNFeDFOeEFHdU05eVE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NDU3NTA2CWZpbGU6QW5pVmVyc2UtVGF1cmktU2V0dXAtMy4yLjEteDY0LmV4ZQl2ZXJzaW9uOjMuMi4xCk5EakdGdDFyOWtKQ094YVJJMlNPNlFiWUluQS9jem4wUU9LVkczQU5aajB0SFRLSE5GTDFhdFBCVlhLdDFib0xXRldaMFBCekMyQ0dkSlRFaFdjWUNBPT0K",
+      "url": "https://github.com/shiwamshoryasharma/AniVerse/releases/download/aniverse2-v3.2.1/AniVerse-Tauri-Setup-3.2.1-x64.exe"
     }
   }
 }
