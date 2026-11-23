@@ -1395,7 +1395,6 @@ impl Drop for RemuxChild {
     }
 }
 
-#[cfg(test)]
 async fn convert_local(
     ffmpeg: &Path,
     directory: &Path,
